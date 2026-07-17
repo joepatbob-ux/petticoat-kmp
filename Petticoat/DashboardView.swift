@@ -40,6 +40,8 @@ struct DashboardView: View {
 struct DashboardThermostatCard: View {
     @Environment(AppModel.self) private var model
 
+    @State private var showMode = false
+
     private var device: Device { model.device }
 
     var body: some View {
@@ -60,7 +62,9 @@ struct DashboardThermostatCard: View {
             .buttonStyle(.plain)
 
             HStack(spacing: 14) {
-                ModeSelectPill(axis: .vertical)
+                ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
+                    showMode = true
+                }
 
                 Text("\(device.currentTemp)")
                     .font(SMA.displayTemp(size: 46, activity: device.activity))
@@ -83,6 +87,9 @@ struct DashboardThermostatCard: View {
             .font(.footnote)
             .foregroundStyle(SMA.labelSecondary)
             .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .sheet(isPresented: $showMode) {
+            ModeSheet()
         }
     }
 }

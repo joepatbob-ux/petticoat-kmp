@@ -4,6 +4,8 @@ import SwiftUI
 struct ControlView: View {
     @Environment(AppModel.self) private var model
 
+    @State private var showMode = false
+
     private var device: Device { model.device }
 
     var body: some View {
@@ -31,8 +33,10 @@ struct ControlView: View {
 
             Spacer()
 
-            ModeSelectPill()
-                .padding(.bottom, 24)
+            ModeSelectPill(systemMode: device.systemMode, fanMode: device.fanMode) {
+                showMode = true
+            }
+            .padding(.bottom, 24)
 
             SetpointControllerCard(
                 holdLabel: "Hold\n(1 Hour)",
@@ -50,6 +54,9 @@ struct ControlView: View {
         .padding(.horizontal, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SMA.groupedBackground.ignoresSafeArea())
+        .sheet(isPresented: $showMode) {
+            ModeSheet()
+        }
     }
 }
 
