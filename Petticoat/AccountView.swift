@@ -4,64 +4,56 @@ struct AccountView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var showLogoutConfirm = false
+    @State private var showDeleteConfirm = false
+    @State private var showChangePassword = false
+    @State private var showHelp = false
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    group {
-                        NavigationRow(title: "Personal Information") { PersonalInformationView() }
-                        Divider().overlay(SMA.separator).padding(.leading, 16)
-                        Button("Change Password") {}
-                            .buttonStyle(.plain)
-                            .foregroundStyle(SMA.accent)
-                            .padding(16)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    group {
-                        NavigationRow(title: "Notification Settings") { NotificationSettingsView() }
-                    }
-
-                    group {
-                        NavigationRow(title: "Energy Programs") { PlaceholderDetail(title: "Energy Programs") }
-                        Divider().overlay(SMA.separator).padding(.leading, 16)
-                        NavigationRow(title: "Smart Integrations") { PlaceholderDetail(title: "Smart Integrations") }
-                    }
-
-                    group {
-                        NavigationRow(title: "About Application") { PlaceholderDetail(title: "About Application") }
-                        Divider().overlay(SMA.separator).padding(.leading, 16)
-                        NavigationRow(title: "Application Options") { PlaceholderDetail(title: "Application Options") }
-                    }
-
-                    group {
-                        LinkRow(title: "Help and Support", systemImage: "arrow.up.right")
-                        Divider().overlay(SMA.separator).padding(.leading, 16)
-                        NavigationRow(title: "Feedback") { PlaceholderDetail(title: "Feedback") }
-                    }
-
-                    group {
-                        Button("Logout") { showLogoutConfirm = true }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(SMA.destructive)
-                            .padding(16)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    group {
-                        Button("Delete Account") {}
-                            .buttonStyle(.plain)
-                            .foregroundStyle(SMA.destructive)
-                            .padding(16)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    Spacer(minLength: 12)
+            List {
+                Section {
+                    NavigationLink("Personal Information") { PersonalInformationView() }
+                    Button("Change Password") { showChangePassword = true }
+                        .foregroundStyle(SMA.accent)
                 }
-                .padding(20)
+
+                Section {
+                    NavigationLink("Notification Settings") { NotificationSettingsView() }
+                }
+
+                Section {
+                    NavigationLink("Energy Programs") { PlaceholderDetail(title: "Energy Programs") }
+                    NavigationLink("Smart Integrations") { PlaceholderDetail(title: "Smart Integrations") }
+                }
+
+                Section {
+                    NavigationLink("About Application") { AboutApplicationView() }
+                    NavigationLink("Application Options") { PlaceholderDetail(title: "Application Options") }
+                }
+
+                Section {
+                    Button { showHelp = true } label: {
+                        LinkRow(title: "Help and Support", systemImage: "arrow.up.right")
+                    }
+                    .buttonStyle(.plain)
+                    NavigationLink("Feedback") { PlaceholderDetail(title: "Feedback") }
+                }
+
+                Section {
+                    Button("Logout", role: .destructive) { showLogoutConfirm = true }
+                        .foregroundStyle(SMA.destructive)
+                }
+
+                Section {
+                    Button("Delete Account", role: .destructive) { showDeleteConfirm = true }
+                        .foregroundStyle(SMA.destructive)
+                }
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
             .background(SMA.groupedBackground.ignoresSafeArea())
+            .listRowBackground(SMA.card)
+            .foregroundStyle(SMA.labelPrimary)
             .navigationTitle("Account")
             .inlineNavTitle()
             .toolbar {
@@ -73,43 +65,33 @@ struct AccountView: View {
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Image(systemName: "questionmark.bubble")
-                        .foregroundStyle(SMA.labelPrimary)
+                    Button { showHelp = true } label: {
+                        Image(systemName: "questionmark.bubble")
+                            .foregroundStyle(SMA.labelPrimary)
+                    }
+                    .accessibilityLabel("Help and Support")
                 }
             }
+            .sheet(isPresented: $showChangePassword) { ChangePasswordView() }
+            .sheet(isPresented: $showHelp) { HelpSupportView() }
             .confirmationDialog("Log out of Sensi?", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
                 Button("Logout", role: .destructive) { model.signOut() }
                 Button("Cancel", role: .cancel) {}
             }
+            .confirmationDialog("Delete your Sensi account?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete Account", role: .destructive) {
+                    dismiss()
+                    model.signOut()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes your account and cannot be undone.")
+            }
         }
-    }
-
-    private func group<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        VStack(spacing: 0) { content() }
-            .cardStyle()
     }
 }
 
 // MARK: - Rows
-
-private struct NavigationRow<Destination: View>: View {
-    let title: String
-    @ViewBuilder let destination: () -> Destination
-
-    var body: some View {
-        NavigationLink(destination: destination) {
-            HStack {
-                Text(title).foregroundStyle(SMA.labelPrimary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(SMA.labelSecondary)
-            }
-            .padding(16)
-        }
-        .buttonStyle(.plain)
-    }
-}
 
 private struct LinkRow: View {
     let title: String
@@ -122,7 +104,6 @@ private struct LinkRow: View {
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(SMA.labelSecondary)
         }
-        .padding(16)
     }
 }
 
@@ -135,20 +116,17 @@ struct PersonalInformationView: View {
     @State private var phone = "(314) 555-0142"
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
+        Form {
+            Section {
                 labeledField("First Name", text: $firstName)
-                Divider().overlay(SMA.separator).padding(.leading, 16)
                 labeledField("Last Name", text: $lastName)
-                Divider().overlay(SMA.separator).padding(.leading, 16)
                 labeledField("Email", text: $email)
-                Divider().overlay(SMA.separator).padding(.leading, 16)
                 labeledField("Phone", text: $phone)
             }
-            .cardStyle()
-            .padding(20)
         }
+        .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
+        .listRowBackground(SMA.card)
         .navigationTitle("Personal Information")
         .inlineNavTitle()
     }
@@ -157,11 +135,11 @@ struct PersonalInformationView: View {
         HStack {
             Text(label)
                 .foregroundStyle(SMA.labelSecondary)
-                .frame(width: 90, alignment: .leading)
+            Spacer()
             TextField(label, text: text)
+                .multilineTextAlignment(.trailing)
                 .foregroundStyle(SMA.labelPrimary)
         }
-        .padding(16)
     }
 }
 
@@ -172,20 +150,17 @@ struct NotificationSettingsView: View {
     @State private var deviceStatus = true
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
+        Form {
+            Section {
                 toggle("Smart Alerts", isOn: $smartAlerts)
-                Divider().overlay(SMA.separator).padding(.leading, 16)
                 toggle("Energy Reports", isOn: $energyReports)
-                Divider().overlay(SMA.separator).padding(.leading, 16)
                 toggle("Info & Offers", isOn: $offers)
-                Divider().overlay(SMA.separator).padding(.leading, 16)
                 toggle("Device Status", isOn: $deviceStatus)
             }
-            .cardStyle()
-            .padding(20)
         }
+        .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
+        .listRowBackground(SMA.card)
         .navigationTitle("Notification Settings")
         .inlineNavTitle()
     }
@@ -194,27 +169,178 @@ struct NotificationSettingsView: View {
         Toggle(title, isOn: isOn)
             .tint(Color(hex: 0x34C759))
             .foregroundStyle(SMA.labelPrimary)
-            .padding(16)
     }
 }
 
 struct PlaceholderDetail: View {
     let title: String
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "square.dashed")
-                .font(.largeTitle)
-                .foregroundStyle(SMA.labelSecondary)
-            Text("\(title)")
-                .font(.headline)
-                .foregroundStyle(SMA.labelPrimary)
-            Text("Prototype screen")
-                .font(.footnote)
-                .foregroundStyle(SMA.labelSecondary)
+        ContentUnavailableView {
+            Label("Coming Soon", systemImage: "sparkles")
+        } description: {
+            Text("\(title) isn't available yet. Check back in a future update.")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SMA.groupedBackground.ignoresSafeArea())
         .navigationTitle(title)
+        .inlineNavTitle()
+    }
+}
+
+// MARK: - Change password
+
+struct ChangePasswordView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var current = ""
+    @State private var new = ""
+    @State private var confirm = ""
+    @State private var saved = false
+
+    /// Local-only validation for the demo: all fields present, new matches confirm,
+    /// new is long enough and differs from the current password.
+    private var isValid: Bool {
+        !current.isEmpty && new.count >= 8 && new == confirm && new != current
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    SecureField("Current Password", text: $current)
+                    SecureField("New Password", text: $new)
+                    SecureField("Confirm New Password", text: $confirm)
+                } footer: {
+                    Text("Your new password must be at least 8 characters and different from your current one.")
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(SMA.groupedBackground.ignoresSafeArea())
+            .listRowBackground(SMA.card)
+            .navigationTitle("Change Password")
+            .inlineNavTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { saved = true }
+                        .disabled(!isValid)
+                }
+            }
+            .alert("Password Changed", isPresented: $saved) {
+                Button("OK") { dismiss() }
+            } message: {
+                Text("Your password has been updated.")
+            }
+        }
+    }
+}
+
+// MARK: - Help & Support
+
+/// Lightweight in-app help hub. Shared by the dashboard and account screens.
+struct HelpSupportView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    NavigationLink("Getting Started") { PlaceholderDetail(title: "Getting Started") }
+                    NavigationLink("Thermostat Setup") { PlaceholderDetail(title: "Thermostat Setup") }
+                    NavigationLink("Schedules & Presets") { PlaceholderDetail(title: "Schedules & Presets") }
+                    NavigationLink("Troubleshooting") { PlaceholderDetail(title: "Troubleshooting") }
+                } header: {
+                    Text("Help Topics")
+                }
+
+                Section {
+                    LinkRow(title: "Contact Support", systemImage: "envelope")
+                    LinkRow(title: "Call Us", systemImage: "phone")
+                } header: {
+                    Text("Get in Touch")
+                } footer: {
+                    Text("Support is available 7 days a week, 7am–9pm CT.")
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(SMA.groupedBackground.ignoresSafeArea())
+            .listRowBackground(SMA.card)
+            .foregroundStyle(SMA.labelPrimary)
+            .navigationTitle("Help & Support")
+            .inlineNavTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(SMA.labelPrimary)
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
+        }
+    }
+}
+
+// MARK: - About
+
+struct AboutApplicationView: View {
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+    private var build: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+    }
+
+    var body: some View {
+        List {
+            Section {
+                VStack(spacing: 8) {
+                    Image("sensi.logo")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(height: 32)
+                        .foregroundStyle(SMA.brandNavy)
+                    Text("Sensi")
+                        .font(.headline)
+                        .foregroundStyle(SMA.labelPrimary)
+                    Text("Version \(version) (\(build))")
+                        .font(.footnote)
+                        .foregroundStyle(SMA.labelSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .listRowBackground(Color.clear)
+            }
+
+            Section {
+                LabeledContent("Version", value: version)
+                LabeledContent("Build", value: build)
+            }
+
+            Section {
+                LinkRow(title: "Privacy Policy", systemImage: "arrow.up.right")
+                LinkRow(title: "Terms of Service", systemImage: "arrow.up.right")
+                LinkRow(title: "Acknowledgements", systemImage: "arrow.up.right")
+            }
+
+            Section {
+                Text("© 2026 Copeland LP. All rights reserved.")
+                    .font(.footnote)
+                    .foregroundStyle(SMA.labelSecondary)
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(SMA.groupedBackground.ignoresSafeArea())
+        .listRowBackground(SMA.card)
+        .foregroundStyle(SMA.labelPrimary)
+        .navigationTitle("About")
         .inlineNavTitle()
     }
 }

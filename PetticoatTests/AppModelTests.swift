@@ -1,0 +1,144 @@
+import Testing
+@testable import Petticoat
+
+@MainActor
+struct AppModelTests {
+
+    // MARK: Setpoint range
+
+    @Test func raisingLowStopsBelowHigh() {
+        let model = AppModel()
+        let high = model.device.keepMax
+        // Push the low bound up far past the high bound.
+        for _ in 0..<50 { model.adjustKeep(.low, by: 1) }
+        #expect(model.device.keepMin == high - 1)
+        #expect(model.device.keepMin < model.device.keepMax)
+    }
+
+    @Test func loweringHighStopsAboveLow() {
+        let model = AppModel()
+        let low = model.device.keepMin
+        for _ in 0..<50 { model.adjustKeep(.high, by: -1) }
+        #expect(model.device.keepMax == low + 1)
+        #expect(model.device.keepMax > model.device.keepMin)
+    }
+
+    @Test func lowBoundClampsAtFloor() {
+        let model = AppModel()
+        for _ in 0..<50 { model.adjustKeep(.low, by: -1) }
+        #expect(model.device.keepMin == 45)
+    }
+
+    // MARK: Control mode transitions
+
+    @Test func adjustingWhileOnScheduleCreatesHold() {
+        let model = AppModel()
+        model.controlMode = .schedule
+        model.adjustKeep(.high, by: 1)
+        #expect(model.controlMode == .hold)
+    }
+
+    @Test func adjustingWhileStandardStaysStandard() {
+        let model = AppModel()
+        model.controlMode = .standard
+        model.adjustKeep(.high, by: 1)
+        #expect(model.controlMode == .standard)
+    }
+
+    @Test func scheduleToggleDrivesMode() {
+        let model = AppModel()
+        model.setScheduleEnabled(false)
+        #expect(model.controlMode == .standard)
+        model.setScheduleEnabled(true)
+        #expect(model.controlMode == .schedule)
+    }
+
+    @Test func activatingProfileEntersActivityMode() {
+        let model = AppModel()
+        let profile = ActivityProfile.samples[3]   // Workout
+        model.activateProfile(profile)
+        #expect(model.controlMode == .activity)
+        #expect(model.activeProfile.id == profile.id)
+    }
+
+    @Test func vacationThenResume() {
+        let model = AppModel()
+        model.setVacation(true)
+        #expect(model.controlMode == .vacation)
+        model.resumeSchedule()
+        #expect(model.controlMode == .schedule)
+    }
+
+    // MARK: Spotlight
+
+    @Test func dismissingSpotlightRemovesIt() {
+        let model = AppModel()
+        let start = model.spotlights.count
+        let first = model.spotlights[0]
+        model.dismissSpotlight(first)
+        #expect(model.spotlights.count == start - 1)
+        #expect(!model.spotlights.contains { $0.id == first.id })
+    }
+
+    // MARK: Routing
+
+    @Test func signInRoutesToMainAndOutToLogin() {
+        let model = AppModel()
+        model.signIn()
+        #expect(model.route == .main)
+
+        model.showAccount = true
+        model.signOut()
+        #expect(model.route == .login)
+        #expect(model.showAccount == false)
+    }
+
+    // MARK: Activity profiles
+
+    @Test func savingEditedProfileUpdatesInPlace() {
+        let model = AppModel()
+        var edited = model.activityProfiles[0]
+        let id = edited.id
+        edited.name = "Renamed"
+        edited.coolTo = 81
+        model.saveProfile(edited)
+        #expect(model.activityProfiles.count == ActivityProfile.samples.count)
+        #expect(model.activityProfiles[0].id == id)
+        #expect(model.activityProfiles[0].name == "Renamed")
+        #expect(model.activityProfiles[0].coolTo == 81)
+    }
+
+    @Test func savingUnknownProfileAppends() {
+        let model = AppModel()
+        let start = model.activityProfiles.count
+        let new = ActivityProfile(name: "Guest", symbol: "person.fill", colorHex: 0, heatTo: 60, coolTo: 80, subtitle: "")
+        model.saveProfile(new)
+        #expect(model.activityProfiles.count == start + 1)
+        #expect(model.activityProfiles.last?.id == new.id)
+    }
+
+    @Test func savingActiveProfileSyncsController() {
+        let model = AppModel()
+        var active = model.activeProfile
+        active.name = "Active Edited"
+        model.saveProfile(active)
+        #expect(model.activeProfile.name == "Active Edited")
+    }
+
+    @Test func duplicatingInsertsCopyAfterOriginal() {
+        let model = AppModel()
+        let start = model.activityProfiles.count
+        let first = model.activityProfiles[0]
+        model.duplicateProfile(first)
+        #expect(model.activityProfiles.count == start + 1)
+        #expect(model.activityProfiles[1].name == first.name + " Copy")
+        #expect(model.activityProfiles[1].id != first.id)
+    }
+
+    @Test func deletingRemovesProfile() {
+        let model = AppModel()
+        let first = model.activityProfiles[0]
+        model.deleteProfile(first)
+        #expect(!model.activityProfiles.contains { $0.id == first.id })
+    }
+}
