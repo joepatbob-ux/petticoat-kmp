@@ -2,35 +2,76 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
+    @State private var spotlightExpanded = true
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                DashboardThermostatCard()
+        List {
+            DashboardThermostatCard()
 
-                SpotlightSection(item: model.spotlight)
+            if !model.spotlights.isEmpty {
+                // The header + lead card live in a stable Section; the remaining cards
+                // are separate Sections that animate out when the section collapses.
+                // Collapsed, the lead card becomes a stack of the cards behind it.
+                Section {
+                    if spotlightExpanded {
+                        SpotlightCard(item: model.spotlights[0]) {
+                            model.dismissSpotlight(model.spotlights[0])
+                        }
+                        .listRowBackground(SMA.card)
+                    } else {
+                        SpotlightStack(items: model.spotlights) { model.dismissSpotlight($0) }
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                    }
+                } header: {
+                    SpotlightHeader(count: model.spotlights.count, expanded: $spotlightExpanded)
+                }
+
+                if spotlightExpanded {
+                    ForEach(Array(model.spotlights.dropFirst())) { item in
+                        Section {
+                            SpotlightCard(item: item) { model.dismissSpotlight(item) }
+                                .listRowBackground(SMA.card)
+                        }
+                    }
+                }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
-        .toolbar {
+        .toolbar { DashboardToolbar() }
+    }
+}
+
+/// The shared dashboard toolbar (sensi wordmark + plus/help/account). Reused by the
+/// compact `DashboardView` and the iPad `MainSplitView` sidebar.
+struct DashboardToolbar: ToolbarContent {
+    @Environment(AppModel.self) private var model
+    var showWordmark = true
+
+    var body: some ToolbarContent {
+        if showWordmark {
             ToolbarItem(placement: .topBarLeading) {
-                SensiWordmark(color: SMA.labelPrimary, size: 26)
+                SensiWordmark(color: SMA.labelPrimary, size: 20)
                     .fixedSize()
             }
             .sharedBackgroundVisibility(.hidden)
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {} label: {
-                    Image(systemName: "plus")
-                }
-                Button {} label: {
-                    Image(systemName: "questionmark.bubble")
-                }
-                Button { model.showAccount = true } label: {
-                    Image(systemName: "person.crop.circle")
-                }
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button { model.showAddDevice = true } label: {
+                Image(systemName: "plus")
             }
+            .accessibilityLabel("Add a Device")
+            Button { model.showHelp = true } label: {
+                Image(systemName: "questionmark.bubble")
+            }
+            .accessibilityLabel("Help and Support")
+            Button { model.showAccount = true } label: {
+                Image(systemName: "person.crop.circle")
+            }
+            .accessibilityLabel("Account")
         }
     }
 }
@@ -45,22 +86,7 @@ struct DashboardThermostatCard: View {
     private var device: Device { model.device }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            NavigationLink {
-                DeviceTabView()
-            } label: {
-                HStack {
-                    Text(device.name)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(SMA.labelPrimary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(SMA.accent)
-                }
-            }
-            .buttonStyle(.plain)
-
+        Section {
             HStack(spacing: 14) {
                 ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
                     showMode = true
@@ -76,9 +102,25 @@ struct DashboardThermostatCard: View {
                     model.adjustKeep(bound, by: delta)
                 }
             }
-            .padding(16)
-            .cardStyle(cornerRadius: 20)
-
+            .listRowBackground(SMA.card)
+        } header: {
+            NavigationLink {
+                DeviceTabView()
+            } label: {
+                HStack {
+                    Text(device.name)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(SMA.labelPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SMA.accent)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .textCase(nil)
+        } footer: {
             HStack(spacing: 4) {
                 Image(systemName: "location.fill")
                     .font(.caption2)
@@ -87,6 +129,7 @@ struct DashboardThermostatCard: View {
             .font(.footnote)
             .foregroundStyle(SMA.labelSecondary)
             .frame(maxWidth: .infinity, alignment: .center)
+            .textCase(nil)
         }
         .sheet(isPresented: $showMode) {
             ModeSheet()
@@ -96,17 +139,20 @@ struct DashboardThermostatCard: View {
 
 // MARK: - Spotlight
 
-struct SpotlightSection: View {
-    let item: SpotlightItem
+struct SpotlightHeader: View {
+    let count: Int
+    @Binding var expanded: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        Button {
+            withAnimation(.snappy) { expanded.toggle() }
+        } label: {
             HStack {
                 Text("Spotlight")
                     .font(.title3.weight(.bold))
                     .foregroundStyle(SMA.labelPrimary)
                 Spacer()
-                Text("1")
+                Text("\(count)")
                     .font(.footnote.weight(.bold))
                     .foregroundStyle(.white)
                     .frame(width: 22, height: 22)
@@ -114,15 +160,91 @@ struct SpotlightSection: View {
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(SMA.accent)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
             }
-
-            SpotlightCard(item: item)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .textCase(nil)
     }
 }
 
-private struct SpotlightCard: View {
+/// Collapsed presentation of the Spotlight section: the top card shown with the
+/// remaining cards peeking behind it as a stack. Tapping expands the section.
+struct SpotlightStack: View {
+    let items: [SpotlightItem]
+    let onDismiss: (SpotlightItem) -> Void
+
+    private var peek: CGFloat { items.count > 2 ? 14 : (items.count > 1 ? 7 : 0) }
+
+    var body: some View {
+        SpotlightAbbrevCard(item: items[0]) { onDismiss(items[0]) }
+            .background {
+                ZStack {
+                    if items.count > 2 {
+                        cardSurface.padding(.horizontal, 20).offset(y: -14)
+                    }
+                    if items.count > 1 {
+                        cardSurface.padding(.horizontal, 10).offset(y: -7)
+                    }
+                    cardSurface
+                }
+            }
+            // Breathing room so the top peeks and drop shadow aren't clipped by the row.
+            .padding(.top, peek + 10)
+            .padding([.horizontal, .bottom], 12)
+    }
+
+    private var cardSurface: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(SMA.card)
+            .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
+    }
+}
+
+/// Abbreviated spotlight card for the collapsed stack: provider + title only, with an
+/// overflow menu (Learn More / Dismiss). Kept short so the stack stays compact.
+struct SpotlightAbbrevCard: View {
     let item: SpotlightItem
+    let onDismiss: () -> Void
+    @State private var showDetail = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "flame.fill")
+                .foregroundStyle(SMA.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.provider)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(SMA.brandNavy)
+                Text(item.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(SMA.labelPrimary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Menu {
+                Button("Learn More", systemImage: "arrow.up.right") { showDetail = true }
+                Button("Dismiss", systemImage: "xmark", role: .destructive) { onDismiss() }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(SMA.accent)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("More options")
+        }
+        .padding(14)
+        .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
+    }
+}
+
+struct SpotlightCard: View {
+    let item: SpotlightItem
+    var onDismiss: () -> Void = {}
+    @State private var showDetail = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -149,23 +271,158 @@ private struct SpotlightCard: View {
             Divider().overlay(SMA.separator)
 
             HStack {
-                Text("Learn More")
+                Button("Learn More") { showDetail = true }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(SMA.orange, in: Capsule())
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .tint(SMA.orange)
                 Spacer()
-                Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(SMA.accent)
-                    .frame(width: 34, height: 34)
-                    .overlay(Circle().stroke(SMA.accent, lineWidth: 1.5))
+                Menu {
+                    Button("Dismiss", systemImage: "xmark", role: .destructive) { onDismiss() }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(SMA.accent)
+                        .frame(width: 26, height: 26)
+                        .overlay(Circle().stroke(SMA.accent, lineWidth: 1.5))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("More options")
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle()
+        .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
+    }
+}
+
+// MARK: - Spotlight detail & Add device sheets
+
+/// Full detail for a spotlight promo, opened by "Learn More". Local content only.
+struct SpotlightDetailView: View {
+    let item: SpotlightItem
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "flame.fill")
+                            .foregroundStyle(SMA.orange)
+                        Text(item.provider)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(SMA.brandNavy)
+                    }
+
+                    Text(item.title)
+                        .font(.title.weight(.bold))
+                        .foregroundStyle(SMA.labelPrimary)
+
+                    Text(item.body)
+                        .font(.body)
+                        .foregroundStyle(SMA.labelPrimary)
+
+                    Text("Offer valid until: \(item.validUntil)")
+                        .font(.footnote)
+                        .foregroundStyle(SMA.labelSecondary)
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Get Started")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .tint(SMA.orange)
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(SMA.groupedBackground.ignoresSafeArea())
+            .navigationTitle(item.provider)
+            .inlineNavTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(SMA.labelPrimary)
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
+        }
+    }
+}
+
+/// Simple "Add a Device" entry point opened from the dashboard toolbar. The demo
+/// presents the available device types rather than a live pairing flow.
+struct AddDeviceView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private struct DeviceType: Identifiable {
+        let id = UUID()
+        let name: String
+        let detail: String
+        let symbol: String
+    }
+
+    private let types: [DeviceType] = [
+        .init(name: "Smart Thermostat", detail: "Wi-Fi enabled comfort control", symbol: "thermostat"),
+        .init(name: "Room Sensor", detail: "Temperature & occupancy", symbol: "sensor"),
+        .init(name: "Smart Plug", detail: "Control anything you plug in", symbol: "powerplug"),
+    ]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(types) { type in
+                        NavigationLink {
+                            PlaceholderDetail(title: type.name)
+                        } label: {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(type.name)
+                                        .foregroundStyle(SMA.labelPrimary)
+                                    Text(type.detail)
+                                        .font(.footnote)
+                                        .foregroundStyle(SMA.labelSecondary)
+                                }
+                            } icon: {
+                                Image(systemName: type.symbol)
+                                    .foregroundStyle(SMA.accent)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Choose a Device to Add")
+                } footer: {
+                    Text("Make sure your device is powered on and nearby before you begin.")
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(SMA.groupedBackground.ignoresSafeArea())
+            .listRowBackground(SMA.card)
+            .foregroundStyle(SMA.labelPrimary)
+            .navigationTitle("Add a Device")
+            .inlineNavTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(SMA.labelPrimary)
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
+        }
     }
 }
 

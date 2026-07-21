@@ -7,66 +7,62 @@ struct LoginView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                Spacer().frame(height: 24)
-
-                SensiLockup(
-                    wordmarkColor: SMA.brandBlue,
-                    copelandColor: SMA.brandNavy,
-                    size: 56
-                )
-                .padding(.bottom, 32)
-
-                // Email + password
-                VStack(spacing: 0) {
+            Form {
+                Section {
                     TextField("Email", text: $email)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
-                        .padding(.vertical, 14)
-                    Divider().overlay(SMA.separator)
                     SecureField("Password", text: $password)
                         .textContentType(.password)
-                        .padding(.vertical, 14)
-                }
-                .padding(.horizontal, 16)
-                .cardStyle()
-                .padding(.horizontal, 20)
-
-                HStack {
-                    Spacer()
-                    NavigationLink("Forgot Password?") {
-                        ForgotPasswordView()
+                } footer: {
+                    HStack {
+                        Spacer()
+                        NavigationLink("Forgot Password?") {
+                            ForgotPasswordView()
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(SMA.accent)
                     }
-                    .font(.footnote.weight(.semibold))
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .listRowBackground(SMA.card)
+            .safeAreaInset(edge: .top) {
+                Image("SensiByCopeland")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 60)
+                    .accessibilityLabel("Sensi by Copeland")
+                    .padding(.top, 24)
+                    .padding(.bottom, 8)
+            }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 16) {
+                    NavigationLink("Create Account") {
+                        CreateAccountView()
+                    }
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(SMA.accent)
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 10)
 
-                Spacer()
-
-                NavigationLink("Create Account") {
-                    CreateAccountView()
+                    Button {
+                        model.signIn()
+                    } label: {
+                        Text("Login")
+                            .font(.body.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .tint(SMA.accent)
+                    .padding(.horizontal, 20)
                 }
-                .font(.body.weight(.semibold))
-                .foregroundStyle(SMA.accent)
-                .padding(.bottom, 20)
-
-                Button {
-                    model.signIn()
-                } label: {
-                    Text("Login")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(SMA.accent, in: Capsule())
-                }
-                .padding(.horizontal, 20)
                 .padding(.bottom, 8)
             }
-            .background(Color.white)
+            .readableFormWidth()
+            .background(SMA.groupedBackground.ignoresSafeArea())
         }
     }
 }
@@ -79,22 +75,19 @@ struct ForgotPasswordView: View {
     @State private var showConfirmation = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            TextField("Email", text: $email)
-                .textInputAutocapitalization(.never)
-                .keyboardType(.emailAddress)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .cardStyle()
-
-            Text("To receive a new password, please enter the email address associated with your account.")
-                .font(.footnote)
-                .foregroundStyle(SMA.labelSecondary)
-                .padding(.horizontal, 4)
-
-            Spacer()
+        Form {
+            Section {
+                TextField("Email", text: $email)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.emailAddress)
+            } footer: {
+                Text("To receive a new password, please enter the email address associated with your account.")
+            }
         }
-        .padding(20)
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .listRowBackground(SMA.card)
+        .readableFormWidth()
         .background(SMA.groupedBackground.ignoresSafeArea())
         .navigationTitle("Forgot Password")
         .inlineNavTitle()
@@ -104,11 +97,11 @@ struct ForgotPasswordView: View {
                     showConfirmation = true
                 } label: {
                     Image(systemName: "arrow.up")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(SMA.accent, in: Circle())
                 }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.circle)
+                .tint(SMA.accent)
+                .disabled(email.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
         .alert("Password Reset", isPresented: $showConfirmation) {
@@ -132,40 +125,31 @@ struct CreateAccountView: View {
     @State private var infoOffers = true
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                VStack(spacing: 0) {
-                    field("First Name", text: $firstName)
-                    Divider().overlay(SMA.separator)
-                    field("Last Name", text: $lastName)
-                    Divider().overlay(SMA.separator)
-                    field("Phone", text: $phone)
-                    Divider().overlay(SMA.separator)
-                    field("Email", text: $email)
-                    Divider().overlay(SMA.separator)
-                    SecureField("Password", text: $password)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                }
-                .cardStyle()
-
+        Form {
+            Section {
+                field("First Name", text: $firstName)
+                field("Last Name", text: $lastName)
+                field("Phone", text: $phone)
+                field("Email", text: $email)
+                SecureField("Password", text: $password)
+            } footer: {
                 Text("By creating a Sensi account, you agree to Terms of Service, End User License Agreement, and Privacy Policy.")
-                    .font(.footnote)
-                    .foregroundStyle(SMA.labelSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
+            Section {
                 toggleRow("Smart Alerts",
                           detail: "Know when there may be an issue with your HVAC system with help from Smart Alerts.",
                           isOn: $smartAlerts)
                 toggleRow("Sensi Info & Offers",
                           detail: "Stay informed about local utility rebates, monthly usage reports, energy-saving tips, and new products.",
                           isOn: $infoOffers)
-
-                Spacer(minLength: 20)
             }
-            .padding(20)
         }
-        .background(Color.white.ignoresSafeArea())
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .listRowBackground(SMA.card)
+        .readableFormWidth()
+        .background(SMA.groupedBackground.ignoresSafeArea())
         .navigationTitle("Create Account")
         .inlineNavTitle()
         .toolbar {
@@ -174,32 +158,36 @@ struct CreateAccountView: View {
                     model.signIn()
                 } label: {
                     Image(systemName: "arrow.up")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(SMA.accent, in: Circle())
                 }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.circle)
+                .tint(SMA.accent)
+                .disabled(!isFormComplete)
             }
         }
+    }
+
+    /// The submit button stays disabled until every field has content.
+    private var isFormComplete: Bool {
+        [firstName, lastName, phone, email, password]
+            .allSatisfy { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
     private func field(_ placeholder: String, text: Binding<String>) -> some View {
         TextField(placeholder, text: text)
             .textInputAutocapitalization(placeholder == "Email" ? .never : .words)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
     }
 
     private func toggleRow(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle(title, isOn: isOn)
-                .font(.body)
-                .tint(Color(hex: 0x34C759))
-            Text(detail)
-                .font(.footnote)
-                .foregroundStyle(SMA.labelSecondary)
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(SMA.labelSecondary)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .tint(Color(hex: 0x34C759))
     }
 }
 

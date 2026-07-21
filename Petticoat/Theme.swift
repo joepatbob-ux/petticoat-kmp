@@ -1,32 +1,32 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Design tokens pulled from the "SMA - iOS26" Figma file.
 enum SMA {
-    // Core palette
-    static let accent            = Color(hex: 0x0088FF)
-    static let groupedBackground = Color(hex: 0xF2F2F7)
-    static let card              = Color.white
-    static let labelPrimary      = Color(hex: 0x000000)
-    static let labelSecondary    = Color(hex: 0x3C3C43).opacity(0.6)
-    static let separator         = Color(hex: 0xE6E6E6)
+    // Core palette — adaptive (light / dark), mapped to iOS system semantics.
+    static let accent            = Color(light: 0x0088FF, dark: 0x0A84FF)
+    static let groupedBackground = Color(light: 0xF2F2F7, dark: 0x000000)
+    static let background        = Color(light: 0xFFFFFF, dark: 0x000000)
+    static let card              = Color(light: 0xFFFFFF, dark: 0x1C1C1E)
+    static let labelPrimary      = Color(light: 0x000000, dark: 0xFFFFFF)
+    static let labelSecondary    = Color(light: 0x3C3C43, dark: 0xEBEBF5).opacity(0.6)
+    static let separator         = Color(light: 0xE6E6E6, dark: 0x38383A)
     static let orange            = Color(hex: 0xF5A623)
     static let tempOrange        = Color(hex: 0xF16A1B)
     static let tempIdle          = Color(hex: 0x8E8E93)
-    static let destructive       = Color(hex: 0xFF3B30)
-    static let fillTertiary      = Color(hex: 0x767680).opacity(0.12)
+    static let destructive       = Color(light: 0xFF3B30, dark: 0xFF453A)
+    static let fillTertiary      = Color(lightHex: 0x767680, lightAlpha: 0.12,
+                                         darkHex: 0x767680, darkAlpha: 0.24)
 
-    // Thermostat surfaces
+    // Thermostat surfaces (intentionally dark surfaces in both modes)
     static let thermostatCard    = Color(hex: 0x485057)
     static let thermostatScreen  = Color(hex: 0x3B4148)
     static let controlFill       = Color(hex: 0x2C3238)
 
-    // Brand
-    static let brandBlue         = Color(hex: 0x0E80B7)
-    static let brandNavy         = Color(hex: 0x14435F)
-
-    // Splash gradient
-    static let splashTop         = Color(hex: 0x0E80B7)
-    static let splashBottom      = Color(hex: 0x0A6C9B)
+    // Brand — lightened in dark mode for contrast on dark surfaces.
+    static let brandNavy         = Color(light: 0x14435F, dark: 0x8FB8CE)
 }
 
 extension Color {
@@ -37,6 +37,29 @@ extension Color {
                   blue:  Double(hex & 0xff)         / 255,
                   opacity: alpha)
     }
+
+    /// An adaptive color that resolves to `light` in light mode, `dark` in dark mode.
+    init(light: UInt, dark: UInt) {
+        self.init(lightHex: light, darkHex: dark)
+    }
+
+    /// Adaptive color with independent per-appearance opacity (for system-style fills).
+    init(lightHex: UInt, lightAlpha: Double = 1, darkHex: UInt, darkAlpha: Double = 1) {
+        #if canImport(UIKit)
+        self = Color(uiColor: UIColor { traits in
+            let isDark = traits.userInterfaceStyle == .dark
+            let hex = isDark ? darkHex : lightHex
+            return UIColor(
+                red:   CGFloat((hex >> 16) & 0xff) / 255,
+                green: CGFloat((hex >> 8)  & 0xff) / 255,
+                blue:  CGFloat(hex & 0xff)         / 255,
+                alpha: CGFloat(isDark ? darkAlpha : lightAlpha)
+            )
+        })
+        #else
+        self.init(hex: lightHex, alpha: lightAlpha)
+        #endif
+    }
 }
 
 /// The lowercase "sensi" wordmark, approximated with a rounded system face.
@@ -44,25 +67,13 @@ struct SensiWordmark: View {
     var color: Color = .black
     var size: CGFloat = 34
     var body: some View {
-        Text("sensi")
-            .font(.system(size: size, weight: .regular, design: .rounded))
+        Image("sensi.logo")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .frame(height: size)
             .foregroundStyle(color)
-    }
-}
-
-/// "sensi / by COPELAND" lockup used on Splash and Login.
-struct SensiLockup: View {
-    var wordmarkColor: Color = .white
-    var copelandColor: Color = .white
-    var size: CGFloat = 64
-    var body: some View {
-        VStack(spacing: 2) {
-            SensiWordmark(color: wordmarkColor, size: size)
-            Text("by COPELAND")
-                .font(.system(size: size * 0.28, weight: .heavy))
-                .tracking(1)
-                .foregroundStyle(copelandColor)
-        }
+            .accessibilityLabel("sensi")
     }
 }
 
@@ -70,8 +81,11 @@ struct SensiLockup: View {
 struct CardBackground: ViewModifier {
     var cornerRadius: CGFloat = 16
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
-            .background(SMA.card, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .containerShape(shape)
+            .background(SMA.card, in: shape)
+            .clipShape(shape)
     }
 }
 
@@ -98,5 +112,53 @@ extension View {
         #else
         self
         #endif
+    }
+
+    /// Constrains free-flowing content (VStack/ScrollView) to a centered readable
+    /// column on regular width (iPad); leaves compact (iPhone) untouched.
+    func readableWidth(_ maxWidth: CGFloat = 560) -> some View {
+        modifier(ReadableWidth(maxWidth: maxWidth))
+    }
+
+    /// Constrains a greedy `Form`/`List` to a centered readable column on regular
+    /// width. A list always fills its frame, so it must be centered with flanking
+    /// spacers rather than a plain `.frame(maxWidth:)`.
+    func readableFormWidth(_ maxWidth: CGFloat = 560) -> some View {
+        modifier(ReadableFormWidth(maxWidth: maxWidth))
+    }
+}
+
+/// Centers VStack/ScrollView content at a max width on regular size class.
+struct ReadableWidth: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var hSize
+    var maxWidth: CGFloat = 560
+
+    func body(content: Content) -> some View {
+        if hSize == .regular {
+            content
+                .frame(maxWidth: maxWidth)
+                .frame(maxWidth: .infinity)
+        } else {
+            content
+        }
+    }
+}
+
+/// Centers a greedy `Form`/`List` at a max width on regular size class using
+/// flanking spacers, since a list ignores a plain max-width frame.
+struct ReadableFormWidth: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var hSize
+    var maxWidth: CGFloat = 560
+
+    func body(content: Content) -> some View {
+        if hSize == .regular {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                content.frame(maxWidth: maxWidth)
+                Spacer(minLength: 0)
+            }
+        } else {
+            content
+        }
     }
 }

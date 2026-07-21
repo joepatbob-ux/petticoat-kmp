@@ -1,0 +1,257 @@
+import SwiftUI
+
+// MARK: - Model
+
+struct ActivityProfile: Identifiable, Hashable {
+    let id = UUID()
+    var name: String
+    var symbol: String
+    var colorHex: UInt
+    var heatTo: Int
+    var coolTo: Int
+    var subtitle: String
+
+    var rangeText: String { "\(heatTo) · \(coolTo)" }
+
+    static let samples: [ActivityProfile] = [
+        .init(name: "Away",    symbol: "figure.walk",     colorHex: 0x30B0C7, heatTo: 62, coolTo: 83, subtitle: "3 Sensors"),
+        .init(name: "Home",    symbol: "house.fill",      colorHex: 0xFF9500, heatTo: 70, coolTo: 75, subtitle: "Thermostat"),
+        .init(name: "Sleep",   symbol: "bed.double.fill", colorHex: 0xAF52DE, heatTo: 62, coolTo: 78, subtitle: "3 Sensors"),
+        .init(name: "Workout", symbol: "dumbbell.fill",   colorHex: 0xFF3B30, heatTo: 62, coolTo: 78, subtitle: "3 Sensors"),
+    ]
+
+    static let new = ActivityProfile(name: "", symbol: "house.fill", colorHex: 0xFF3B30, heatTo: 68, coolTo: 76, subtitle: "3 Sensors")
+}
+
+// MARK: - Activity Profiles list
+
+/// The Presets area: a list of activity profiles you can create, edit, and reorder.
+struct ActivityProfilesList: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var editing: ActivityProfile?
+    @State private var creatingNew = false
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(model.activityProfiles) { profile in
+                    Button {
+                        model.activateProfile(profile)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 12) {
+                            ProfileIcon(symbol: profile.symbol, colorHex: profile.colorHex, size: 30)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(profile.name)
+                                    .foregroundStyle(SMA.labelPrimary)
+                                Text(profile.subtitle)
+                                    .font(.footnote)
+                                    .foregroundStyle(SMA.labelSecondary)
+                            }
+                            Spacer()
+                            Text(profile.rangeText)
+                                .foregroundStyle(SMA.labelSecondary)
+                                .monospacedDigit()
+                            Menu {
+                                Button("Edit", systemImage: "pencil") { editing = profile }
+                                Button("Duplicate", systemImage: "plus.square.on.square") { model.duplicateProfile(profile) }
+                                Button("Delete", systemImage: "trash", role: .destructive) { model.deleteProfile(profile) }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(SMA.accent)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            } footer: {
+                Text("Profiles set the temperature range and sensors used for each part of your day.")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .listRowBackground(SMA.card)
+        .background(SMA.groupedBackground.ignoresSafeArea())
+        .navigationTitle("Activity Profiles")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { creatingNew = true } label: { Image(systemName: "plus") }
+            }
+        }
+        .sheet(item: $editing) { profile in
+            EditActivityProfileView(profile: profile, onSave: model.saveProfile)
+        }
+        .sheet(isPresented: $creatingNew) {
+            EditActivityProfileView(profile: .new, onSave: model.saveProfile)
+        }
+    }
+
+}
+
+/// A profile's colored circular icon.
+struct ProfileIcon: View {
+    let symbol: String
+    let colorHex: UInt
+    var size: CGFloat = 30
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.5, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Color(hex: colorHex), in: Circle())
+    }
+}
+
+// MARK: - Edit Activity Profile
+
+struct EditActivityProfileView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var profile: ActivityProfile
+    let onSave: (ActivityProfile) -> Void
+
+    init(profile: ActivityProfile, onSave: @escaping (ActivityProfile) -> Void) {
+        _profile = State(initialValue: profile)
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(spacing: 10) {
+                        ProfileIcon(symbol: profile.symbol, colorHex: profile.colorHex, size: 64)
+                        Text(profile.name.isEmpty ? "New Profile" : profile.name)
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(SMA.labelPrimary)
+                        NavigationLink {
+                            ProfileNameView(name: $profile.name, symbol: $profile.symbol, colorHex: $profile.colorHex)
+                        } label: {
+                            Text("Edit")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(SMA.accent)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+
+                Section {
+                    Stepper(value: $profile.coolTo, in: 50...95) {
+                        LabeledContent("Cool to", value: "\(profile.coolTo)")
+                    }
+                    Stepper(value: $profile.heatTo, in: 45...90) {
+                        LabeledContent("Heat to", value: "\(profile.heatTo)")
+                    }
+                } header: {
+                    Text("Setpoints")
+                } footer: {
+                    Text("Your system will use this range to determine the proper set point for your heating and cooling mode.")
+                }
+
+                Section {
+                    NavigationLink {
+                        PlaceholderDetail(title: "Participating Sensors")
+                    } label: {
+                        LabeledContent("Participating Sensors", value: "3 of 4")
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .listRowBackground(SMA.card)
+            .background(SMA.groupedBackground.ignoresSafeArea())
+            .navigationTitle("Edit Activity Profile")
+            .inlineNavTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { onSave(profile); dismiss() }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .tint(SMA.accent)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Profile Name (name + color + icon)
+
+struct ProfileNameView: View {
+    @Binding var name: String
+    @Binding var symbol: String
+    @Binding var colorHex: UInt
+
+    private let colors: [UInt] = [0x30B0C7, 0x5856D6, 0xAF52DE, 0xFF3B30, 0xFF9500, 0x34C759]
+    private let symbols = [
+        "house.fill", "dumbbell.fill", "briefcase.fill", "book.fill", "fork.knife", "moon.zzz.fill",
+        "figure.walk", "tv.fill", "cup.and.saucer.fill", "wineglass.fill", "paintpalette.fill", "bed.double.fill",
+        "pawprint.fill", "gamecontroller.fill", "car.fill", "airplane", "leaf.fill", "flame.fill",
+    ]
+    private let grid = Array(repeating: GridItem(.flexible()), count: 6)
+
+    var body: some View {
+        List {
+            Section {
+                TextField("Name", text: $name)
+            }
+
+            Section {
+                HStack(spacing: 12) {
+                    ForEach(colors, id: \.self) { c in
+                        Button { colorHex = c } label: {
+                            ZStack {
+                                Circle().fill(Color(hex: c))
+                                if colorHex == c {
+                                    Circle().fill(SMA.card).frame(width: 13, height: 13)
+                                }
+                            }
+                            .frame(width: 34, height: 34)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.vertical, 4)
+                .listRowSeparator(.hidden)
+
+                LazyVGrid(columns: grid, spacing: 12) {
+                    ForEach(symbols, id: \.self) { s in
+                        Button { symbol = s } label: {
+                            Image(systemName: s)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(symbol == s ? .white : Color(hex: colorHex))
+                                .frame(width: 42, height: 42)
+                                .background(Circle().fill(symbol == s ? Color(hex: colorHex) : SMA.fillTertiary))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
+                .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .listRowBackground(SMA.card)
+        .background(SMA.groupedBackground.ignoresSafeArea())
+        .navigationTitle("Profile Name")
+        .navigationBarTitleDisplayMode(.large)
+    }
+}
+
+#Preview {
+    NavigationStack {
+        ActivityProfilesList()
+    }
+    .environment(AppModel())
+}

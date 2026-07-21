@@ -8,14 +8,14 @@ struct DeviceTabView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            Tab("Control", systemImage: "thermometer.medium", value: DeviceTab.control) {
+            Tab("Control", image: "thermostat.fill", value: DeviceTab.control) {
                 ControlView()
             }
-            Tab("Schedule", systemImage: "calendar", value: DeviceTab.schedule) {
-                DeviceTabPlaceholder(title: "Schedule", systemImage: "calendar")
+            Tab("Schedule", image: "schedule.activity", value: DeviceTab.schedule) {
+                ScheduleView()
             }
-            Tab("Usage", systemImage: "chart.bar.xaxis", value: DeviceTab.usage) {
-                DeviceTabPlaceholder(title: "Usage", systemImage: "chart.bar.xaxis")
+            Tab("Usage", systemImage: "gauge.with.needle.fill", value: DeviceTab.usage) {
+                DeviceTabPlaceholder(title: "Usage", systemImage: "gauge.with.needle.fill")
             }
             Tab("Reminders", systemImage: "bell", value: DeviceTab.reminders) {
                 DeviceTabPlaceholder(title: "Reminders", systemImage: "bell")
@@ -50,17 +50,21 @@ enum DeviceTab: Hashable {
     case control, schedule, usage, reminders, settings
 }
 
-/// Placeholder content for the not-yet-built device tabs.
+/// Placeholder content for the not-yet-built device tabs. Accepts either a system
+/// symbol or a custom asset symbol.
 struct DeviceTabPlaceholder: View {
     let title: String
-    let systemImage: String
+    var systemImage: String? = nil
+    var image: String? = nil
 
     var body: some View {
-        ContentUnavailableView(
-            title,
-            systemImage: systemImage,
-            description: Text("Prototype screen")
-        )
+        Group {
+            if let image {
+                ContentUnavailableView(title, image: image, description: Text("Prototype screen"))
+            } else {
+                ContentUnavailableView(title, systemImage: systemImage ?? "questionmark", description: Text("Prototype screen"))
+            }
+        }
         .background(SMA.groupedBackground.ignoresSafeArea())
     }
 }

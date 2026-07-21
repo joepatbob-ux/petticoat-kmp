@@ -6,6 +6,9 @@ struct ModeSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
+    @State private var showWheel = false
+    private let circulateOptions = ["17% (10min)", "33% (15min)", "50% (20min)", "67% (25min)"]
+
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
@@ -26,37 +29,58 @@ struct ModeSheet: View {
             .padding(.top, 16)
             .padding(.bottom, 8)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        SheetSectionHeader("System")
-                        SystemModeSelector(selected: $model.device.systemMode)
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        SheetSectionHeader("Fan")
-                        FanModeSelector(selected: $model.device.fanMode)
-                    }
-                    CirculateCard(
-                        circulate: $model.device.circulateFan,
-                        amount: $model.device.circulateAmount
-                    )
+            List {
+                Section("System") {
+                    SystemModeSelector(selected: $model.device.systemMode)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
-                .padding(20)
+
+                Section("Fan") {
+                    FanModeSelector(selected: $model.device.fanMode)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                }
+
+                Section {
+                    Toggle("Circulate Fan", isOn: $model.device.circulateFan)
+                        .tint(Color(hex: 0x34C759))
+
+                    Button {
+                        withAnimation(.snappy) { showWheel.toggle() }
+                    } label: {
+                        HStack {
+                            Text("Amount Per Hour")
+                                .foregroundStyle(SMA.labelPrimary)
+                            Spacer()
+                            Text(model.device.circulateAmount)
+                                .font(.subheadline)
+                                .foregroundStyle(SMA.labelPrimary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(SMA.fillTertiary, in: Capsule())
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!model.device.circulateFan)
+
+                    if showWheel {
+                        Picker("Amount Per Hour", selection: $model.device.circulateAmount) {
+                            ForEach(circulateOptions, id: \.self) { Text($0).tag($0) }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(height: 160)
+                    }
+                }
+                .listRowBackground(SMA.card)
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .foregroundStyle(SMA.labelPrimary)
         }
         .background(SMA.groupedBackground.ignoresSafeArea())
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-    }
-}
-
-private struct SheetSectionHeader: View {
-    let text: String
-    init(_ text: String) { self.text = text }
-    var body: some View {
-        Text(text)
-            .font(.headline)
-            .foregroundStyle(SMA.labelSecondary)
     }
 }
 
@@ -66,53 +90,24 @@ struct SystemModeSelector: View {
     @Binding var selected: SystemMode
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(SystemMode.allCases) { mode in
-                Button { selected = mode } label: {
-                    VStack(spacing: 6) {
-                        SystemModeIcon(mode: mode)
-                            .font(.footnote)
-                        Text(mode.label)
-                            .font(.caption2)
-                            .foregroundStyle(SMA.labelPrimary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background {
-                        if selected == mode {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(SMA.card)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
+        PillSegmentedSelector(items: SystemMode.allCases, selection: $selected, label: \.label) { mode in
+            SystemModeIcon(mode: mode, size: 30)
         }
-        .padding(4)
-        .background(SMA.fillTertiary, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .animation(.snappy, value: selected)
     }
 }
 
-/// Icon(s) representing a system mode. Shared by the selector and the mode pill.
+/// Icon representing a system mode, rendered from the custom multicolor art.
+/// Each asset carries light/dark appearance variants, so no tinting is applied.
+/// Shared by the selector and the mode pill.
 struct SystemModeIcon: View {
     let mode: SystemMode
+    var size: CGFloat = 28
 
     var body: some View {
-        switch mode {
-        case .cool:
-            Image(systemName: "snowflake").foregroundStyle(SMA.accent)
-        case .heat:
-            Image(systemName: "flame.fill").foregroundStyle(SMA.tempOrange)
-        case .auxHeat:
-            Image(systemName: "flame.fill").foregroundStyle(SMA.destructive)
-        case .auto:
-            HStack(spacing: 2) {
-                Image(systemName: "snowflake").foregroundStyle(SMA.accent)
-                Image(systemName: "flame.fill").foregroundStyle(SMA.tempOrange)
-            }
-        case .off:
-            Image(systemName: "stop.circle.fill").foregroundStyle(SMA.labelPrimary)
-        }
+        Image(mode.iconName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
     }
 }
 
@@ -122,79 +117,23 @@ struct FanModeSelector: View {
     @Binding var selected: FanMode
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(FanMode.allCases) { mode in
-                Button { selected = mode } label: {
-                    VStack(spacing: 6) {
-                        Image(systemName: "fanblades.fill")
-                            .foregroundStyle(selected == mode ? SMA.accent : SMA.labelSecondary)
-                        Text(mode.label)
-                            .font(.caption2)
-                            .foregroundStyle(SMA.labelPrimary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background {
-                        if selected == mode {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(SMA.card)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
+        PillSegmentedSelector(items: FanMode.allCases, selection: $selected, label: \.label) { mode in
+            FanModeIcon(mode: mode, size: 30)
         }
-        .padding(4)
-        .background(SMA.fillTertiary, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .animation(.snappy, value: selected)
     }
 }
 
-// MARK: - Circulate
-
-struct CirculateCard: View {
-    @Binding var circulate: Bool
-    @Binding var amount: String
-    @State private var showWheel = false
-
-    private let options = ["17% (10min)", "33% (15min)", "50% (20min)", "67% (25min)"]
+/// Icon representing a fan mode, rendered from the custom art (Auto carries an
+/// "A" badge). Shared by the selector and the mode pill.
+struct FanModeIcon: View {
+    let mode: FanMode
+    var size: CGFloat = 28
 
     var body: some View {
-        VStack(spacing: 0) {
-            Toggle("Circulate Fan", isOn: $circulate)
-                .tint(Color(hex: 0x34C759))
-                .foregroundStyle(SMA.labelPrimary)
-                .padding(16)
-
-            Divider().overlay(SMA.separator).padding(.leading, 16)
-
-            Button {
-                withAnimation(.snappy) { showWheel.toggle() }
-            } label: {
-                HStack {
-                    Text("Amount Per Hour")
-                        .foregroundStyle(SMA.labelPrimary)
-                    Spacer()
-                    Text(amount)
-                        .font(.subheadline)
-                        .foregroundStyle(SMA.labelPrimary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(SMA.fillTertiary, in: Capsule())
-                }
-                .padding(16)
-            }
-            .buttonStyle(.plain)
-            .disabled(!circulate)
-
-            if showWheel {
-                Picker("Amount Per Hour", selection: $amount) {
-                    ForEach(options, id: \.self) { Text($0).tag($0) }
-                }
-                .pickerStyle(.wheel)
-                .frame(height: 160)
-            }
-        }
-        .cardStyle()
+        Image(mode.iconName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
     }
 }
 

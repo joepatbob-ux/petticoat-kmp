@@ -5,18 +5,13 @@ struct SplashView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [SMA.splashTop, SMA.splashBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            SMA.background.ignoresSafeArea()
 
-            SensiLockup(
-                wordmarkColor: .white,
-                copelandColor: .white.opacity(0.85),
-                size: 72
-            )
+            Image("SensiByCopeland")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 240)
+                .accessibilityLabel("Sensi by Copeland")
         }
         .task {
             try? await Task.sleep(for: .seconds(1.8))

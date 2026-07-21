@@ -21,17 +21,32 @@ struct RootView: View {
     }
 }
 
-/// Signed-in container: Dashboard is the root, Account is presented as a sheet.
+/// Signed-in container. On iPhone (compact) the dashboard is the root of a
+/// NavigationStack; on iPad (regular) it becomes a NavigationSplitView. Account is
+/// presented as a sheet in both modes.
 struct MainView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.horizontalSizeClass) private var hSize
 
     var body: some View {
         @Bindable var model = model
-        NavigationStack {
-            DashboardView()
+        Group {
+            if hSize == .regular {
+                MainSplitView()
+            } else {
+                NavigationStack {
+                    DashboardView()
+                }
+            }
         }
         .sheet(isPresented: $model.showAccount) {
             AccountView()
+        }
+        .sheet(isPresented: $model.showAddDevice) {
+            AddDeviceView()
+        }
+        .sheet(isPresented: $model.showHelp) {
+            HelpSupportView()
         }
     }
 }
