@@ -3,10 +3,11 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
     @State private var spotlightExpanded = true
+    @State private var showControl = false
 
     var body: some View {
         List {
-            DashboardThermostatCard()
+            DashboardThermostatCard(showControl: $showControl)
 
             if !model.spotlights.isEmpty {
                 // The header + lead card live in a stable Section; the remaining cards
@@ -41,6 +42,7 @@ struct DashboardView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
+        .navigationDestination(isPresented: $showControl) { DeviceTabView() }
         .toolbar { DashboardToolbar() }
     }
 }
@@ -81,7 +83,14 @@ struct DashboardToolbar: ToolbarContent {
 struct DashboardThermostatCard: View {
     @Environment(AppModel.self) private var model
 
+    /// Drives the push to the device Control screen. Owned by DashboardView so the
+    /// navigationDestination lives on the List, not inside a List row (which made
+    /// an embedded NavigationLink hijack the header's tap).
+    @Binding var showControl: Bool
     @State private var showMode = false
+    /// Inline sensor list disclosure. Expanding reveals the paired sensors in place;
+    /// it does not drill into the device — tapping the temperature body does that.
+    @State private var sensorsExpanded = false
 
     private var device: Device { model.device }
 
@@ -92,31 +101,52 @@ struct DashboardThermostatCard: View {
                     showMode = true
                 }
 
-                Text("\(device.currentTemp)")
-                    .font(SMA.displayTemp(size: 46, activity: device.activity))
-                    .foregroundStyle(SMA.tempColor(device.activity))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-
-                Spacer(minLength: 8)
+                // Tapping the temperature body drills into the Control screen. The
+                // mode pill and stepper flanking it keep their own actions.
+                Button {
+                    showControl = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("\(device.currentTemp)")
+                            .font(SMA.displayTemp(size: 46, activity: device.activity))
+                            .foregroundStyle(SMA.tempColor(device.activity))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                        Spacer(minLength: 8)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(device.name) controls")
 
                 SetpointStepper(low: device.keepMin, high: device.keepMax) { bound, delta in
                     model.adjustKeep(bound, by: delta)
                 }
             }
             .listRowBackground(SMA.card)
+
+            if sensorsExpanded {
+                ForEach(device.sensors) { sensor in
+                    SensorRow(sensor: sensor)
+                        .listRowBackground(SMA.card)
+                }
+            }
         } header: {
-            NavigationLink {
-                DeviceTabView()
+            Button {
+                withAnimation(.snappy) { sensorsExpanded.toggle() }
             } label: {
-                HStack {
+                HStack(spacing: 8) {
                     Text(device.name)
                         .font(.title3.weight(.bold))
                         .foregroundStyle(SMA.labelPrimary)
                     Spacer()
+                    Text(device.sensorSummary)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(SMA.labelSecondary)
                     Image(systemName: "chevron.right")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(SMA.accent)
+                        .rotationEffect(.degrees(sensorsExpanded ? 90 : 0))
                         .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
@@ -124,6 +154,8 @@ struct DashboardThermostatCard: View {
             }
             .buttonStyle(.plain)
             .textCase(nil)
+            .accessibilityLabel("\(device.name), \(device.sensorSummary)")
+            .accessibilityHint(sensorsExpanded ? "Collapse sensor list" : "Expand sensor list")
         } footer: {
             HStack(spacing: 4) {
                 Image(systemName: "location.fill")
@@ -139,6 +171,35 @@ struct DashboardThermostatCard: View {
         .sheet(isPresented: $showMode) {
             ModeSheet()
         }
+    }
+}
+
+/// One paired room sensor in the dashboard card's expandable list.
+struct SensorRow: View {
+    let sensor: RoomSensor
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: sensor.participating ? "sensor.fill" : "sensor")
+                .foregroundStyle(sensor.participating ? SMA.accent : SMA.labelSecondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(sensor.name)
+                    .foregroundStyle(SMA.labelPrimary)
+                Text(sensor.participating ? "Participating" : "Not participating")
+                    .font(.caption)
+                    .foregroundStyle(SMA.labelSecondary)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 10) {
+                Label("\(sensor.temp)°", systemImage: "thermometer.medium")
+                Label("\(sensor.humidity)%", systemImage: "humidity.fill")
+            }
+            .font(.footnote)
+            .foregroundStyle(SMA.labelSecondary)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 }
 
