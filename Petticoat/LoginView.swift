@@ -98,6 +98,7 @@ struct ForgotPasswordView: View {
                 } label: {
                     Image(systemName: "arrow.up")
                 }
+                .accessibilityLabel("Reset Password")
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.circle)
                 .tint(SMA.accent)
@@ -159,6 +160,7 @@ struct CreateAccountView: View {
                 } label: {
                     Image(systemName: "arrow.up")
                 }
+                .accessibilityLabel("Create Account")
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.circle)
                 .tint(SMA.accent)

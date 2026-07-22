@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "install.hero.jumperTwoR.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

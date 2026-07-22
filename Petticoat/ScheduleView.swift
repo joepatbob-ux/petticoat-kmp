@@ -104,6 +104,7 @@ struct AutomationModeSelector: View {
             Image(mode.icon)
                 .font(.title)
                 .symbolRenderingMode(.multicolor)
+                .accessibilityHidden(true)
         }
     }
 }

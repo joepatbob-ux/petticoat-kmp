@@ -64,6 +64,7 @@ struct ActivityProfilesList: View {
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("More options for \(profile.name)")
                         }
                     }
                     .buttonStyle(.plain)
@@ -105,6 +106,7 @@ struct ProfileIcon: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(Color(hex: colorHex), in: Circle())
+            .accessibilityHidden(true)
     }
 }
 
@@ -219,6 +221,8 @@ struct ProfileNameView: View {
                         }
                         .buttonStyle(.plain)
                         .frame(maxWidth: .infinity)
+                        .accessibilityLabel("Color")
+                        .accessibilityAddTraits(colorHex == c ? [.isSelected] : [])
                     }
                 }
                 .padding(.vertical, 4)
@@ -234,6 +238,8 @@ struct ProfileNameView: View {
                                 .background(Circle().fill(symbol == s ? Color(hex: colorHex) : SMA.fillTertiary))
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(s)
+                        .accessibilityAddTraits(symbol == s ? [.isSelected] : [])
                     }
                 }
                 .padding(.vertical, 4)
