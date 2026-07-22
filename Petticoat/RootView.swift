@@ -41,12 +41,15 @@ struct MainView: View {
         }
         .sheet(isPresented: $model.showAccount) {
             AccountView()
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $model.showAddDevice) {
             AddDeviceView()
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $model.showHelp) {
             HelpSupportView()
+                .presentationDragIndicator(.visible)
         }
     }
 }

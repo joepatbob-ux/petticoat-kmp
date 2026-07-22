@@ -105,6 +105,11 @@ struct InstallDevice: Identifiable {
                     ChoiceOption(title: "I have two \"R\" wires", image: "install.hero.jumperTwoR"),
                 ]),
             InstallStep(
+                stage: "Install", hero: "install.hero.jumperTwoR", title: "Pull Any Jumper Wires",
+                body: "If your old thermostat has a jumper wire linking two terminals (for example R and RC), remove it now. Your Sensi thermostat manages this connection internally, so jumpers are no longer needed.",
+                warning: "Remove jumpers before disconnecting",
+                link: "How to Identify a Jumper Wire"),
+            InstallStep(
                 stage: "Install", hero: "install.hero.removeBase", title: "Disconnect Wires and Remove Base",
                 link: "How to Remove Old Thermostat Base"),
             InstallStep(
@@ -284,27 +289,7 @@ struct InstallFlowView: View {
                         .padding(.top, 8)
                         .accessibilityHidden(true)
 
-                    VStack(spacing: 12) {
-                        if let warning = step.warning {
-                            Label(warning, systemImage: "exclamationmark.triangle.fill")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(SMA.tempOrange)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .background(SMA.tempOrange.opacity(0.12), in: Capsule())
-                        }
-                        Text(step.title)
-                            .font(.title2.weight(.bold))
-                            .foregroundStyle(SMA.labelPrimary)
-                            .multilineTextAlignment(.center)
-                        if let body = step.body {
-                            Text(body)
-                                .font(.body)
-                                .foregroundStyle(SMA.labelSecondary)
-                                .multilineTextAlignment(.center)
-                        }
-                    }
-                    .padding(.horizontal, 24)
+                    StepHeadline(title: step.title, detail: step.body, warning: step.warning)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, 16)

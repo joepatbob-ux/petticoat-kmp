@@ -99,6 +99,38 @@ struct InstallButtonBar: View {
     }
 }
 
+/// Centered caution pill (optional) + title + body (optional), shared by the
+/// standard and Connect the Wires steps.
+struct StepHeadline: View {
+    let title: String
+    var detail: String? = nil
+    var warning: String? = nil
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if let warning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(SMA.tempOrange)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(SMA.tempOrange.opacity(0.12), in: Capsule())
+            }
+            Text(title)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(SMA.labelPrimary)
+                .multilineTextAlignment(.center)
+            if let detail {
+                Text(detail)
+                    .font(.body)
+                    .foregroundStyle(SMA.labelSecondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+}
+
 // MARK: - Select Wi-Fi
 
 struct WifiListContent: View {
@@ -456,19 +488,7 @@ struct ConnectWiresContent: View {
                         .padding(.horizontal, 16)
                     }
 
-                    VStack(spacing: 12) {
-                        Text(step.title)
-                            .font(.title2.weight(.bold))
-                            .foregroundStyle(SMA.labelPrimary)
-                            .multilineTextAlignment(.center)
-                        if let body = step.body {
-                            Text(body)
-                                .font(.body)
-                                .foregroundStyle(SMA.labelSecondary)
-                                .multilineTextAlignment(.center)
-                        }
-                    }
-                    .padding(.horizontal, 24)
+                    StepHeadline(title: step.title, detail: step.body)
                 }
                 .padding(.top, 8)
                 .padding(.bottom, 16)
