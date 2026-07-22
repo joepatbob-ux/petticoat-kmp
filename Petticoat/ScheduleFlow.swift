@@ -5,6 +5,16 @@ import SwiftUI
 struct SchedulePreset: Identifiable, Hashable {
     let id = UUID()
     var name: String
+    /// The schedule itself: one or more day groups, each with its own events.
+    var groups: [ScheduleDayGroup] = [ScheduleDayGroup(days: Set(0..<7), events: ScheduleEvent.samples())]
+}
+
+/// A set of days sharing the same list of events. A schedule is one or more of
+/// these (e.g. "Weekdays" + "Weekend").
+struct ScheduleDayGroup: Identifiable, Hashable {
+    let id = UUID()
+    var days: Set<Int>
+    var events: [ScheduleEvent]
 }
 
 struct ScheduleEvent: Identifiable, Hashable {
@@ -35,8 +45,8 @@ struct SchedulePresetsList: View {
 
     @State private var presets: [SchedulePreset]
     @State private var selection: UUID?
-    @State private var editingName: String?
-    @State private var creatingNew = false
+    @State private var editing: SchedulePreset?
+    @State private var creating: SchedulePreset?
 
     init(title: String, presets: [String]) {
         self.title = title
@@ -61,7 +71,7 @@ struct SchedulePresetsList: View {
                                 .foregroundStyle(SMA.labelPrimary)
                             Spacer()
                             Menu {
-                                Button("Edit", systemImage: "pencil") { editingName = preset.name }
+                                Button("Edit", systemImage: "pencil") { editing = preset }
                                 Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(preset) }
                                 Button("Delete", systemImage: "trash", role: .destructive) { delete(preset) }
                             } label: {
@@ -87,21 +97,27 @@ struct SchedulePresetsList: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { creatingNew = true } label: { Image(systemName: "plus") }
+                Button { creating = SchedulePreset(name: "") } label: { Image(systemName: "plus") }
             }
         }
-        .sheet(isPresented: $creatingNew) {
-            ScheduleEditorView(scheduleName: "")
+        .sheet(item: $creating) { draft in
+            ScheduleEditorView(preset: draft) { new in
+                presets.append(new)
+                selection = new.id
+            }
         }
-        .sheet(item: Binding(get: { editingName.map { NamedSheet(name: $0) } },
-                             set: { editingName = $0?.name })) { sheet in
-            ScheduleEditorView(scheduleName: sheet.name)
+        .sheet(item: $editing) { preset in
+            ScheduleEditorView(preset: preset) { updated in
+                if let i = presets.firstIndex(where: { $0.id == updated.id }) {
+                    presets[i] = updated
+                }
+            }
         }
     }
 
     private func duplicate(_ preset: SchedulePreset) {
-        guard let i = presets.firstIndex(of: preset) else { return }
-        presets.insert(SchedulePreset(name: preset.name + " Copy"), at: i + 1)
+        guard let i = presets.firstIndex(where: { $0.id == preset.id }) else { return }
+        presets.insert(SchedulePreset(name: preset.name + " Copy", groups: preset.groups), at: i + 1)
     }
 
     private func delete(_ preset: SchedulePreset) {
@@ -110,46 +126,32 @@ struct SchedulePresetsList: View {
     }
 }
 
-/// Identifiable wrapper so a plain name string can drive a `.sheet(item:)`.
-private struct NamedSheet: Identifiable {
-    let id = UUID()
-    let name: String
-}
-
 // MARK: - Edit Schedule (name + days + events)
 
 struct ScheduleEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
-    /// A set of days sharing the same list of events. A schedule is one or more
-    /// of these (e.g. "Weekdays" + "Weekend").
-    private struct DayGroup: Identifiable {
-        let id = UUID()
-        var days: Set<Int>
-        var events: [ScheduleEvent]
-    }
-
-    @State private var scheduleName: String
-    @State private var groups: [DayGroup]
+    @State private var preset: SchedulePreset
     @State private var editingEvent: ScheduleEvent?
-    @State private var addingEventGroup: DayGroup.ID?
+    @State private var addingEventGroup: ScheduleDayGroup.ID?
+    let onSave: (SchedulePreset) -> Void
 
     private let dayLabels = ["M", "T", "W", "T", "F", "S", "S"]
     private let dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-    init(scheduleName: String) {
-        _scheduleName = State(initialValue: scheduleName)
-        _groups = State(initialValue: [DayGroup(days: Set(0..<7), events: ScheduleEvent.samples())])
+    init(preset: SchedulePreset, onSave: @escaping (SchedulePreset) -> Void) {
+        _preset = State(initialValue: preset)
+        self.onSave = onSave
     }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    TextField("Name", text: $scheduleName)
+                    TextField("Name", text: $preset.name)
                 }
 
-                ForEach(groups) { group in
+                ForEach(preset.groups) { group in
                     Section {
                         dayPicker(for: group)
 
@@ -171,7 +173,7 @@ struct ScheduleEditorView: View {
 
                         Button("Add Event", systemImage: "plus") { addingEventGroup = group.id }
 
-                        if groups.count > 1 {
+                        if preset.groups.count > 1 {
                             Button("Remove Day Group", systemImage: "trash", role: .destructive) {
                                 removeGroup(group.id)
                             }
@@ -191,19 +193,23 @@ struct ScheduleEditorView: View {
             .background(SMA.groupedBackground.ignoresSafeArea())
             .navigationTitle("Edit Schedule")
             .inlineNavTitle()
+            .presentationDragIndicator(.visible)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
                         .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { dismiss() }
+                    Button("Save") {
+                        onSave(preset)
+                        dismiss()
+                    }
                 }
             }
-            .sheet(isPresented: Binding(get: { addingEventGroup != nil },
-                                        set: { if !$0 { addingEventGroup = nil } })) {
+            .sheet(item: Binding(get: { addingEventGroup.map { GroupTarget(id: $0) } },
+                                 set: { addingEventGroup = $0?.id })) { target in
                 EditEventView(setpoint: 70, time: Date()) { event in
-                    if let id = addingEventGroup { addEvent(event, to: id) }
+                    addEvent(event, to: target.id)
                 }
             }
             .sheet(item: $editingEvent) { event in
@@ -216,7 +222,7 @@ struct ScheduleEditorView: View {
 
     // MARK: - Day picker
 
-    private func dayPicker(for group: DayGroup) -> some View {
+    private func dayPicker(for group: ScheduleDayGroup) -> some View {
         HStack(spacing: 6) {
             ForEach(0..<7, id: \.self) { i in
                 let on = group.days.contains(i)
@@ -240,30 +246,30 @@ struct ScheduleEditorView: View {
 
     // MARK: - Mutations
 
-    private func groupIndex(_ id: DayGroup.ID) -> Int? { groups.firstIndex { $0.id == id } }
+    private func groupIndex(_ id: ScheduleDayGroup.ID) -> Int? { preset.groups.firstIndex { $0.id == id } }
 
-    private func toggleDay(_ i: Int, in id: DayGroup.ID) {
+    private func toggleDay(_ i: Int, in id: ScheduleDayGroup.ID) {
         guard let g = groupIndex(id) else { return }
-        if groups[g].days.contains(i) { groups[g].days.remove(i) } else { groups[g].days.insert(i) }
+        if preset.groups[g].days.contains(i) { preset.groups[g].days.remove(i) } else { preset.groups[g].days.insert(i) }
     }
 
-    private func deleteEvents(_ offsets: IndexSet, from id: DayGroup.ID) {
+    private func deleteEvents(_ offsets: IndexSet, from id: ScheduleDayGroup.ID) {
         guard let g = groupIndex(id) else { return }
-        groups[g].events.remove(atOffsets: offsets)
+        preset.groups[g].events.remove(atOffsets: offsets)
     }
 
-    private func addEvent(_ event: ScheduleEvent, to id: DayGroup.ID) {
+    private func addEvent(_ event: ScheduleEvent, to id: ScheduleDayGroup.ID) {
         guard let g = groupIndex(id) else { return }
-        groups[g].events.append(event)
-        groups[g].events.sort { $0.time < $1.time }
+        preset.groups[g].events.append(event)
+        preset.groups[g].events.sort { $0.time < $1.time }
     }
 
     private func updateEvent(_ eventID: ScheduleEvent.ID, setpoint: Int, time: Date) {
-        for g in groups.indices {
-            if let e = groups[g].events.firstIndex(where: { $0.id == eventID }) {
-                groups[g].events[e].setpoint = setpoint
-                groups[g].events[e].time = time
-                groups[g].events.sort { $0.time < $1.time }
+        for g in preset.groups.indices {
+            if let e = preset.groups[g].events.firstIndex(where: { $0.id == eventID }) {
+                preset.groups[g].events[e].setpoint = setpoint
+                preset.groups[g].events[e].time = time
+                preset.groups[g].events.sort { $0.time < $1.time }
                 return
             }
         }
@@ -271,12 +277,12 @@ struct ScheduleEditorView: View {
 
     private func addDayGroup() {
         withAnimation(.snappy) {
-            groups.append(DayGroup(days: [], events: ScheduleEvent.samples()))
+            preset.groups.append(ScheduleDayGroup(days: [], events: ScheduleEvent.samples()))
         }
     }
 
-    private func removeGroup(_ id: DayGroup.ID) {
-        withAnimation(.snappy) { groups.removeAll { $0.id == id } }
+    private func removeGroup(_ id: ScheduleDayGroup.ID) {
+        withAnimation(.snappy) { preset.groups.removeAll { $0.id == id } }
     }
 
     // MARK: - Labels
@@ -289,6 +295,11 @@ struct ScheduleEditorView: View {
         let short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         return days.sorted().map { short[$0] }.joined(separator: ", ")
     }
+}
+
+/// Identifiable wrapper so a day-group id can drive a `.sheet(item:)`.
+private struct GroupTarget: Identifiable {
+    let id: ScheduleDayGroup.ID
 }
 
 // MARK: - Edit Event (start time + setpoint)
@@ -325,6 +336,7 @@ struct EditEventView: View {
             .background(SMA.groupedBackground.ignoresSafeArea())
             .navigationTitle("Edit Event")
             .inlineNavTitle()
+            .presentationDragIndicator(.visible)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }

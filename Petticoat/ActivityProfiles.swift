@@ -176,6 +176,7 @@ struct EditActivityProfileView: View {
             .background(SMA.groupedBackground.ignoresSafeArea())
             .navigationTitle("Edit Activity Profile")
             .inlineNavTitle()
+            .presentationDragIndicator(.visible)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
