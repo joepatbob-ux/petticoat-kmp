@@ -103,7 +103,9 @@ private struct LinkRow: View {
             Image(systemName: systemImage)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(SMA.labelSecondary)
+                .accessibilityHidden(true)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -304,6 +306,7 @@ struct AboutApplicationView: View {
                         .scaledToFit()
                         .frame(height: 32)
                         .foregroundStyle(SMA.brandNavy)
+                        .accessibilityHidden(true)
                     Text("Sensi")
                         .font(.headline)
                         .foregroundStyle(SMA.labelPrimary)

@@ -86,6 +86,7 @@ struct SpotlightSidebarCard: View {
             HStack(spacing: 6) {
                 Image(systemName: "flame.fill")
                     .foregroundStyle(SMA.orange)
+                    .accessibilityHidden(true)
                 Text(item.provider)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(SMA.brandNavy)
@@ -98,6 +99,7 @@ struct SpotlightSidebarCard: View {
                         .foregroundStyle(SMA.labelSecondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("More options")
             }
 
             Text(item.title)

@@ -56,6 +56,7 @@ struct SchedulePresetsList: View {
                             Image(systemName: selection == preset.id ? "largecircle.fill.circle" : "circle")
                                 .font(.title3)
                                 .foregroundStyle(selection == preset.id ? SMA.accent : SMA.labelSecondary)
+                                .accessibilityHidden(true)
                             Text(preset.name)
                                 .foregroundStyle(SMA.labelPrimary)
                             Spacer()
@@ -70,9 +71,11 @@ struct SchedulePresetsList: View {
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("More options for \(preset.name)")
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(selection == preset.id ? [.isSelected] : [])
                 }
             }
         }
@@ -191,6 +194,7 @@ struct ScheduleEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { dismiss() }
@@ -324,6 +328,7 @@ struct EditEventView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
@@ -332,6 +337,7 @@ struct EditEventView: View {
                     } label: {
                         Image(systemName: "checkmark")
                     }
+                    .accessibilityLabel("Save")
                 }
             }
         }

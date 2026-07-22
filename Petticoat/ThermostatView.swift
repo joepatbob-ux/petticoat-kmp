@@ -67,6 +67,7 @@ struct WeatherSummary: View {
             HStack(spacing: 12) {
                 Image(systemName: "sun.max.fill")
                     .foregroundStyle(SMA.labelPrimary)
+                    .accessibilityHidden(true)
                 Text("\(temp)")
                     .font(.title2.weight(.bold))
                     .foregroundStyle(SMA.labelPrimary)
@@ -110,6 +111,7 @@ struct HumidityLabel: View {
         HStack(spacing: 6) {
             Image(systemName: "humidity.fill")
                 .foregroundStyle(SMA.accent)
+                .accessibilityHidden(true)
             Text("\(humidity)%")
                 .foregroundStyle(SMA.labelSecondary)
         }
@@ -143,6 +145,8 @@ struct ModeSelectPill: View {
             .background(SMA.fillTertiary, in: Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Mode: \(systemMode.label), fan: \(fanMode.label)")
+        .accessibilityHint("Opens mode settings")
     }
 
     /// Short divider between the system and fan icons — orientation follows the axis.
@@ -153,6 +157,7 @@ struct ModeSelectPill: View {
                 width: axis == .horizontal ? 1 : 18,
                 height: axis == .horizontal ? 18 : 1
             )
+            .accessibilityHidden(true)
     }
 }
 
@@ -175,6 +180,7 @@ struct SetpointStepper: View {
                     Text("\(low)")
                     Image(systemName: "circle.fill").font(.system(size: 4))
                         .foregroundStyle(SMA.labelSecondary)
+                        .accessibilityHidden(true)
                     Text("\(high)")
                 }
                 .font(.title3.weight(.semibold))
@@ -202,6 +208,7 @@ struct SetpointStepper: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(delta > 0 ? "Increase temperature" : "Decrease temperature")
     }
 }
 
@@ -229,6 +236,8 @@ private struct SetpointToggle: View {
                 .background { if selected == bound { Capsule().fill(SMA.card) } }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected == bound ? [.isSelected] : [])
+        .accessibilityLabel(bound == .low ? "Low setpoint" : "High setpoint")
     }
 }
 
@@ -336,6 +345,7 @@ struct ControllerSection: View {
             HStack(spacing: 8) {
                 Text("\(period.heatTo)")
                 Image(systemName: "circle.fill").font(.system(size: 4))
+                    .accessibilityHidden(true)
                 Text("\(period.coolTo)")
             }
             .font(.title3.weight(.semibold))
@@ -356,6 +366,7 @@ struct ControllerSection: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
     }
 
     private var pageDots: some View {
@@ -366,6 +377,9 @@ struct ControllerSection: View {
                     .frame(width: i == (page ?? 0) ? 16 : 6, height: 6)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Page")
+        .accessibilityValue("\((page ?? 0) + 1) of \(pageCount)")
     }
 
     // MARK: Leading element (single-card modes)
@@ -424,6 +438,7 @@ struct ControllerSection: View {
     private func untilLabel(_ text: String) -> some View {
         HStack(spacing: 4) {
             Image(systemName: "location.fill").font(.caption2)
+                .accessibilityHidden(true)
             Text("Until \(text)")
         }
         .font(.footnote)
@@ -450,6 +465,7 @@ struct ControllerSection: View {
             : "Starts \(model.upcomingPeriods[index - 1].startText)"
         return HStack(spacing: 4) {
             Image(systemName: icon).font(.caption2)
+                .accessibilityHidden(true)
             Text(text)
         }
         .font(.footnote)
@@ -483,6 +499,7 @@ struct ControllerStatusSheet: View {
                     Image(systemName: symbol)
                         .font(.system(size: 40))
                         .foregroundStyle(SMA.accent)
+                        .accessibilityHidden(true)
                     Text(headline)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(SMA.labelPrimary)
@@ -526,6 +543,7 @@ struct ControllerStatusSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
                 }
             }
         }

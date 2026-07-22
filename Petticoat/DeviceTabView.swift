@@ -31,6 +31,7 @@ struct DeviceTabView: View {
                 Button {} label: {
                     Image(systemName: "questionmark.bubble")
                 }
+                .accessibilityLabel("Help and Support")
             }
         }
     }

@@ -24,6 +24,7 @@ struct ModeSheet: View {
                         .padding(8)
                         .background(SMA.fillTertiary, in: Circle())
                 }
+                .accessibilityLabel("Close")
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -108,6 +109,7 @@ struct SystemModeIcon: View {
             .resizable()
             .scaledToFit()
             .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
 
@@ -134,6 +136,7 @@ struct FanModeIcon: View {
             .resizable()
             .scaledToFit()
             .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
 

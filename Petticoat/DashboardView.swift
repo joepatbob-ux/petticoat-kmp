@@ -95,6 +95,8 @@ struct DashboardThermostatCard: View {
                 Text("\(device.currentTemp)")
                     .font(SMA.displayTemp(size: 46, activity: device.activity))
                     .foregroundStyle(SMA.tempColor(device.activity))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
 
                 Spacer(minLength: 8)
 
@@ -115,8 +117,10 @@ struct DashboardThermostatCard: View {
                     Image(systemName: "chevron.right")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(SMA.accent)
+                        .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
+                .accessibilityAddTraits(.isHeader)
             }
             .buttonStyle(.plain)
             .textCase(nil)
@@ -124,6 +128,7 @@ struct DashboardThermostatCard: View {
             HStack(spacing: 4) {
                 Image(systemName: "location.fill")
                     .font(.caption2)
+                    .accessibilityHidden(true)
                 Text("Until \(device.holdUntil)")
             }
             .font(.footnote)
@@ -157,10 +162,12 @@ struct SpotlightHeader: View {
                     .foregroundStyle(.white)
                     .frame(width: 22, height: 22)
                     .background(SMA.accent, in: Circle())
+                    .accessibilityLabel("\(count) spotlights")
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(SMA.accent)
                     .rotationEffect(.degrees(expanded ? 90 : 0))
+                    .accessibilityHidden(true)
             }
             .contentShape(Rectangle())
         }
@@ -213,6 +220,7 @@ struct SpotlightAbbrevCard: View {
         HStack(spacing: 12) {
             Image(systemName: "flame.fill")
                 .foregroundStyle(SMA.orange)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.provider)
                     .font(.caption.weight(.bold))
@@ -251,6 +259,7 @@ struct SpotlightCard: View {
             HStack(spacing: 8) {
                 Image(systemName: "flame.fill")
                     .foregroundStyle(SMA.orange)
+                    .accessibilityHidden(true)
                 Text(item.provider)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(SMA.brandNavy)
@@ -308,6 +317,7 @@ struct SpotlightDetailView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "flame.fill")
                             .foregroundStyle(SMA.orange)
+                            .accessibilityHidden(true)
                         Text(item.provider)
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(SMA.brandNavy)
@@ -344,73 +354,6 @@ struct SpotlightDetailView: View {
             }
             .background(SMA.groupedBackground.ignoresSafeArea())
             .navigationTitle(item.provider)
-            .inlineNavTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(SMA.labelPrimary)
-                    }
-                    .accessibilityLabel("Close")
-                }
-            }
-        }
-    }
-}
-
-/// Simple "Add a Device" entry point opened from the dashboard toolbar. The demo
-/// presents the available device types rather than a live pairing flow.
-struct AddDeviceView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    private struct DeviceType: Identifiable {
-        let id = UUID()
-        let name: String
-        let detail: String
-        let symbol: String
-    }
-
-    private let types: [DeviceType] = [
-        .init(name: "Smart Thermostat", detail: "Wi-Fi enabled comfort control", symbol: "thermostat"),
-        .init(name: "Room Sensor", detail: "Temperature & occupancy", symbol: "sensor"),
-        .init(name: "Smart Plug", detail: "Control anything you plug in", symbol: "powerplug"),
-    ]
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach(types) { type in
-                        NavigationLink {
-                            PlaceholderDetail(title: type.name)
-                        } label: {
-                            Label {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(type.name)
-                                        .foregroundStyle(SMA.labelPrimary)
-                                    Text(type.detail)
-                                        .font(.footnote)
-                                        .foregroundStyle(SMA.labelSecondary)
-                                }
-                            } icon: {
-                                Image(systemName: type.symbol)
-                                    .foregroundStyle(SMA.accent)
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Choose a Device to Add")
-                } footer: {
-                    Text("Make sure your device is powered on and nearby before you begin.")
-                }
-            }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(SMA.groupedBackground.ignoresSafeArea())
-            .listRowBackground(SMA.card)
-            .foregroundStyle(SMA.labelPrimary)
-            .navigationTitle("Add a Device")
             .inlineNavTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
