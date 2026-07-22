@@ -12,6 +12,7 @@ enum InstallStepKind {
     case loading        // configuring… auto-advances
     case form           // enter location
     case wirePicker     // select terminals with wires
+    case connectWires   // diagram of the terminals picked in the wire-picker step
     case choice         // tap a row to continue (furnace type, wire configuration)
 }
 
@@ -87,12 +88,12 @@ struct InstallDevice: Identifiable {
                 body: "Take a photo of your existing thermostat wiring in case you need it for reference later. The photo will be saved to your camera roll.",
                 secondary: "Take Photo Now"),
             InstallStep(
+                stage: "Install", kind: .wirePicker, title: "Pick Terminals with Wires Attached",
+                link: "How to Pick Your Wires"),
+            InstallStep(
                 stage: "Install", hero: "install.hero.labelWires", title: "Label Your Wires",
                 body: "Using the provided wire label stickers, carefully label your wires by removing one wire at a time from the terminal and applying a label sticker.",
                 link: "If My Labels Don't Match"),
-            InstallStep(
-                stage: "Install", kind: .wirePicker, title: "Pick Terminals with Wires Attached",
-                link: "How to Pick Your Wires"),
             InstallStep(
                 stage: "Install", kind: .choice, title: "Furnace Type",
                 link: "Identify Furnace Type",
@@ -111,7 +112,7 @@ struct InstallDevice: Identifiable {
                 body: "Mount the thermostat base securely using the supplied screws and, if needed, drill holes and insert anchors for added support.",
                 link: "How to Install New Thermostat Base"),
             InstallStep(
-                stage: "Install", hero: "install.hero.connectWires", title: "Connect the Wires",
+                stage: "Install", kind: .connectWires, title: "Connect the Wires",
                 body: "Press the paddle underneath the terminal corresponding to the wire label sticker and insert the wire into the opening.",
                 link: "How to Connect the Wires"),
             InstallStep(
@@ -228,6 +229,8 @@ struct InstallFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var index = 0
     @State private var showHelp = false
+    /// Terminals chosen in the wire-picker step; read back by the Connect the Wires step.
+    @State private var wireSelection: Set<String> = []
 
     private var step: InstallStep { device.steps[index] }
     private var progress: Double { Double(index + 1) / Double(device.steps.count) }
@@ -261,7 +264,8 @@ struct InstallFlowView: View {
         case .pin:        PinContent(step: step, onAdvance: advance)
         case .loading:    LoadingContent(step: step, onAdvance: advance)
         case .form:       FormContent(step: step, onAdvance: advance)
-        case .wirePicker: WirePickerContent(step: step, configResource: device.wireConfigResource, onHelp: { showHelp = true }, onAdvance: advance)
+        case .wirePicker: WirePickerContent(step: step, configResource: device.wireConfigResource, selection: $wireSelection, onHelp: { showHelp = true }, onAdvance: advance)
+        case .connectWires: ConnectWiresContent(step: step, selection: wireSelection, onHelp: { showHelp = true }, onAdvance: advance)
         case .choice:     ChoiceContent(step: step, onHelp: { showHelp = true }, onAdvance: advance)
         case .fullBleed:  EmptyView()
         }
