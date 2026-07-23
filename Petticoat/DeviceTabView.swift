@@ -4,6 +4,7 @@ import SwiftUI
 /// A native bottom TabView scoped to a single device.
 struct DeviceTabView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     @State private var selection: DeviceTab = .control
 
     var body: some View {
@@ -26,7 +27,14 @@ struct DeviceTabView: View {
         }
         .navigationTitle(title)
         .inlineNavTitle()
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { dismiss() } label: {
+                    Image(systemName: "square.grid.2x2.fill")
+                }
+                .accessibilityLabel("Back to Dashboard")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {} label: {
                     Image(systemName: "questionmark.bubble")

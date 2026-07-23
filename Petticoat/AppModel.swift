@@ -18,6 +18,9 @@ struct Device {
     let outdoorLow: Int
     let scheduleName: String
     let sensorSummary: String
+    /// Room sensors paired with this thermostat, shown in the dashboard card's
+    /// expandable list. `participating` sensors feed the averaged temperature.
+    var sensors: [RoomSensor] = RoomSensor.samples
     var systemMode: SystemMode = .auto
     var fanMode: FanMode = .auto
     var circulateFan: Bool = true
@@ -60,6 +63,22 @@ struct Device {
         scheduleName: "Comfort",
         sensorSummary: "2 of 3 Sensors"
     )
+}
+
+/// A paired room sensor. `participating` means it contributes to the averaged
+/// temperature the thermostat controls to.
+struct RoomSensor: Identifiable, Hashable {
+    let id = UUID()
+    let name: String
+    let temp: Int
+    let humidity: Int
+    var participating: Bool
+
+    static let samples = [
+        RoomSensor(name: "Thermostat", temp: 72, humidity: 40, participating: true),
+        RoomSensor(name: "Bedroom",    temp: 70, humidity: 42, participating: true),
+        RoomSensor(name: "Office",     temp: 75, humidity: 38, participating: false),
+    ]
 }
 
 struct SpotlightItem: Identifiable {

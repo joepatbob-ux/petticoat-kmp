@@ -99,6 +99,38 @@ struct InstallButtonBar: View {
     }
 }
 
+/// Centered caution pill (optional) + title + body (optional), shared by the
+/// standard and Connect the Wires steps.
+struct StepHeadline: View {
+    let title: String
+    var detail: String? = nil
+    var warning: String? = nil
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if let warning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(SMA.tempOrange)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(SMA.tempOrange.opacity(0.12), in: Capsule())
+            }
+            Text(title)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(SMA.labelPrimary)
+                .multilineTextAlignment(.center)
+            if let detail {
+                Text(detail)
+                    .font(.body)
+                    .foregroundStyle(SMA.labelSecondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+}
+
 // MARK: - Select Wi-Fi
 
 struct WifiListContent: View {
@@ -313,25 +345,27 @@ final class WireConfigStore {
 struct WirePickerContent: View {
     let step: InstallStep
     let configResource: String?
+    @Binding var selection: Set<String>
     let onHelp: () -> Void
     let onAdvance: () -> Void
-    @State private var selected: Set<String> = []
 
     /// 4-column layout matching the design (the "Other" catch-all is omitted since
-    /// it never appears in a valid configuration).
-    private let terminals = ["R", "W", "Y", "G", "RH", "W1", "Y1", "O", "RC", "W/E",
-                             "Y2", "B", "C", "W2", "L", "O/B", "X", "E", "AUX"]
+    /// it never appears in a valid configuration). Shared so the Connect the Wires
+    /// diagram can present the selection in the same canonical order.
+    static let terminalOrder = ["R", "W", "Y", "G", "RH", "W1", "Y1", "O", "RC", "W/E",
+                                "Y2", "B", "C", "W2", "L", "O/B", "X", "E", "AUX"]
+    private var terminals: [String] { WirePickerContent.terminalOrder }
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
 
     private var configs: [Set<String>] {
         configResource.map { WireConfigStore.shared.configs(resource: $0) } ?? []
     }
     /// Configs still reachable given the current selection.
-    private var candidates: [Set<String>] { configs.filter { $0.isSuperset(of: selected) } }
+    private var candidates: [Set<String>] { configs.filter { $0.isSuperset(of: selection) } }
     /// Terminals that appear in at least one reachable config (selectable set).
     private var allowed: Set<String> { candidates.reduce(into: Set<String>()) { $0.formUnion($1) } }
     /// The selection exactly matches a valid configuration.
-    private var isValid: Bool { !selected.isEmpty && configs.contains(selected) }
+    private var isValid: Bool { !selection.isEmpty && configs.contains(selection) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -364,22 +398,12 @@ struct WirePickerContent: View {
     }
 
     private func terminalChip(_ t: String) -> some View {
-        let on = selected.contains(t)
+        let on = selection.contains(t)
         let enabled = allowed.contains(t)   // selected chips are always in `allowed`
         return Button {
-            if on { selected.remove(t) } else { selected.insert(t) }
+            if on { selection.remove(t) } else { selection.insert(t) }
         } label: {
-            Text(t)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(on ? .white : (enabled ? SMA.accent : SMA.labelSecondary))
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(on ? SMA.accent : SMA.card)
-                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(on ? SMA.accent : (enabled ? SMA.accent : SMA.separator), lineWidth: 1.5))
-                )
+            TerminalTile(label: t, isOn: on, isEnabled: enabled)
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
@@ -394,11 +418,84 @@ struct WirePickerContent: View {
             Label("Valid wiring configuration", systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color(hex: 0x34C759))
-        } else if !selected.isEmpty {
+        } else if !selection.isEmpty {
             Text("Keep selecting the terminals with wires attached.")
                 .font(.footnote)
                 .foregroundStyle(SMA.labelSecondary)
                 .multilineTextAlignment(.center)
+        }
+    }
+}
+
+/// A single terminal tile, shared by the wire picker (interactive, state-styled)
+/// and the Connect the Wires diagram (read-only, always shown as selected).
+struct TerminalTile: View {
+    let label: String
+    let isOn: Bool
+    var isEnabled: Bool = true
+
+    var body: some View {
+        Text(label)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isOn ? .white : (isEnabled ? SMA.accent : SMA.labelSecondary))
+            .frame(maxWidth: .infinity)
+            .frame(height: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isOn ? SMA.accent : SMA.card)
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(isOn ? SMA.accent : (isEnabled ? SMA.accent : SMA.separator), lineWidth: 1.5))
+            )
+    }
+}
+
+// MARK: - Connect the Wires
+
+/// Shows the terminals the user selected in the wire-picker step as filled tiles,
+/// so the diagram matches their actual wiring instead of a generic photo.
+struct ConnectWiresContent: View {
+    let step: InstallStep
+    let selection: Set<String>
+    let onHelp: () -> Void
+    let onAdvance: () -> Void
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
+
+    /// Selected terminals in the picker's canonical column order.
+    private var orderedSelection: [String] {
+        WirePickerContent.terminalOrder.filter { selection.contains($0) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    if orderedSelection.isEmpty {
+                        Text("No terminals selected.")
+                            .font(.footnote)
+                            .foregroundStyle(SMA.labelSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 24)
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 10) {
+                            ForEach(orderedSelection, id: \.self) { t in
+                                TerminalTile(label: t, isOn: true)
+                                    .accessibilityLabel("Terminal \(t)")
+                            }
+                        }
+                        .padding(16)
+                        .background(SMA.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .padding(.horizontal, 16)
+                    }
+
+                    StepHeadline(title: step.title, detail: step.body)
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            }
+
+            InstallButtonBar(link: step.link, onLink: onHelp,
+                             primary: "Continue", onPrimary: onAdvance)
         }
     }
 }

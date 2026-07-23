@@ -20,7 +20,12 @@ struct ActivityProfile: Identifiable, Hashable {
         .init(name: "Workout", symbol: "dumbbell.fill",   colorHex: 0xFF3B30, heatTo: 62, coolTo: 78, subtitle: "3 Sensors"),
     ]
 
-    static let new = ActivityProfile(name: "", symbol: "house.fill", colorHex: 0xFF3B30, heatTo: 68, coolTo: 76, subtitle: "3 Sensors")
+    /// A blank profile for the "create new" sheet. Computed so each new profile
+    /// gets a fresh `id` — otherwise a shared constant id makes `saveProfile`
+    /// overwrite the previously-created profile instead of appending.
+    static var new: ActivityProfile {
+        ActivityProfile(name: "", symbol: "house.fill", colorHex: 0xFF3B30, heatTo: 68, coolTo: 76, subtitle: "3 Sensors")
+    }
 }
 
 // MARK: - Activity Profiles list
@@ -171,6 +176,7 @@ struct EditActivityProfileView: View {
             .background(SMA.groupedBackground.ignoresSafeArea())
             .navigationTitle("Edit Activity Profile")
             .inlineNavTitle()
+            .presentationDragIndicator(.visible)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }

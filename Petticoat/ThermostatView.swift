@@ -43,6 +43,7 @@ struct ControlView: View {
         }
         .padding(.horizontal, 20)
         .readableWidth()
+        .scrollableWhenNeeded()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SMA.groupedBackground.ignoresSafeArea())
         .sheet(isPresented: $showMode) {
