@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Models
 
@@ -69,8 +70,10 @@ struct SchedulePresetsList: View {
 
     @State private var presets: [SchedulePreset]
     @State private var selection: UUID?
-    @State private var editing: SchedulePreset?
-    @State private var creating: SchedulePreset?
+    /// Drives the create/edit sheet. A preset whose id isn't in `presets` yet is a
+    /// new one (create); an existing id edits in place. One sheet avoids the
+    /// stacked-`.sheet` presentation bug.
+    @State private var editorPreset: SchedulePreset?
 
     init(title: String, presets: [String]) {
         self.title = title
@@ -83,33 +86,42 @@ struct SchedulePresetsList: View {
         List {
             Section {
                 ForEach(presets) { preset in
-                    Button {
-                        selection = preset.id
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: selection == preset.id ? "largecircle.fill.circle" : "circle")
-                                .font(.title3)
-                                .foregroundStyle(selection == preset.id ? SMA.accent : SMA.labelSecondary)
-                                .accessibilityHidden(true)
-                            Text(preset.name)
-                                .foregroundStyle(SMA.labelPrimary)
-                            Spacer()
-                            Menu {
-                                Button("Edit", systemImage: "pencil") { editing = preset }
-                                Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(preset) }
-                                Button("Delete", systemImage: "trash", role: .destructive) { delete(preset) }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(SMA.accent)
-                                    .contentShape(Rectangle())
+                    HStack(spacing: 12) {
+                        // Sibling controls with .borderless button styles so the List
+                        // hit-tests the row selection and the menu independently — a
+                        // Menu nested in a tappable row otherwise leaks its first
+                        // action ("Edit") to row-body taps.
+                        Button {
+                            selection = preset.id
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: selection == preset.id ? "largecircle.fill.circle" : "circle")
+                                    .font(.title3)
+                                    .foregroundStyle(selection == preset.id ? SMA.accent : SMA.labelSecondary)
+                                    .accessibilityHidden(true)
+                                Text(preset.name)
+                                    .foregroundStyle(SMA.labelPrimary)
+                                Spacer()
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("More options for \(preset.name)")
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.borderless)
+                        .accessibilityAddTraits(selection == preset.id ? [.isSelected] : [])
+
+                        Menu {
+                            Button("Edit", systemImage: "pencil") { editorPreset = preset }
+                            Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(preset) }
+                            Button("Delete", systemImage: "trash", role: .destructive) { delete(preset) }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(SMA.accent)
+                                .frame(width: 28, height: 28)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("More options for \(preset.name)")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selection == preset.id ? [.isSelected] : [])
                 }
             }
         }
@@ -121,19 +133,16 @@ struct SchedulePresetsList: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { creating = SchedulePreset(name: "") } label: { Image(systemName: "plus") }
+                Button { editorPreset = SchedulePreset(name: "") } label: { Image(systemName: "plus") }
             }
         }
-        .sheet(item: $creating) { draft in
-            ScheduleEditorView(preset: draft) { new in
-                presets.append(new)
-                selection = new.id
-            }
-        }
-        .sheet(item: $editing) { preset in
-            ScheduleEditorView(preset: preset) { updated in
-                if let i = presets.firstIndex(where: { $0.id == updated.id }) {
-                    presets[i] = updated
+        .sheet(item: $editorPreset) { draft in
+            ScheduleEditorView(preset: draft) { result in
+                if let i = presets.firstIndex(where: { $0.id == result.id }) {
+                    presets[i] = result          // existing preset: edit in place
+                } else {
+                    presets.append(result)       // new preset: add and select it
+                    selection = result.id
                 }
             }
         }
@@ -161,6 +170,7 @@ struct ScheduleEditorView: View {
     @State private var showingDetails = false
     @State private var addTarget: GroupTarget?
     @State private var editTarget: EventTarget?
+    @State private var timeTarget: EventTarget?
     let onSave: (SchedulePreset) -> Void
 
     private let dayLabels = ["M", "T", "W", "T", "F", "S", "S"]
@@ -191,7 +201,12 @@ struct ScheduleEditorView: View {
                             events: group.events,
                             selectedID: selectedEventID,
                             onChangeStart: { id, newTime in setEventTime(id, to: newTime) },
-                            onSelect: { id in selectedEventID = id }
+                            onSelect: { id in selectedEventID = id },
+                            onRequestManualTime: { id in
+                                if let event = group.events.first(where: { $0.id == id }) {
+                                    timeTarget = EventTarget(groupID: group.id, event: event)
+                                }
+                            }
                         )
                         .frame(height: 340)
                         .frame(maxWidth: .infinity)
@@ -301,6 +316,12 @@ struct ScheduleEditorView: View {
                 ScheduleEventEditor(title: "Edit Event", initial: target.event, profiles: model.activityProfiles) { updated in
                     replaceEvent(target.event.id, with: updated)
                 }
+            }
+            .sheet(item: $timeTarget) { target in
+                ManualStartTimeSheet(name: target.event.name, time: target.event.time) { newTime in
+                    setEventTime(target.event.id, to: newTime)
+                }
+                .presentationDetents([.height(320)])
             }
         }
     }
@@ -484,6 +505,7 @@ private struct EventTarget: Identifiable {
 
 struct ScheduleEventEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var model
 
     let title: String
     let profiles: [ActivityProfile]
@@ -491,6 +513,7 @@ struct ScheduleEventEditor: View {
 
     @State private var selectedProfileID: ActivityProfile.ID?
     @State private var time: Date
+    @State private var creatingProfile = false
 
     init(title: String, initial: ScheduleEvent?, profiles: [ActivityProfile], onSave: @escaping (ScheduleEvent) -> Void) {
         self.title = title
@@ -510,7 +533,7 @@ struct ScheduleEventEditor: View {
                 }
 
                 Section("Activity") {
-                    ForEach(profiles) { profile in
+                    ForEach(model.activityProfiles) { profile in
                         Button {
                             selectedProfileID = profile.id
                         } label: {
@@ -535,6 +558,23 @@ struct ScheduleEventEditor: View {
                         .buttonStyle(.plain)
                         .accessibilityAddTraits(profile.id == selectedProfileID ? [.isSelected] : [])
                     }
+
+                    Button {
+                        creatingProfile = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "plus")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(SMA.accent)
+                                .frame(width: 30, height: 30)
+                                .background(Circle().fill(SMA.accent.opacity(0.12)))
+                            Text("Create New Profile")
+                                .foregroundStyle(SMA.accent)
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .listStyle(.insetGrouped)
@@ -551,7 +591,7 @@ struct ScheduleEventEditor: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        if let profile = profiles.first(where: { $0.id == selectedProfileID }) {
+                        if let profile = model.activityProfiles.first(where: { $0.id == selectedProfileID }) {
                             onSave(ScheduleEvent(from: profile, time: time))
                         }
                         dismiss()
@@ -562,7 +602,90 @@ struct ScheduleEventEditor: View {
                     .disabled(selectedProfileID == nil)
                 }
             }
+            .sheet(isPresented: $creatingProfile) {
+                EditActivityProfileView(profile: .new) { newProfile in
+                    model.saveProfile(newProfile)
+                    selectedProfileID = newProfile.id
+                }
+            }
         }
+    }
+}
+
+// MARK: - Manual start time entry
+
+/// A compact sheet for typing a period's start time, opened by tapping the time in
+/// the center of the dial.
+struct ManualStartTimeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let name: String
+    let onSave: (Date) -> Void
+    @State private var time: Date
+
+    init(name: String, time: Date, onSave: @escaping (Date) -> Void) {
+        self.name = name
+        self.onSave = onSave
+        _time = State(initialValue: time)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                IntervalTimePicker(time: $time, minuteInterval: 15)
+                    .frame(maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity)
+            .background(SMA.groupedBackground.ignoresSafeArea())
+            .navigationTitle("\(name) Start")
+            .inlineNavTitle()
+            .presentationDragIndicator(.visible)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Set") {
+                        onSave(time)
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .tint(SMA.accent)
+                }
+            }
+        }
+    }
+}
+
+/// A wheels-style time picker with a fixed minute interval. SwiftUI's `DatePicker`
+/// has no minute-interval option, so this wraps `UIDatePicker`.
+private struct IntervalTimePicker: UIViewRepresentable {
+    @Binding var time: Date
+    var minuteInterval: Int = 15
+
+    func makeUIView(context: Context) -> UIDatePicker {
+        let picker = UIDatePicker()
+        picker.datePickerMode = .time
+        picker.preferredDatePickerStyle = .wheels
+        picker.minuteInterval = minuteInterval
+        picker.date = time
+        picker.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .valueChanged)
+        return picker
+    }
+
+    func updateUIView(_ picker: UIDatePicker, context: Context) {
+        picker.minuteInterval = minuteInterval
+        if picker.date != time { picker.date = time }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject {
+        let parent: IntervalTimePicker
+        init(_ parent: IntervalTimePicker) { self.parent = parent }
+        @objc func changed(_ sender: UIDatePicker) { parent.time = sender.date }
     }
 }
 
