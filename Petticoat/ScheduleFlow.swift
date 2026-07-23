@@ -17,22 +17,46 @@ struct ScheduleDayGroup: Identifiable, Hashable {
     var events: [ScheduleEvent]
 }
 
+/// One scheduled period: an Activity Profile snapshot (name/icon/color/range) that
+/// starts at `time`. Snapshotting keeps a saved schedule stable if the source
+/// profile is later edited.
 struct ScheduleEvent: Identifiable, Hashable {
     let id = UUID()
-    var setpoint: Int
+    var name: String
+    var symbol: String
+    var colorHex: UInt
+    var heatTo: Int
+    var coolTo: Int
     var time: Date
 
     var timeText: String { time.formatted(date: .omitted, time: .shortened) }
+    var rangeText: String { "\(heatTo) · \(coolTo)" }
+
+    init(name: String, symbol: String, colorHex: UInt, heatTo: Int, coolTo: Int, time: Date) {
+        self.name = name
+        self.symbol = symbol
+        self.colorHex = colorHex
+        self.heatTo = heatTo
+        self.coolTo = coolTo
+        self.time = time
+    }
+
+    init(from profile: ActivityProfile, time: Date) {
+        self.init(name: profile.name, symbol: profile.symbol, colorHex: profile.colorHex,
+                  heatTo: profile.heatTo, coolTo: profile.coolTo, time: time)
+    }
+
+    static func at(_ h: Int, _ m: Int) -> Date {
+        Calendar.current.date(bySettingHour: h, minute: m, second: 0, of: Date()) ?? Date()
+    }
 
     static func samples() -> [ScheduleEvent] {
-        func at(_ h: Int, _ m: Int) -> Date {
-            Calendar.current.date(bySettingHour: h, minute: m, second: 0, of: Date()) ?? Date()
-        }
+        let p = ActivityProfile.samples   // [Away, Home, Sleep, Workout]
         return [
-            ScheduleEvent(setpoint: 70, time: at(6, 0)),
-            ScheduleEvent(setpoint: 62, time: at(8, 0)),
-            ScheduleEvent(setpoint: 70, time: at(17, 0)),
-            ScheduleEvent(setpoint: 62, time: at(22, 0)),
+            ScheduleEvent(from: p[1], time: at(6, 0)),    // Home
+            ScheduleEvent(from: p[0], time: at(8, 0)),    // Away
+            ScheduleEvent(from: p[1], time: at(17, 0)),   // Home
+            ScheduleEvent(from: p[2], time: at(22, 0)),   // Sleep
         ]
     }
 }
@@ -126,14 +150,16 @@ struct SchedulePresetsList: View {
     }
 }
 
-// MARK: - Edit Schedule (name + days + events)
+// MARK: - Edit Schedule (name + day groups + radial dial + events)
 
 struct ScheduleEditorView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var model
 
     @State private var preset: SchedulePreset
-    @State private var editingEvent: ScheduleEvent?
-    @State private var addingEventGroup: ScheduleDayGroup.ID?
+    @State private var selectedEventID: ScheduleEvent.ID?
+    @State private var addTarget: GroupTarget?
+    @State private var editTarget: EventTarget?
     let onSave: (SchedulePreset) -> Void
 
     private let dayLabels = ["M", "T", "W", "T", "F", "S", "S"]
@@ -141,8 +167,11 @@ struct ScheduleEditorView: View {
 
     init(preset: SchedulePreset, onSave: @escaping (SchedulePreset) -> Void) {
         _preset = State(initialValue: preset)
+        _selectedEventID = State(initialValue: preset.groups.first?.events.first?.id)
         self.onSave = onSave
     }
+
+    private var isNew: Bool { preset.name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -155,43 +184,65 @@ struct ScheduleEditorView: View {
                     Section {
                         dayPicker(for: group)
 
+                        RadialScheduleDial(events: group.events, selectedID: selectedEventID) { id, newTime in
+                            setEventTime(id, to: newTime)
+                        }
+                        .frame(height: 300)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(SMA.card)
+                        .listRowSeparator(.hidden)
+
                         ForEach(group.events) { event in
-                            Button {
-                                editingEvent = event
-                            } label: {
-                                HStack {
-                                    Text("Heat to: \(event.setpoint)")
-                                        .foregroundStyle(SMA.labelPrimary)
-                                    Spacer()
-                                    Text(event.timeText)
-                                        .foregroundStyle(SMA.labelSecondary)
-                                }
-                            }
-                            .buttonStyle(.plain)
+                            eventRow(event, in: group)
                         }
                         .onDelete { deleteEvents($0, from: group.id) }
 
-                        Button("Add Event", systemImage: "plus") { addingEventGroup = group.id }
-
-                        if preset.groups.count > 1 {
-                            Button("Remove Day Group", systemImage: "trash", role: .destructive) {
-                                removeGroup(group.id)
-                            }
+                        Button {
+                            addTarget = GroupTarget(id: group.id)
+                        } label: {
+                            Label("Add Event", systemImage: "plus")
+                                .foregroundStyle(SMA.accent)
                         }
                     } header: {
-                        Text(daysSummary(group.days))
+                        HStack {
+                            Text(daysSummary(group.days))
+                                .font(.headline)
+                                .foregroundStyle(SMA.labelPrimary)
+                            Spacer()
+                            if preset.groups.count > 1 {
+                                Menu {
+                                    Button("Remove Day Group", systemImage: "trash", role: .destructive) {
+                                        removeGroup(group.id)
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(SMA.accent)
+                                        .frame(width: 28, height: 28)
+                                        .overlay(Circle().stroke(SMA.accent, lineWidth: 1.5))
+                                }
+                                .accessibilityLabel("Day group options")
+                            }
+                        }
+                        .textCase(nil)
                     }
                 }
 
                 Section {
-                    Button("Add Day Group", systemImage: "plus") { addDayGroup() }
+                    Button {
+                        addDayGroup()
+                    } label: {
+                        Text("Create New Day Group")
+                            .frame(maxWidth: .infinity)
+                            .foregroundStyle(SMA.accent)
+                    }
                 }
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .listRowBackground(SMA.card)
             .background(SMA.groupedBackground.ignoresSafeArea())
-            .navigationTitle("Edit Schedule")
+            .navigationTitle(isNew ? "Create Schedule" : "Edit Schedule")
             .inlineNavTitle()
             .presentationDragIndicator(.visible)
             .toolbar {
@@ -199,25 +250,63 @@ struct ScheduleEditorView: View {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
                         .accessibilityLabel("Cancel")
                 }
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {} label: { Image(systemName: "questionmark.bubble") }
+                        .accessibilityLabel("Help and Support")
                     Button("Save") {
                         onSave(preset)
                         dismiss()
                     }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .tint(SMA.accent)
                 }
             }
-            .sheet(item: Binding(get: { addingEventGroup.map { GroupTarget(id: $0) } },
-                                 set: { addingEventGroup = $0?.id })) { target in
-                EditEventView(setpoint: 70, time: Date()) { event in
+            .sheet(item: $addTarget) { target in
+                ScheduleEventEditor(title: "Add Event", initial: nil, profiles: model.activityProfiles) { event in
                     addEvent(event, to: target.id)
                 }
             }
-            .sheet(item: $editingEvent) { event in
-                EditEventView(setpoint: event.setpoint, time: event.time) { updated in
-                    updateEvent(event.id, setpoint: updated.setpoint, time: updated.time)
+            .sheet(item: $editTarget) { target in
+                ScheduleEventEditor(title: "Edit Event", initial: target.event, profiles: model.activityProfiles) { updated in
+                    replaceEvent(target.event.id, with: updated)
                 }
             }
         }
+    }
+
+    // MARK: - Event row
+
+    private func eventRow(_ event: ScheduleEvent, in group: ScheduleDayGroup) -> some View {
+        HStack(spacing: 12) {
+            ProfileIcon(symbol: event.symbol, colorHex: event.colorHex, size: 32)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(event.name)
+                    .foregroundStyle(SMA.labelPrimary)
+                Text("Keep between: \(event.rangeText)")
+                    .font(.footnote)
+                    .foregroundStyle(SMA.labelSecondary)
+            }
+            Spacer(minLength: 8)
+            Text(event.timeText)
+                .foregroundStyle(SMA.labelSecondary)
+                .monospacedDigit()
+            Menu {
+                Button("Edit", systemImage: "pencil") { editTarget = EventTarget(groupID: group.id, event: event) }
+                Button("Delete", systemImage: "trash", role: .destructive) { deleteEvent(event.id, from: group.id) }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(SMA.accent)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Options for \(event.name)")
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { selectedEventID = event.id }
+        .accessibilityAddTraits(selectedEventID == event.id ? [.isSelected] : [])
     }
 
     // MARK: - Day picker
@@ -258,17 +347,41 @@ struct ScheduleEditorView: View {
         preset.groups[g].events.remove(atOffsets: offsets)
     }
 
+    private func deleteEvent(_ eventID: ScheduleEvent.ID, from id: ScheduleDayGroup.ID) {
+        guard let g = groupIndex(id) else { return }
+        preset.groups[g].events.removeAll { $0.id == eventID }
+    }
+
     private func addEvent(_ event: ScheduleEvent, to id: ScheduleDayGroup.ID) {
         guard let g = groupIndex(id) else { return }
         preset.groups[g].events.append(event)
         preset.groups[g].events.sort { $0.time < $1.time }
+        selectedEventID = event.id
     }
 
-    private func updateEvent(_ eventID: ScheduleEvent.ID, setpoint: Int, time: Date) {
+    /// Replace a selected event's start time (from the dial), keeping the list sorted.
+    private func setEventTime(_ eventID: ScheduleEvent.ID, to newTime: Date) {
         for g in preset.groups.indices {
             if let e = preset.groups[g].events.firstIndex(where: { $0.id == eventID }) {
-                preset.groups[g].events[e].setpoint = setpoint
-                preset.groups[g].events[e].time = time
+                preset.groups[g].events[e].time = newTime
+                preset.groups[g].events.sort { $0.time < $1.time }
+                return
+            }
+        }
+    }
+
+    /// Replace an event's profile snapshot + time (from the event editor).
+    private func replaceEvent(_ eventID: ScheduleEvent.ID, with new: ScheduleEvent) {
+        for g in preset.groups.indices {
+            if let e = preset.groups[g].events.firstIndex(where: { $0.id == eventID }) {
+                var updated = preset.groups[g].events[e]
+                updated.name = new.name
+                updated.symbol = new.symbol
+                updated.colorHex = new.colorHex
+                updated.heatTo = new.heatTo
+                updated.coolTo = new.coolTo
+                updated.time = new.time
+                preset.groups[g].events[e] = updated
                 preset.groups[g].events.sort { $0.time < $1.time }
                 return
             }
@@ -297,44 +410,80 @@ struct ScheduleEditorView: View {
     }
 }
 
-/// Identifiable wrapper so a day-group id can drive a `.sheet(item:)`.
+/// Identifiable wrapper so a day-group id can drive a `.sheet(item:)` (Add Event).
 private struct GroupTarget: Identifiable {
     let id: ScheduleDayGroup.ID
 }
 
-// MARK: - Edit Event (start time + setpoint)
+/// Identifiable wrapper for the Edit Event sheet, carrying the event + its group.
+private struct EventTarget: Identifiable {
+    var id: ScheduleEvent.ID { event.id }
+    let groupID: ScheduleDayGroup.ID
+    let event: ScheduleEvent
+}
 
-struct EditEventView: View {
+// MARK: - Add / Edit Event (pick an Activity Profile + start time)
+
+struct ScheduleEventEditor: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var time: Date
-    @State private var setpoint: Int
+    let title: String
+    let profiles: [ActivityProfile]
     let onSave: (ScheduleEvent) -> Void
 
-    init(setpoint: Int, time: Date, onSave: @escaping (ScheduleEvent) -> Void) {
-        _setpoint = State(initialValue: setpoint)
-        _time = State(initialValue: time)
+    @State private var selectedProfileID: ActivityProfile.ID?
+    @State private var time: Date
+
+    init(title: String, initial: ScheduleEvent?, profiles: [ActivityProfile], onSave: @escaping (ScheduleEvent) -> Void) {
+        self.title = title
+        self.profiles = profiles
         self.onSave = onSave
+        _time = State(initialValue: initial?.time ?? ScheduleEvent.at(12, 0))
+        let match = profiles.first(where: { $0.name == initial?.name })?.id ?? profiles.first?.id
+        _selectedProfileID = State(initialValue: match)
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            List {
+                Section("Start Time") {
                     DatePicker("Start", selection: $time, displayedComponents: .hourAndMinute)
+                        .foregroundStyle(SMA.labelPrimary)
                 }
 
-                Section("Setpoint") {
-                    Stepper(value: $setpoint, in: 45...95) {
-                        LabeledContent("Heat to", value: "\(setpoint)")
+                Section("Activity") {
+                    ForEach(profiles) { profile in
+                        Button {
+                            selectedProfileID = profile.id
+                        } label: {
+                            HStack(spacing: 12) {
+                                ProfileIcon(symbol: profile.symbol, colorHex: profile.colorHex, size: 30)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(profile.name)
+                                        .foregroundStyle(SMA.labelPrimary)
+                                    Text("Keep between: \(profile.rangeText)")
+                                        .font(.footnote)
+                                        .foregroundStyle(SMA.labelSecondary)
+                                }
+                                Spacer()
+                                if profile.id == selectedProfileID {
+                                    Image(systemName: "checkmark")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(SMA.accent)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(profile.id == selectedProfileID ? [.isSelected] : [])
                     }
                 }
             }
+            .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .listRowBackground(SMA.card)
-            .foregroundStyle(SMA.labelPrimary)
             .background(SMA.groupedBackground.ignoresSafeArea())
-            .navigationTitle("Edit Event")
+            .navigationTitle(title)
             .inlineNavTitle()
             .presentationDragIndicator(.visible)
             .toolbar {
@@ -343,13 +492,16 @@ struct EditEventView: View {
                         .accessibilityLabel("Cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        onSave(ScheduleEvent(setpoint: setpoint, time: time))
+                    Button("Save") {
+                        if let profile = profiles.first(where: { $0.id == selectedProfileID }) {
+                            onSave(ScheduleEvent(from: profile, time: time))
+                        }
                         dismiss()
-                    } label: {
-                        Image(systemName: "checkmark")
                     }
-                    .accessibilityLabel("Save")
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .tint(SMA.accent)
+                    .disabled(selectedProfileID == nil)
                 }
             }
         }
