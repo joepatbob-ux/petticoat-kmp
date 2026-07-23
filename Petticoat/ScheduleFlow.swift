@@ -164,6 +164,8 @@ struct ScheduleEditorView: View {
 
     private let dayLabels = ["M", "T", "W", "T", "F", "S", "S"]
     private let dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    private let minEvents = 1
+    private let maxEvents = 8
 
     init(preset: SchedulePreset, onSave: @escaping (SchedulePreset) -> Void) {
         _preset = State(initialValue: preset)
@@ -184,11 +186,39 @@ struct ScheduleEditorView: View {
                     Section {
                         dayPicker(for: group)
 
-                        RadialScheduleDial(events: group.events, selectedID: selectedEventID) { id, newTime in
-                            setEventTime(id, to: newTime)
-                        }
+                        RadialScheduleDial(
+                            events: group.events,
+                            selectedID: selectedEventID,
+                            onChangeStart: { id, newTime in setEventTime(id, to: newTime) },
+                            onSelect: { id in selectedEventID = id }
+                        )
                         .frame(height: 300)
                         .frame(maxWidth: .infinity)
+                        .listRowBackground(SMA.card)
+                        .listRowSeparator(.hidden)
+
+                        HStack(spacing: 12) {
+                            Button {
+                                addTarget = GroupTarget(id: group.id)
+                            } label: {
+                                Label("Add Event", systemImage: "plus").frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                            .tint(SMA.accent)
+                            .disabled(group.events.count >= maxEvents)
+
+                            Button {
+                                removeSelectedEvent(in: group.id)
+                            } label: {
+                                Label("Remove Event", systemImage: "minus").frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                            .tint(SMA.destructive)
+                            .disabled(group.events.count <= minEvents)
+                        }
+                        .padding(.vertical, 2)
                         .listRowBackground(SMA.card)
                         .listRowSeparator(.hidden)
 
@@ -196,13 +226,6 @@ struct ScheduleEditorView: View {
                             eventRow(event, in: group)
                         }
                         .onDelete { deleteEvents($0, from: group.id) }
-
-                        Button {
-                            addTarget = GroupTarget(id: group.id)
-                        } label: {
-                            Label("Add Event", systemImage: "plus")
-                                .foregroundStyle(SMA.accent)
-                        }
                     } header: {
                         HStack {
                             Text(daysSummary(group.days))
@@ -294,6 +317,7 @@ struct ScheduleEditorView: View {
             Menu {
                 Button("Edit", systemImage: "pencil") { editTarget = EventTarget(groupID: group.id, event: event) }
                 Button("Delete", systemImage: "trash", role: .destructive) { deleteEvent(event.id, from: group.id) }
+                    .disabled(group.events.count <= minEvents)
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.body.weight(.semibold))
@@ -343,20 +367,33 @@ struct ScheduleEditorView: View {
     }
 
     private func deleteEvents(_ offsets: IndexSet, from id: ScheduleDayGroup.ID) {
-        guard let g = groupIndex(id) else { return }
+        guard let g = groupIndex(id), preset.groups[g].events.count - offsets.count >= minEvents else { return }
         preset.groups[g].events.remove(atOffsets: offsets)
+        if !preset.groups[g].events.contains(where: { $0.id == selectedEventID }) {
+            selectedEventID = preset.groups[g].events.first?.id
+        }
     }
 
     private func deleteEvent(_ eventID: ScheduleEvent.ID, from id: ScheduleDayGroup.ID) {
-        guard let g = groupIndex(id) else { return }
+        guard let g = groupIndex(id), preset.groups[g].events.count > minEvents else { return }
         preset.groups[g].events.removeAll { $0.id == eventID }
+        if selectedEventID == eventID { selectedEventID = preset.groups[g].events.first?.id }
     }
 
     private func addEvent(_ event: ScheduleEvent, to id: ScheduleDayGroup.ID) {
-        guard let g = groupIndex(id) else { return }
+        guard let g = groupIndex(id), preset.groups[g].events.count < maxEvents else { return }
         preset.groups[g].events.append(event)
         preset.groups[g].events.sort { $0.time < $1.time }
         selectedEventID = event.id
+    }
+
+    /// Removes the selected event (or the group's last) — never below `minEvents`.
+    private func removeSelectedEvent(in id: ScheduleDayGroup.ID) {
+        guard let g = groupIndex(id), preset.groups[g].events.count > minEvents else { return }
+        let targetID = preset.groups[g].events.contains(where: { $0.id == selectedEventID })
+            ? selectedEventID : preset.groups[g].events.last?.id
+        preset.groups[g].events.removeAll { $0.id == targetID }
+        selectedEventID = preset.groups[g].events.first?.id
     }
 
     /// Replace a selected event's start time (from the dial), keeping the list sorted.
