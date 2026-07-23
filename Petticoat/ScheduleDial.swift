@@ -24,6 +24,8 @@ struct RadialScheduleDial: View {
     /// Fixed corner radius applied to every arc corner, so all arcs round identically.
     private let cornerRadius: CGFloat = 11
     private let snapMinutes = 15
+    private let hourMarkerOpacity: CGFloat = 0.62
+    private let hourMarkerFadeFraction: CGFloat = 0.018
     /// Visual floor for a period: the scrubber can't drag a period shorter than an hour,
     /// so arcs stay large enough to read. Manual time entry bypasses this and still
     /// allows 15-minute granularity for finer sub-hour periods.
@@ -42,6 +44,7 @@ struct RadialScheduleDial: View {
             let ringD = size - 2 * margin
             let radius = ringD / 2
             let center = CGPoint(x: size / 2, y: size / 2)
+            let arcs = arcSegments()
 
             ZStack {
                 Circle()
@@ -50,7 +53,7 @@ struct RadialScheduleDial: View {
 
                 // Arcs with evenly rounded ends. The corner radius is fixed (not
                 // thickness-relative) so every arc rounds identically regardless of width.
-                ForEach(arcSegments()) { arc in
+                ForEach(arcs) { arc in
                     let thickness = arc.selected ? selectedArcWidth : arcWidth
                     ArcBand(startFraction: arc.start, endFraction: arc.end, radius: radius,
                             thickness: thickness, cornerRadius: cornerRadius)
@@ -62,8 +65,9 @@ struct RadialScheduleDial: View {
                 // at the top and N (noon) at the bottom in place of those two dots.
                 ForEach(0..<24, id: \.self) { h in
                     if h != 0 && h != 12 {
+                        let opacity = markerOpacity(at: CGFloat(h) / 24, arcs: arcs)
                         Circle()
-                            .fill(.white.opacity(0.7))
+                            .fill(.white.opacity(opacity))
                             .frame(width: 3, height: 3)
                             .offset(y: -radius)
                             .rotationEffect(.degrees(Double(h) / 24 * 360))
@@ -71,11 +75,11 @@ struct RadialScheduleDial: View {
                 }
                 Text("M")
                     .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.white.opacity(max(0.35, markerOpacity(at: 0, arcs: arcs))))
                     .position(x: center.x, y: center.y - radius)
                 Text("N")
                     .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.white.opacity(max(0.35, markerOpacity(at: 0.5, arcs: arcs))))
                     .position(x: center.x, y: center.y + radius)
 
                 centerReadout
@@ -223,6 +227,19 @@ struct RadialScheduleDial: View {
     private func point(_ f: CGFloat, radius r: CGFloat, center: CGPoint) -> CGPoint {
         let a = Double(f) * 2 * .pi - .pi / 2
         return CGPoint(x: center.x + r * CGFloat(cos(a)), y: center.y + r * CGFloat(sin(a)))
+    }
+
+    private func markerOpacity(at fraction: CGFloat, arcs: [Arc]) -> CGFloat {
+        let nearestEdge = arcs.reduce(CGFloat.greatestFiniteMagnitude) { nearest, arc in
+            min(nearest, circularDistance(fraction, arc.start), circularDistance(fraction, arc.end))
+        }
+        let fade = min(max(nearestEdge / hourMarkerFadeFraction, 0), 1)
+        return hourMarkerOpacity * fade
+    }
+
+    private func circularDistance(_ a: CGFloat, _ b: CGFloat) -> CGFloat {
+        let d = abs((a - b) - floor(a - b))
+        return min(d, 1 - d)
     }
 
     private struct Arc: Identifiable {
