@@ -133,14 +133,13 @@ struct RadialScheduleDial: View {
         // Tuck the grip forward from the start edge so it clears the rounded corner and
         // sits fully inside the arc band instead of straddling the edge. The drag maps the
         // pointer back by the same inset, so grabbing the grip doesn't jump the time.
-        let inset = radius > 0 ? (cornerRadius + 7) / (2 * .pi * radius) : 0
+        let inset = radius > 0 ? (cornerRadius + 5) / (2 * .pi * radius) : 0
         let f = frac(e.time) + inset
         let p = point(f, radius: radius, center: center)
-        // Three white lines forming a grip, rotated so they run radially across the arc.
-        return HStack(spacing: 3) {
-            Capsule().fill(.white).frame(width: 2.5, height: 20)
-            Capsule().fill(.white).frame(width: 2.5, height: 20)
-            Capsule().fill(.white).frame(width: 2.5, height: 20)
+        // Two thick white lines forming a grip, rotated so they run radially across the arc.
+        return HStack(spacing: 6) {
+            Capsule().fill(.white).frame(width: 5, height: 20)
+            Capsule().fill(.white).frame(width: 5, height: 20)
         }
         .shadow(color: .black.opacity(0.3), radius: 2)
         .rotationEffect(.degrees(Double(f) * 360))
