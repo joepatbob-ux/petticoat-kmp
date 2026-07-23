@@ -142,9 +142,10 @@ struct RadialScheduleDial: View {
         let inset = knobInsetFraction(radius: radius)
         let f = frac(e.time) + inset
         let p = point(f, radius: radius, center: center)
-        return ConvergingGrip()
-            .stroke(.white, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-            .frame(width: 18, height: 22)
+        return HStack(spacing: 3) {
+            Capsule().fill(.white).frame(width: 3.5, height: 18)
+            Capsule().fill(.white).frame(width: 3.5, height: 18)
+        }
         .rotationEffect(.degrees(Double(f) * 360))
         .frame(width: 46, height: 46)          // larger, transparent drag target
         .contentShape(Circle())
@@ -349,22 +350,6 @@ private struct ArcBand: Shape {
         path.addLine(to: p(ro - CGFloat(r), a0))
         path.addQuadCurve(to: p(ro, a0 + insetO), control: p(ro, a0))
         path.closeSubpath()
-        return path
-    }
-}
-
-private struct ConvergingGrip: Shape {
-    func path(in rect: CGRect) -> Path {
-        let outerY = rect.minY
-        let innerY = rect.maxY
-        let outerInset = rect.width * 0.2
-        let innerInset = rect.width * 0.38
-
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX + outerInset, y: outerY))
-        path.addLine(to: CGPoint(x: rect.minX + innerInset, y: innerY))
-        path.move(to: CGPoint(x: rect.maxX - outerInset, y: outerY))
-        path.addLine(to: CGPoint(x: rect.maxX - innerInset, y: innerY))
         return path
     }
 }
