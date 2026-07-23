@@ -232,20 +232,19 @@ struct ScheduleEditorView: View {
                                 .font(.headline)
                                 .foregroundStyle(SMA.labelPrimary)
                             Spacer()
-                            if preset.groups.count > 1 {
-                                Menu {
-                                    Button("Remove Day Group", systemImage: "trash", role: .destructive) {
-                                        removeGroup(group.id)
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .font(.body.weight(.semibold))
-                                        .foregroundStyle(SMA.accent)
-                                        .frame(width: 28, height: 28)
-                                        .overlay(Circle().stroke(SMA.accent, lineWidth: 1.5))
+                            Menu {
+                                Button("Remove Day Group", systemImage: "trash", role: .destructive) {
+                                    removeGroup(group.id)
                                 }
-                                .accessibilityLabel("Day group options")
+                                .disabled(preset.groups.count <= 1)
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(SMA.accent)
+                                    .frame(width: 28, height: 28)
+                                    .overlay(Circle().stroke(SMA.accent, lineWidth: 1.5))
                             }
+                            .accessibilityLabel("Day group options")
                         }
                         .textCase(nil)
                     }

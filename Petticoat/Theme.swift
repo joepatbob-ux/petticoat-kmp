@@ -126,6 +126,18 @@ extension View {
     func readableFormWidth(_ maxWidth: CGFloat = 560) -> some View {
         modifier(ReadableFormWidth(maxWidth: maxWidth))
     }
+
+    /// Wraps fixed (Spacer-distributed) content in a ScrollView that only scrolls
+    /// when the content is taller than the available space. The content still fills
+    /// the screen via `minHeight`, so Spacer-based layouts look identical when they
+    /// fit and become scrollable (e.g. under large Dynamic Type) when they don't.
+    func scrollableWhenNeeded() -> some View {
+        GeometryReader { geo in
+            ScrollView {
+                self.frame(minWidth: geo.size.width, minHeight: geo.size.height)
+            }
+        }
+    }
 }
 
 /// Centers VStack/ScrollView content at a max width on regular size class.

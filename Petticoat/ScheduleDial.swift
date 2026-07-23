@@ -16,7 +16,7 @@ struct RadialScheduleDial: View {
     private let selectedArcWidth: CGFloat = 32
     /// Gap between adjacent arcs, as a fraction of the full circle (~a few px).
     private let gap: CGFloat = 0.008
-    private let snapMinutes = 5
+    private let snapMinutes = 15
     private let spaceName = "scheduleDial"
 
     private var sortedEvents: [ScheduleEvent] { events.sorted { $0.time < $1.time } }
@@ -37,6 +37,16 @@ struct RadialScheduleDial: View {
                 Circle()
                     .stroke(SMA.fillTertiary, lineWidth: arcWidth)
                     .frame(width: ringD, height: ringD)
+
+                // Hour tick marks just inside the ring; longer/bolder every 6 hours.
+                ForEach(0..<24, id: \.self) { h in
+                    let major = h % 6 == 0
+                    Capsule()
+                        .fill(SMA.labelSecondary.opacity(major ? 0.45 : 0.22))
+                        .frame(width: major ? 2 : 1.5, height: major ? 11 : 6)
+                        .offset(y: -(radius - selectedArcWidth / 2 - 10))
+                        .rotationEffect(.degrees(Double(h) / 24 * 360))
+                }
 
                 // Arcs, selected drawn last so its extra thickness reads at the seams.
                 ForEach(arcs) { arc in
