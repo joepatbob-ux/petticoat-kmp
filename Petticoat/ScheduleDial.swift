@@ -27,6 +27,7 @@ struct RadialScheduleDial: View {
     private let hourMarkerOpacity: CGFloat = 0.62
     private let hourMarkerFadeFraction: CGFloat = 0.018
     private let gripMarkerFadeFraction: CGFloat = 0.024
+    private let gripTickSpreadFraction: CGFloat = 0.005
     /// Visual floor for a period: the scrubber can't drag a period shorter than an hour,
     /// so arcs stay large enough to read. Manual time entry bypasses this and still
     /// allows 15-minute granularity for finer sub-hour periods.
@@ -142,21 +143,30 @@ struct RadialScheduleDial: View {
         let inset = knobInsetFraction(radius: radius)
         let f = frac(e.time) + inset
         let p = point(f, radius: radius, center: center)
-        return HStack(spacing: 3) {
-            Capsule().fill(.white).frame(width: 3.5, height: 18)
-            Capsule().fill(.white).frame(width: 3.5, height: 18)
+        return ZStack {
+            ForEach([-gripTickSpreadFraction, gripTickSpreadFraction], id: \.self) { offset in
+                let tickFraction = f + offset
+                Capsule()
+                    .fill(.white)
+                    .frame(width: 3.5, height: 18)
+                    .rotationEffect(.degrees(Double(tickFraction) * 360))
+                    .position(point(tickFraction, radius: radius, center: center))
+            }
+
+            Circle()
+                .fill(.white.opacity(0.001))
+                .frame(width: 46, height: 46)
+                .contentShape(Circle())
+                .position(p)
+                .gesture(
+                    DragGesture(minimumDistance: 4, coordinateSpace: .named(spaceName))
+                        .onChanged { value in
+                            let newTime = time(at: value.location, center: center, for: e, insetFraction: inset)
+                            onChangeStart(e.id, newTime)
+                        }
+                )
         }
-        .rotationEffect(.degrees(Double(f) * 360))
-        .frame(width: 46, height: 46)          // larger, transparent drag target
-        .contentShape(Circle())
-        .position(p)
-        .gesture(
-            DragGesture(minimumDistance: 4, coordinateSpace: .named(spaceName))
-                .onChanged { value in
-                    let newTime = time(at: value.location, center: center, for: e, insetFraction: inset)
-                    onChangeStart(e.id, newTime)
-                }
-        )
+        .frame(width: center.x * 2, height: center.y * 2)
         .accessibilityHidden(true)
     }
 
