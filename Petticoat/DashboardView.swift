@@ -10,20 +10,24 @@ struct DashboardView: View {
 
     var body: some View {
         List {
-            if model.hasThermostat {
-                DashboardThermostatCard(showControl: $showControl)
-            } else {
+            if model.devices.isEmpty {
                 // No thermostat yet: lead with the filled onboarding card.
                 SpotlightCard(item: .welcome, expanded: true, onToggle: {}, onDismiss: {})
                     .spotlightCardStyle(kind: .promotional)
+            } else {
+                // Thermostat cards — a long-press drag reorders them.
+                ForEach(model.devices) { device in
+                    DashboardThermostatCard(device: device, showControl: $showControl)
+                        .thermostatCardStyle()
+                }
+                .reorderable()
             }
 
             if !model.spotlights.isEmpty {
-                // One reorderable collection: the header chevron expands/collapses every
-                // card at once, tapping a card toggles just that one, and a long-press
-                // drag reorders them.
-                Section {
-                    ForEach(model.spotlights) { item in
+                // Each spotlight is its own card. The header chevron expands/collapses
+                // them all at once; tapping a card toggles just that one.
+                ForEach(Array(model.spotlights.enumerated()), id: \.element.id) { index, item in
+                    Section {
                         SpotlightCard(
                             item: item,
                             expanded: !collapsedSpotlights.contains(item.id),
@@ -31,14 +35,15 @@ struct DashboardView: View {
                             onDismiss: { model.dismissSpotlight(item) }
                         )
                         .spotlightCardStyle(kind: item.kind)
+                    } header: {
+                        if index == 0 {
+                            SpotlightHeader(
+                                count: model.spotlights.count,
+                                allExpanded: collapsedSpotlights.isEmpty,
+                                onToggle: toggleAllSpotlights
+                            )
+                        }
                     }
-                    .reorderable()
-                } header: {
-                    SpotlightHeader(
-                        count: model.spotlights.count,
-                        allExpanded: collapsedSpotlights.isEmpty,
-                        onToggle: toggleAllSpotlights
-                    )
                 }
             }
         }
@@ -46,8 +51,8 @@ struct DashboardView: View {
         .listSectionSpacing(16)
         .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
-        .reorderContainer(for: SpotlightItem.self) { difference in
-            withAnimation(.snappy) { difference.apply(to: &model.spotlights) }
+        .reorderContainer(for: Device.self) { difference in
+            withAnimation(.snappy) { difference.apply(to: &model.devices) }
         }
         .navigationDestination(isPresented: $showControl) { DeviceTabView() }
         .toolbar { DashboardToolbar() }
@@ -111,58 +116,18 @@ struct DashboardToolbar: ToolbarContent {
 struct DashboardThermostatCard: View {
     @Environment(AppModel.self) private var model
 
+    /// The device this card represents.
+    let device: Device
     /// Drives the push to the device Control screen. Owned by DashboardView so the
-    /// navigationDestination lives on the List, not inside a List row (which made
-    /// an embedded NavigationLink hijack the header's tap).
+    /// navigationDestination lives on the List, not inside a List row.
     @Binding var showControl: Bool
     @State private var showMode = false
-    /// Inline sensor disclosure. Expanding reveals the participating-sensor
-    /// selection in place; it does not drill into the device — tapping the
-    /// temperature body does that.
+    /// Inline sensor disclosure — reveals the participating-sensor selection in place.
     @State private var sensorsExpanded = false
 
-    private var device: Device { model.device }
-
     var body: some View {
-        Section {
-            HStack(spacing: 14) {
-                ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
-                    showMode = true
-                }
-
-                // Tapping the temperature body drills into the Control screen. The
-                // mode pill and stepper flanking it keep their own actions.
-                Button {
-                    showControl = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Text("\(device.currentTemp)")
-                            .font(SMA.displayTemp(size: 46, activity: device.activity))
-                            .foregroundStyle(SMA.tempColor(device.activity))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                        Spacer(minLength: 8)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(device.name) controls")
-
-                SetpointStepper(low: device.keepMin, high: device.keepMax,
-                                mode: device.systemMode, showsLabel: true) { bound, delta in
-                    model.adjustKeep(bound, by: delta)
-                }
-            }
-            .listRowBackground(SMA.card)
-            .listRowSeparator(.hidden)
-
-            if sensorsExpanded {
-                ForEach(device.sensors) { sensor in
-                    SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor) }
-                        .listRowBackground(SMA.card)
-                }
-            }
-        } header: {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header: name + chevron (expands the participating-sensor selection).
             Button {
                 withAnimation(.snappy) { sensorsExpanded.toggle() }
             } label: {
@@ -181,10 +146,52 @@ struct DashboardThermostatCard: View {
                 .accessibilityAddTraits(.isHeader)
             }
             .buttonStyle(.plain)
-            .textCase(nil)
             .accessibilityLabel(device.name)
             .accessibilityHint(sensorsExpanded ? "Collapse sensors" : "Choose participating sensors")
-        } footer: {
+
+            // Main row: mode pill, temperature (drills in), setpoint stepper.
+            HStack(spacing: 14) {
+                ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
+                    model.selectDevice(device.id)
+                    showMode = true
+                }
+
+                Button {
+                    model.selectDevice(device.id)
+                    showControl = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("\(device.currentTemp)")
+                            .font(SMA.displayTemp(size: 46, activity: device.activity))
+                            .foregroundStyle(SMA.tempColor(device.activity))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                        Spacer(minLength: 8)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(device.name) controls")
+
+                SetpointStepper(low: device.keepMin, high: device.keepMax,
+                                mode: device.systemMode, showsLabel: true) { bound, delta in
+                    model.adjustKeep(bound, by: delta, in: device.id)
+                }
+            }
+
+            // Participating-sensor selection. No divider above the first sensor;
+            // dividers separate the rows.
+            if sensorsExpanded {
+                VStack(spacing: 0) {
+                    ForEach(Array(device.sensors.enumerated()), id: \.element.id) { index, sensor in
+                        if index > 0 { Divider().overlay(SMA.separator) }
+                        SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor, in: device.id) }
+                            .padding(.vertical, 6)
+                    }
+                }
+            }
+
+            // Footer: schedule-aware status.
             HStack(spacing: 4) {
                 Image(systemName: footer.icon)
                     .font(.caption2)
@@ -194,7 +201,6 @@ struct DashboardThermostatCard: View {
             .font(.footnote)
             .foregroundStyle(SMA.labelSecondary)
             .frame(maxWidth: .infinity, alignment: .center)
-            .textCase(nil)
         }
         .sheet(isPresented: $showMode) {
             ModeSheet()
@@ -468,6 +474,20 @@ private extension View {
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .listRowSeparator(.hidden)
     }
+
+    /// The white self-contained surface for a thermostat card, so device cards can
+    /// live in one reorderable collection alongside the same 26pt-radius look.
+    func thermostatCardStyle() -> some View {
+        self
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                SMA.card.clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            .listRowSeparator(.hidden)
+    }
 }
 
 /// Applies a single-collection reorder result to a plain array of Identifiable items.
@@ -573,7 +593,7 @@ struct SpotlightDetailView: View {
 
 #Preview("No thermostat") {
     let model = AppModel()
-    model.hasThermostat = false
+    model.devices = []
     return NavigationStack {
         DashboardView()
     }

@@ -3,7 +3,8 @@ import Observation
 
 // MARK: - Mock models
 
-struct Device {
+struct Device: Identifiable {
+    let id = UUID()
     let name: String
     let location: String
     var currentTemp: Int
@@ -65,6 +66,27 @@ struct Device {
         outdoorLow: 81,
         scheduleName: "Comfort",
         sensorSummary: "2 of 3 Sensors"
+    )
+
+    static let sampleUpstairs = Device(
+        name: "Upstairs",
+        location: "St. Louis, MO",
+        currentTemp: 74,
+        setpoint: 72,
+        heatTo: 70,
+        keepMin: 66,
+        keepMax: 76,
+        holdUntil: "6:00AM or Away",
+        humidity: 44,
+        outdoorTemp: 89,
+        outdoorHigh: 89,
+        outdoorLow: 81,
+        scheduleName: "Comfort",
+        sensorSummary: "1 of 2 Sensors",
+        sensors: [
+            RoomSensor(name: "Thermostat", temp: 74, humidity: 44, participating: true),
+            RoomSensor(name: "Nursery",    temp: 72, humidity: 46, participating: false, battery: 63),
+        ]
     )
 }
 
@@ -279,11 +301,27 @@ final class AppModel {
     var showAddDevice = false
     var showHelp = false
 
-    var device = Device.sample
+    /// All paired thermostats, shown as resortable cards on the dashboard. Empty
+    /// means no thermostat has been added yet (the dashboard shows the onboarding
+    /// welcome card instead).
+    var devices: [Device] = [.sample, .sampleUpstairs]
+    /// The device the single-device screens (Control, Mode, Schedule) act on.
+    var selectedDeviceID: Device.ID? = nil
     var spotlights: [SpotlightItem] = SpotlightItem.samples
-    /// Whether any thermostat has been added. When false, the dashboard shows the
-    /// filled welcome/onboarding spotlight in place of a device card.
-    var hasThermostat = true
+
+    /// The currently selected device — a read/write proxy into `devices` so the
+    /// existing single-device screens keep working unchanged.
+    var device: Device {
+        get { devices.first { $0.id == selectedDeviceID } ?? devices.first ?? .sample }
+        set {
+            let i = devices.firstIndex { $0.id == selectedDeviceID } ?? devices.startIndex
+            guard devices.indices.contains(i) else { return }
+            devices[i] = newValue
+        }
+    }
+
+    /// Make a device the target of the single-device screens.
+    func selectDevice(_ id: Device.ID) { selectedDeviceID = id }
 
     /// Drives the controller UI. Defaults to following the schedule (timeline).
     var controlMode: ControlMode = .schedule
@@ -303,39 +341,48 @@ final class AppModel {
     /// honoring the two-degree deadband, pushes the opposite bound when they'd
     /// collide. In heat/cool it moves the single active target. Adjusting while
     /// following a schedule or profile creates a temporary hold.
-    func adjustKeep(_ bound: SetpointBound, by delta: Int) {
+    func adjustKeep(_ bound: SetpointBound, by delta: Int, in id: Device.ID) {
+        guard let i = devices.firstIndex(where: { $0.id == id }) else { return }
         let lo = SetpointConfig.minTemp
         let hi = SetpointConfig.maxTemp
         let gap = SetpointConfig.deadband
 
-        if device.systemMode.isRangeSetpoint {
+        var d = devices[i]
+        if d.systemMode.isRangeSetpoint {
             switch bound {
             case .low:
-                let v = min(max(device.keepMin + delta, lo), hi - gap)
-                device.keepMin = v
-                if device.keepMax < v + gap { device.keepMax = v + gap }
+                let v = min(max(d.keepMin + delta, lo), hi - gap)
+                d.keepMin = v
+                if d.keepMax < v + gap { d.keepMax = v + gap }
             case .high:
-                let v = min(max(device.keepMax + delta, lo + gap), hi)
-                device.keepMax = v
-                if device.keepMin > v - gap { device.keepMin = v - gap }
+                let v = min(max(d.keepMax + delta, lo + gap), hi)
+                d.keepMax = v
+                if d.keepMin > v - gap { d.keepMin = v - gap }
             }
-        } else if device.systemMode == .cool {
-            device.keepMax = min(max(device.keepMax + delta, lo + gap), hi)
-            device.keepMin = min(device.keepMin, device.keepMax - gap)
+        } else if d.systemMode == .cool {
+            d.keepMax = min(max(d.keepMax + delta, lo + gap), hi)
+            d.keepMin = min(d.keepMin, d.keepMax - gap)
         } else {   // heat / auxHeat
-            device.keepMin = min(max(device.keepMin + delta, lo), hi - gap)
-            device.keepMax = max(device.keepMax, device.keepMin + gap)
+            d.keepMin = min(max(d.keepMin + delta, lo), hi - gap)
+            d.keepMax = max(d.keepMax, d.keepMin + gap)
         }
+        devices[i] = d
 
         if controlMode == .schedule || controlMode == .activity {
             withAnimation(.snappy) { controlMode = .hold }
         }
     }
 
-    /// Toggle whether a paired sensor feeds the averaged temperature.
-    func toggleSensor(_ sensor: RoomSensor) {
-        guard let i = device.sensors.firstIndex(where: { $0.id == sensor.id }) else { return }
-        withAnimation(.snappy) { device.sensors[i].participating.toggle() }
+    /// Convenience for the single-device screens: adjusts the selected device.
+    func adjustKeep(_ bound: SetpointBound, by delta: Int) {
+        adjustKeep(bound, by: delta, in: device.id)
+    }
+
+    /// Toggle whether a paired sensor feeds the averaged temperature on a device.
+    func toggleSensor(_ sensor: RoomSensor, in id: Device.ID) {
+        guard let di = devices.firstIndex(where: { $0.id == id }),
+              let si = devices[di].sensors.firstIndex(where: { $0.id == sensor.id }) else { return }
+        withAnimation(.snappy) { devices[di].sensors[si].participating.toggle() }
     }
 
     /// Automation Schedule/Off toggle drives schedule vs. standard control.
