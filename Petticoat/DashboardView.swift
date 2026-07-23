@@ -3,8 +3,10 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
     @State private var showControl = false
-    /// Which spotlight cards are expanded. Each expands independently — no stack.
-    @State private var expandedSpotlights: Set<UUID> = []
+    /// Spotlight cards shown in their abbreviated form. Empty by default, so every
+    /// card starts expanded; the header chevron collapses/expands them all at once,
+    /// and tapping a card toggles just that one.
+    @State private var collapsedSpotlights: Set<UUID> = []
 
     var body: some View {
         List {
@@ -12,43 +14,62 @@ struct DashboardView: View {
                 DashboardThermostatCard(showControl: $showControl)
             } else {
                 // No thermostat yet: lead with the filled onboarding card.
-                Section {
-                    SpotlightCard(item: .welcome, expanded: true, onToggle: {}, onDismiss: {})
-                        .listRowBackground(SpotlightRowBackground(kind: .promotional))
-                }
+                SpotlightCard(item: .welcome, expanded: true, onToggle: {}, onDismiss: {})
+                    .spotlightCardStyle(kind: .promotional)
             }
 
             if !model.spotlights.isEmpty {
-                // Each spotlight is its own card. Tapping one expands just that card;
-                // the others stay collapsed. The "Spotlight" title rides on the first.
-                ForEach(Array(model.spotlights.enumerated()), id: \.element.id) { index, item in
-                    Section {
+                // One reorderable collection: the header chevron expands/collapses every
+                // card at once, tapping a card toggles just that one, and a long-press
+                // drag reorders them.
+                Section {
+                    ForEach(model.spotlights) { item in
                         SpotlightCard(
                             item: item,
-                            expanded: expandedSpotlights.contains(item.id),
+                            expanded: !collapsedSpotlights.contains(item.id),
                             onToggle: { toggleSpotlight(item) },
                             onDismiss: { model.dismissSpotlight(item) }
                         )
-                        .listRowBackground(SpotlightRowBackground(kind: item.kind))
-                    } header: {
-                        if index == 0 { SpotlightHeader(count: model.spotlights.count) }
+                        .spotlightCardStyle(kind: item.kind)
                     }
+                    .reorderable()
+                } header: {
+                    SpotlightHeader(
+                        count: model.spotlights.count,
+                        allExpanded: collapsedSpotlights.isEmpty,
+                        onToggle: toggleAllSpotlights
+                    )
                 }
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(16)
         .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
+        .reorderContainer(for: SpotlightItem.self) { difference in
+            withAnimation(.snappy) { difference.apply(to: &model.spotlights) }
+        }
         .navigationDestination(isPresented: $showControl) { DeviceTabView() }
         .toolbar { DashboardToolbar() }
     }
 
     private func toggleSpotlight(_ item: SpotlightItem) {
         withAnimation(.snappy) {
-            if expandedSpotlights.contains(item.id) {
-                expandedSpotlights.remove(item.id)
+            if collapsedSpotlights.contains(item.id) {
+                collapsedSpotlights.remove(item.id)
             } else {
-                expandedSpotlights.insert(item.id)
+                collapsedSpotlights.insert(item.id)
+            }
+        }
+    }
+
+    /// Header chevron: collapse every card when all are expanded, else expand all.
+    private func toggleAllSpotlights() {
+        withAnimation(.snappy) {
+            if collapsedSpotlights.isEmpty {
+                collapsedSpotlights = Set(model.spotlights.map(\.id))
+            } else {
+                collapsedSpotlights.removeAll()
             }
         }
     }
@@ -251,21 +272,33 @@ struct SensorSelectRow: View {
 
 struct SpotlightHeader: View {
     let count: Int
+    let allExpanded: Bool
+    let onToggle: () -> Void
 
     var body: some View {
-        HStack {
-            Text("Spotlight")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(SMA.labelPrimary)
-            Spacer()
-            Text("\(count)")
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .background(SMA.accent, in: Circle())
-                .accessibilityLabel("\(count) spotlights")
+        Button(action: onToggle) {
+            HStack {
+                Text("Spotlight")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(SMA.labelPrimary)
+                Spacer()
+                Text("\(count)")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+                    .background(SMA.accent, in: Circle())
+                    .accessibilityLabel("\(count) spotlights")
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SMA.accent)
+                    .rotationEffect(.degrees(allExpanded ? 90 : 0))
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .textCase(nil)
+        .accessibilityHint(allExpanded ? "Collapse all spotlights" : "Expand all spotlights")
     }
 }
 
@@ -283,72 +316,96 @@ struct SpotlightCard: View {
     @State private var showDetail = false
 
     private var kind: SpotlightItem.Kind { item.kind }
-    private var alwaysExpanded: Bool { kind == .promotional }
-    private var isOpen: Bool { expanded || alwaysExpanded }
+    private var isOpen: Bool { expanded }
 
     var body: some View {
+        Group {
+            if isOpen { expandedContent } else { collapsedContent }
+        }
+        .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
+    }
+
+    /// Hero + full title, body, subline, separator, and the CTA / overflow row.
+    private var expandedContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Button { if !alwaysExpanded { onToggle() } } label: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(item.heroImage ?? kind.defaultHero)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 32)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityHidden(true)
-
-                    Text(item.title)
-                        .font(.title.weight(.bold))
-                        .foregroundStyle(titleColor)
-                        .lineLimit(isOpen ? nil : 2)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if isOpen {
-                        Text(item.body)
-                            .font(.body)
-                            .foregroundStyle(bodyColor)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if !item.subline.isEmpty {
-                            Text(item.subline)
-                                .font(.footnote)
-                                .foregroundStyle(sublineColor)
-                        }
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                hero
+                Text(item.title)
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(titleColor)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(item.body)
+                    .font(.body)
+                    .foregroundStyle(bodyColor)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !item.subline.isEmpty {
+                    Text(item.subline)
+                        .font(.footnote)
+                        .foregroundStyle(sublineColor)
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .disabled(alwaysExpanded)
-            .accessibilityHint(alwaysExpanded ? "" : (isOpen ? "Collapse spotlight" : "Expand spotlight"))
+            .contentShape(Rectangle())
+            .onTapGesture { onToggle() }
 
-            if isOpen { Divider().overlay(separatorColor) }
+            Divider().overlay(separatorColor)
 
-            // Action row: the CTA when open, overflow menu always in the corner.
             HStack {
-                if isOpen {
-                    Button { primaryAction() } label: {
-                        Text(item.actionLabel ?? kind.defaultActionLabel)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(kind.buttonLabelColor)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 9)
-                            .background(kind.buttonTint, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
+                Button { primaryAction() } label: {
+                    Text(item.actionLabel ?? kind.defaultActionLabel)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(kind.buttonLabelColor)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 9)
+                        .background(kind.buttonTint, in: Capsule())
                 }
+                .buttonStyle(.plain)
                 Spacer()
                 overflow
             }
         }
-        .padding(.vertical, 4)
-        .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
+    }
+
+    /// Compact form: hero, a smaller headline, and a one-line body that truncates
+    /// with the overflow icon sitting on its trailing baseline.
+    private var collapsedContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            hero
+            Text(item.title)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(titleColor)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(item.body)
+                    .font(.subheadline)
+                    .foregroundStyle(bodyColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                overflow
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { onToggle() }
+    }
+
+    private var hero: some View {
+        Image(item.heroImage ?? kind.defaultHero)
+            .resizable()
+            .scaledToFit()
+            .frame(height: 32)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityHidden(true)
     }
 
     private var overflow: some View {
         Menu {
-            if kind == .promotional {
+            if item.startsInstall {
                 Button("Get Help", systemImage: "questionmark.circle") { model.showHelp = true }
             } else {
                 if !isOpen {
@@ -369,7 +426,7 @@ struct SpotlightCard: View {
     }
 
     private func primaryAction() {
-        if kind == .promotional { model.showAddDevice = true } else { showDetail = true }
+        if item.startsInstall { model.showAddDevice = true } else { showDetail = true }
     }
 
     private var titleColor: Color { kind.isFilled ? .white : SMA.labelPrimary }
@@ -392,6 +449,51 @@ struct SpotlightRowBackground: View {
                 )
         } else {
             SMA.card
+        }
+    }
+}
+
+private extension View {
+    /// Renders a spotlight card as a self-contained rounded surface inside a clear
+    /// list row, so all cards can live in one reorderable section.
+    func spotlightCardStyle(kind: SpotlightItem.Kind) -> some View {
+        self
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                SpotlightRowBackground(kind: kind)
+                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            .listRowSeparator(.hidden)
+    }
+}
+
+/// Applies a single-collection reorder result to a plain array of Identifiable items.
+extension ReorderDifference where CollectionID == ReorderableSingleCollectionIdentifier {
+    func apply<C>(to collection: inout C)
+        where C: RangeReplaceableCollection,
+              C.Element: Identifiable,
+              C.Element.ID == ItemID
+    {
+        let moving = Set(sources)
+        guard !moving.isEmpty else { return }
+
+        var moved: [C.Element] = []
+        moved.reserveCapacity(moving.count)
+        collection.removeAll { element in
+            guard moving.contains(element.id) else { return false }
+            moved.append(element)
+            return true
+        }
+
+        switch destination.position {
+        case .before(let id):
+            let index = collection.firstIndex { $0.id == id } ?? collection.endIndex
+            collection.insert(contentsOf: moved, at: index)
+        case .end:
+            collection.append(contentsOf: moved)
         }
     }
 }

@@ -121,6 +121,9 @@ struct SpotlightItem: Identifiable {
     var actionLabel: String? = nil
     /// Hero asset name; falls back to the kind's default when nil.
     var heroImage: String? = nil
+    /// Onboarding cards launch the install flow from their CTA (and can't be
+    /// dismissed); other cards open their detail.
+    var startsInstall: Bool = false
 
     /// The "Expires: …" line under the body (empty when there's no expiry).
     var subline: String { validUntil.isEmpty ? "" : "Expires: \(validUntil)" }
@@ -130,10 +133,18 @@ struct SpotlightItem: Identifiable {
         kind: .promotional,
         provider: "",
         title: "Welcome to the Sensi!",
-        body: "Let’s get started by installing your Sensi Thermostat."
+        body: "Let’s get started by installing your Sensi Thermostat.",
+        startsInstall: true
     )
 
     static let samples = [
+        SpotlightItem(
+            kind: .promotional,
+            provider: "",
+            title: "Get more from your Sensi",
+            body: "Explore Smart Alerts, energy insights, and remote room sensors.",
+            validUntil: "June 27, 2024"
+        ),
         SpotlightItem(
             kind: .partner,
             provider: "ACME POWER",
