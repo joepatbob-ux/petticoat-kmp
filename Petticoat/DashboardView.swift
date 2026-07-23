@@ -11,10 +11,10 @@ struct DashboardView: View {
             if model.hasThermostat {
                 DashboardThermostatCard(showControl: $showControl)
             } else {
-                // No thermostat yet: lead with the filled onboarding spotlight.
+                // No thermostat yet: lead with the filled onboarding card.
                 Section {
-                    WelcomeSpotlightCard(item: .welcome)
-                        .listRowBackground(WelcomeCardBackground())
+                    SpotlightCard(item: .welcome, expanded: true, onToggle: {}, onDismiss: {})
+                        .listRowBackground(SpotlightRowBackground(kind: .promotional))
                 }
             }
 
@@ -23,13 +23,13 @@ struct DashboardView: View {
                 // the others stay collapsed. The "Spotlight" title rides on the first.
                 ForEach(Array(model.spotlights.enumerated()), id: \.element.id) { index, item in
                     Section {
-                        SpotlightRow(
+                        SpotlightCard(
                             item: item,
                             expanded: expandedSpotlights.contains(item.id),
                             onToggle: { toggleSpotlight(item) },
                             onDismiss: { model.dismissSpotlight(item) }
                         )
-                        .listRowBackground(SMA.card)
+                        .listRowBackground(SpotlightRowBackground(kind: item.kind))
                     } header: {
                         if index == 0 { SpotlightHeader(count: model.spotlights.count) }
                     }
@@ -269,137 +269,130 @@ struct SpotlightHeader: View {
     }
 }
 
-/// A single spotlight card that expands in place. Collapsed, it shows the provider
-/// and title with a chevron; expanded, it reveals the full promo body and actions.
-/// Tapping the header row toggles the card; the overflow menu and Learn More are
-/// independent controls.
-struct SpotlightRow: View {
+/// A dashboard spotlight card. The three kinds share one layout — hero image, title,
+/// body, an "Expires:" subline, a separator, then an action button with an overflow
+/// menu in the corner. Promotional cards use the filled brand surface and stay
+/// expanded; generic/partner cards are white and collapse to hero + title until
+/// tapped.
+struct SpotlightCard: View {
+    @Environment(AppModel.self) private var model
     let item: SpotlightItem
     let expanded: Bool
     let onToggle: () -> Void
     let onDismiss: () -> Void
     @State private var showDetail = false
 
+    private var kind: SpotlightItem.Kind { item.kind }
+    private var alwaysExpanded: Bool { kind == .promotional }
+    private var isOpen: Bool { expanded || alwaysExpanded }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Tapping the header expands/collapses this card. The provider logo
-            // (an SVG asset) will sit ahead of the text once it's added.
-            Button(action: onToggle) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.provider)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(SMA.brandNavy)
+        VStack(alignment: .leading, spacing: 14) {
+            Button { if !alwaysExpanded { onToggle() } } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Image(item.heroImage ?? kind.defaultHero)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 32)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityHidden(true)
+
                     Text(item.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(SMA.labelPrimary)
-                        .lineLimit(expanded ? nil : 1)
+                        .font(.title.weight(.bold))
+                        .foregroundStyle(titleColor)
+                        .lineLimit(isOpen ? nil : 2)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if isOpen {
+                        Text(item.body)
+                            .font(.body)
+                            .foregroundStyle(bodyColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if !item.subline.isEmpty {
+                            Text(item.subline)
+                                .font(.footnote)
+                                .foregroundStyle(sublineColor)
+                        }
+                    }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityHint(expanded ? "Collapse spotlight" : "Expand spotlight")
+            .disabled(alwaysExpanded)
+            .accessibilityHint(alwaysExpanded ? "" : (isOpen ? "Collapse spotlight" : "Expand spotlight"))
 
-            if expanded {
-                Text(item.body)
-                    .font(.subheadline)
-                    .foregroundStyle(SMA.labelSecondary)
+            if isOpen { Divider().overlay(separatorColor) }
 
-                Text("Offer valid until: \(item.validUntil)")
-                    .font(.footnote)
-                    .foregroundStyle(SMA.labelSecondary.opacity(0.8))
-
-                Divider().overlay(SMA.separator)
-            }
-
-            // Bottom action row: Learn More when open, overflow menu in the corner.
+            // Action row: the CTA when open, overflow menu always in the corner.
             HStack {
-                if expanded {
-                    Button("Learn More") { showDetail = true }
-                        .font(.subheadline.weight(.semibold))
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.capsule)
-                        .tint(SMA.orange)
-                }
-                Spacer()
-                Menu {
-                    if !expanded {
-                        Button("Learn More", systemImage: "arrow.up.right") { showDetail = true }
+                if isOpen {
+                    Button { primaryAction() } label: {
+                        Text(item.actionLabel ?? kind.defaultActionLabel)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(kind.buttonLabelColor)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 9)
+                            .background(kind.buttonTint, in: Capsule())
                     }
-                    Button("Dismiss", systemImage: "xmark", role: .destructive) { onDismiss() }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(SMA.accent)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("More options")
-            }
-        }
-        .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
-    }
-}
-
-/// The filled onboarding spotlight shown when no thermostat has been added. Unlike
-/// the promo cards it doesn't collapse — it always shows its message and a prominent
-/// "Get Started" action, with the overflow menu in the bottom corner.
-struct WelcomeSpotlightCard: View {
-    @Environment(AppModel.self) private var model
-    let item: SpotlightItem
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(item.title)
-                    .font(.title.weight(.bold))
-                    .foregroundStyle(.white)
-                Text(item.body)
-                    .font(.body)
-                    .foregroundStyle(.white.opacity(0.75))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Divider().overlay(Color.white.opacity(0.25))
-
-            HStack {
-                Button { model.showAddDevice = true } label: {
-                    Text(item.actionLabel ?? "Get Started")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(SMA.brandTeal)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 9)
-                        .background(.white, in: Capsule())
-                }
-                .buttonStyle(.plain)
                 Spacer()
-                Menu {
-                    Button("Get Help", systemImage: "questionmark.circle") { model.showHelp = true }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("More options")
+                overflow
             }
         }
         .padding(.vertical, 4)
+        .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
     }
+
+    private var overflow: some View {
+        Menu {
+            if kind == .promotional {
+                Button("Get Help", systemImage: "questionmark.circle") { model.showHelp = true }
+            } else {
+                if !isOpen {
+                    Button("Learn More", systemImage: "arrow.up.right") { showDetail = true }
+                }
+                Button("Dismiss", systemImage: "xmark", role: .destructive) { onDismiss() }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(kind.accent)
+                .frame(width: 26, height: 26)
+                .overlay(Circle().stroke(kind.accent, lineWidth: 1.5))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("More options")
+    }
+
+    private func primaryAction() {
+        if kind == .promotional { model.showAddDevice = true } else { showDetail = true }
+    }
+
+    private var titleColor: Color { kind.isFilled ? .white : SMA.labelPrimary }
+    private var bodyColor: Color { kind.isFilled ? .white.opacity(0.75) : SMA.labelSecondary }
+    private var sublineColor: Color { kind.isFilled ? .white.opacity(0.35) : SMA.labelSecondary.opacity(0.5) }
+    private var separatorColor: Color { kind.isFilled ? .white.opacity(0.25) : SMA.separator }
 }
 
-/// The teal fill (with the design's subtle bottom shade) behind the welcome card.
-struct WelcomeCardBackground: View {
+/// The list-row fill behind a spotlight card: the teal brand surface for the filled
+/// promotional card, the standard white card for the rest.
+struct SpotlightRowBackground: View {
+    let kind: SpotlightItem.Kind
+
     var body: some View {
-        SMA.brandTeal
-            .overlay(
-                LinearGradient(colors: [.clear, .black.opacity(0.04)],
-                               startPoint: .top, endPoint: .bottom)
-            )
+        if kind.isFilled {
+            SMA.brandTeal
+                .overlay(
+                    LinearGradient(colors: [.clear, .black.opacity(0.04)],
+                                   startPoint: .top, endPoint: .bottom)
+                )
+        } else {
+            SMA.card
+        }
     }
 }
 

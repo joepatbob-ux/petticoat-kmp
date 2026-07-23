@@ -106,36 +106,78 @@ struct RoomSensor: Identifiable, Hashable {
 }
 
 struct SpotlightItem: Identifiable {
+    /// The three card treatments from the design system. Promotional is the filled
+    /// brand card; Generic is a first-party white card; Partner is a co-branded
+    /// white card.
+    enum Kind { case promotional, generic, partner }
+
     let id = UUID()
+    var kind: Kind = .generic
     let provider: String
     let title: String
     let body: String
     var validUntil: String = ""
-    /// Call-to-action label for filled onboarding cards (e.g. "Get Started").
+    /// CTA label; falls back to the kind's default when nil.
     var actionLabel: String? = nil
+    /// Hero asset name; falls back to the kind's default when nil.
+    var heroImage: String? = nil
+
+    /// The "Expires: …" line under the body (empty when there's no expiry).
+    var subline: String { validUntil.isEmpty ? "" : "Expires: \(validUntil)" }
 
     /// The filled onboarding card shown when no thermostat has been added yet.
     static let welcome = SpotlightItem(
+        kind: .promotional,
         provider: "",
         title: "Welcome to the Sensi!",
-        body: "Let’s get started by installing your Sensi Thermostat.",
-        actionLabel: "Get Started"
+        body: "Let’s get started by installing your Sensi Thermostat."
     )
 
     static let samples = [
         SpotlightItem(
+            kind: .partner,
             provider: "ACME POWER",
             title: "Save with the EcoSmart program!",
             body: "Optimize your energy usage by registering to the EcoSmart program today!",
             validUntil: "July 15, 2025"
         ),
         SpotlightItem(
+            kind: .generic,
             provider: "SENSI",
             title: "Your July usage report is ready",
             body: "See how your energy use compared to last month and get personalized tips to save.",
             validUntil: "August 1, 2025"
         ),
     ]
+}
+
+extension SpotlightItem.Kind {
+    /// Filled cards use the brand surface with white text; others are white cards.
+    var isFilled: Bool { self == .promotional }
+
+    var defaultActionLabel: String { self == .promotional ? "Get Started" : "Learn More" }
+
+    var defaultHero: String {
+        switch self {
+        case .promotional: "spotlight.hero.sensor"
+        case .generic:     "spotlight.hero.energy"
+        case .partner:     "spotlight.hero.partner"
+        }
+    }
+
+    /// Capsule fill behind the action button.
+    var buttonTint: Color {
+        switch self {
+        case .promotional: .white
+        case .generic:     Color(hex: 0x15CB70)   // System Mode / Energy Green
+        case .partner:     SMA.orange
+        }
+    }
+
+    var buttonLabelColor: Color { self == .promotional ? SMA.brandTeal : .white }
+
+    /// Ellipsis and other accents — white on the filled card, brand blue otherwise.
+    var accent: Color { self == .promotional ? .white : SMA.accent }
 }
 
 // MARK: - App state
