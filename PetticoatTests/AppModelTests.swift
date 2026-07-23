@@ -6,21 +6,24 @@ struct AppModelTests {
 
     // MARK: Setpoint range
 
-    @Test func raisingLowStopsBelowHigh() {
+    @Test func raisingLowPushesHighByDeadband() {
         let model = AppModel()
-        let high = model.device.keepMax
-        // Push the low bound up far past the high bound.
+        // Push the low bound up; it drags the high bound along, keeping the deadband,
+        // and caps at the ceiling minus the deadband.
         for _ in 0..<50 { model.adjustKeep(.low, by: 1) }
-        #expect(model.device.keepMin == high - 1)
-        #expect(model.device.keepMin < model.device.keepMax)
+        #expect(model.device.keepMin == SetpointConfig.maxTemp - SetpointConfig.deadband)
+        #expect(model.device.keepMax == SetpointConfig.maxTemp)
+        #expect(model.device.keepMax - model.device.keepMin == SetpointConfig.deadband)
     }
 
-    @Test func loweringHighStopsAboveLow() {
+    @Test func loweringHighPushesLowByDeadband() {
         let model = AppModel()
-        let low = model.device.keepMin
+        // Lowering the high bound drags the low bound down, keeping the deadband,
+        // and caps at the floor plus the deadband.
         for _ in 0..<50 { model.adjustKeep(.high, by: -1) }
-        #expect(model.device.keepMax == low + 1)
-        #expect(model.device.keepMax > model.device.keepMin)
+        #expect(model.device.keepMax == SetpointConfig.minTemp + SetpointConfig.deadband)
+        #expect(model.device.keepMin == SetpointConfig.minTemp)
+        #expect(model.device.keepMax - model.device.keepMin == SetpointConfig.deadband)
     }
 
     @Test func lowBoundClampsAtFloor() {

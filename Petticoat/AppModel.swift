@@ -47,6 +47,9 @@ struct Device {
         }
     }
 
+    /// How many paired sensors currently feed the averaged temperature.
+    var participatingCount: Int { sensors.filter(\.participating).count }
+
     static let sample = Device(
         name: "Home",
         location: "St. Louis, MO",
@@ -66,18 +69,39 @@ struct Device {
 }
 
 /// A paired room sensor. `participating` means it contributes to the averaged
-/// temperature the thermostat controls to.
+/// temperature the thermostat controls to. `battery` is the remaining charge
+/// (0–100), or nil for hard-wired models that have no battery.
 struct RoomSensor: Identifiable, Hashable {
     let id = UUID()
     let name: String
     let temp: Int
     let humidity: Int
     var participating: Bool
+    var battery: Int? = nil
+
+    /// Battery icon that steps down with the remaining charge.
+    static func batterySymbol(_ level: Int) -> String {
+        switch level {
+        case 67...:   "battery.100"
+        case 34...66: "battery.50"
+        case 1...33:  "battery.25"
+        default:      "battery.0"
+        }
+    }
+
+    /// Green while healthy, orange as it wanes, red when nearly dead.
+    static func batteryColor(_ level: Int) -> Color {
+        switch level {
+        case 50...:    Color(hex: 0x34C759)
+        case 20..<50:  SMA.orange
+        default:       SMA.destructive
+        }
+    }
 
     static let samples = [
-        RoomSensor(name: "Thermostat", temp: 72, humidity: 40, participating: true),
-        RoomSensor(name: "Bedroom",    temp: 70, humidity: 42, participating: true),
-        RoomSensor(name: "Office",     temp: 75, humidity: 38, participating: false),
+        RoomSensor(name: "Thermostat", temp: 72, humidity: 40, participating: true),                // wired
+        RoomSensor(name: "Bedroom",    temp: 70, humidity: 42, participating: true,  battery: 41),
+        RoomSensor(name: "Office",     temp: 75, humidity: 38, participating: false, battery: 12),
     ]
 }
 
@@ -86,7 +110,17 @@ struct SpotlightItem: Identifiable {
     let provider: String
     let title: String
     let body: String
-    let validUntil: String
+    var validUntil: String = ""
+    /// Call-to-action label for filled onboarding cards (e.g. "Get Started").
+    var actionLabel: String? = nil
+
+    /// The filled onboarding card shown when no thermostat has been added yet.
+    static let welcome = SpotlightItem(
+        provider: "",
+        title: "Welcome to the Sensi!",
+        body: "Let’s get started by installing your Sensi Thermostat.",
+        actionLabel: "Get Started"
+    )
 
     static let samples = [
         SpotlightItem(
@@ -108,6 +142,14 @@ struct SpotlightItem: Identifiable {
 
 /// Which end of the comfort range is being adjusted.
 enum SetpointBound { case low, high }
+
+/// Shared limits for setpoint adjustment. Heat and cool setpoints must stay at
+/// least `deadband` degrees apart; pushing one into the other drags it along.
+enum SetpointConfig {
+    static let minTemp = 45
+    static let maxTemp = 95
+    static let deadband = 2
+}
 
 /// Current HVAC call state, derived from temperature vs. the comfort range.
 enum HVACActivity { case idle, heating, cooling }
@@ -143,6 +185,17 @@ enum SystemMode: String, CaseIterable, Identifiable {
         case .off:     "mode.off"
         }
     }
+    /// The label shown above the setpoint at rest: a range in Auto, a single
+    /// target when heating or cooling.
+    var setpointLabel: String {
+        switch self {
+        case .heat, .auxHeat: "Heat To"
+        case .cool:           "Cool To"
+        default:              "Keep Between"
+        }
+    }
+    /// Auto controls to a low·high range; heat/cool control to a single target.
+    var isRangeSetpoint: Bool { self == .auto || self == .off }
 }
 
 enum FanMode: String, CaseIterable, Identifiable {
@@ -175,6 +228,9 @@ final class AppModel {
 
     var device = Device.sample
     var spotlights: [SpotlightItem] = SpotlightItem.samples
+    /// Whether any thermostat has been added. When false, the dashboard shows the
+    /// filled welcome/onboarding spotlight in place of a device card.
+    var hasThermostat = true
 
     /// Drives the controller UI. Defaults to following the schedule (timeline).
     var controlMode: ControlMode = .schedule
@@ -190,20 +246,43 @@ final class AppModel {
         .init(name: "Sleep", symbol: "bed.double.fill", colorHex: 0xAF52DE, heatTo: 66, coolTo: 72, startText: "10:00 PM"),
     ]
 
-    /// Adjusts a single comfort-range bound, keeping low strictly below high.
-    /// Adjusting while following a schedule or profile creates a temporary hold.
+    /// Adjusts the comfort setpoint. In Auto this moves one bound of the range and,
+    /// honoring the two-degree deadband, pushes the opposite bound when they'd
+    /// collide. In heat/cool it moves the single active target. Adjusting while
+    /// following a schedule or profile creates a temporary hold.
     func adjustKeep(_ bound: SetpointBound, by delta: Int) {
-        switch bound {
-        case .low:
-            let v = device.keepMin + delta
-            if v >= 45, v < device.keepMax { device.keepMin = v }
-        case .high:
-            let v = device.keepMax + delta
-            if v <= 95, v > device.keepMin { device.keepMax = v }
+        let lo = SetpointConfig.minTemp
+        let hi = SetpointConfig.maxTemp
+        let gap = SetpointConfig.deadband
+
+        if device.systemMode.isRangeSetpoint {
+            switch bound {
+            case .low:
+                let v = min(max(device.keepMin + delta, lo), hi - gap)
+                device.keepMin = v
+                if device.keepMax < v + gap { device.keepMax = v + gap }
+            case .high:
+                let v = min(max(device.keepMax + delta, lo + gap), hi)
+                device.keepMax = v
+                if device.keepMin > v - gap { device.keepMin = v - gap }
+            }
+        } else if device.systemMode == .cool {
+            device.keepMax = min(max(device.keepMax + delta, lo + gap), hi)
+            device.keepMin = min(device.keepMin, device.keepMax - gap)
+        } else {   // heat / auxHeat
+            device.keepMin = min(max(device.keepMin + delta, lo), hi - gap)
+            device.keepMax = max(device.keepMax, device.keepMin + gap)
         }
+
         if controlMode == .schedule || controlMode == .activity {
             withAnimation(.snappy) { controlMode = .hold }
         }
+    }
+
+    /// Toggle whether a paired sensor feeds the averaged temperature.
+    func toggleSensor(_ sensor: RoomSensor) {
+        guard let i = device.sensors.firstIndex(where: { $0.id == sensor.id }) else { return }
+        withAnimation(.snappy) { device.sensors[i].participating.toggle() }
     }
 
     /// Automation Schedule/Off toggle drives schedule vs. standard control.

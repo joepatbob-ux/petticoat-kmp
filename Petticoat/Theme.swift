@@ -27,6 +27,8 @@ enum SMA {
 
     // Brand — lightened in dark mode for contrast on dark surfaces.
     static let brandNavy         = Color(light: 0x14435F, dark: 0x8FB8CE)
+    /// Filled brand surface used by the onboarding "Welcome" spotlight card.
+    static let brandTeal         = Color(hex: 0x006998)
 }
 
 extension Color {

@@ -2,39 +2,36 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
-    @State private var spotlightExpanded = true
     @State private var showControl = false
+    /// Which spotlight cards are expanded. Each expands independently — no stack.
+    @State private var expandedSpotlights: Set<UUID> = []
 
     var body: some View {
         List {
-            DashboardThermostatCard(showControl: $showControl)
+            if model.hasThermostat {
+                DashboardThermostatCard(showControl: $showControl)
+            } else {
+                // No thermostat yet: lead with the filled onboarding spotlight.
+                Section {
+                    WelcomeSpotlightCard(item: .welcome)
+                        .listRowBackground(WelcomeCardBackground())
+                }
+            }
 
             if !model.spotlights.isEmpty {
-                // The header + lead card live in a stable Section; the remaining cards
-                // are separate Sections that animate out when the section collapses.
-                // Collapsed, the lead card becomes a stack of the cards behind it.
-                Section {
-                    if spotlightExpanded {
-                        SpotlightCard(item: model.spotlights[0]) {
-                            model.dismissSpotlight(model.spotlights[0])
-                        }
+                // Each spotlight is its own card. Tapping one expands just that card;
+                // the others stay collapsed. The "Spotlight" title rides on the first.
+                ForEach(Array(model.spotlights.enumerated()), id: \.element.id) { index, item in
+                    Section {
+                        SpotlightRow(
+                            item: item,
+                            expanded: expandedSpotlights.contains(item.id),
+                            onToggle: { toggleSpotlight(item) },
+                            onDismiss: { model.dismissSpotlight(item) }
+                        )
                         .listRowBackground(SMA.card)
-                    } else {
-                        SpotlightStack(items: model.spotlights) { model.dismissSpotlight($0) }
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
-                    }
-                } header: {
-                    SpotlightHeader(count: model.spotlights.count, expanded: $spotlightExpanded)
-                }
-
-                if spotlightExpanded {
-                    ForEach(Array(model.spotlights.dropFirst())) { item in
-                        Section {
-                            SpotlightCard(item: item) { model.dismissSpotlight(item) }
-                                .listRowBackground(SMA.card)
-                        }
+                    } header: {
+                        if index == 0 { SpotlightHeader(count: model.spotlights.count) }
                     }
                 }
             }
@@ -44,6 +41,16 @@ struct DashboardView: View {
         .background(SMA.groupedBackground.ignoresSafeArea())
         .navigationDestination(isPresented: $showControl) { DeviceTabView() }
         .toolbar { DashboardToolbar() }
+    }
+
+    private func toggleSpotlight(_ item: SpotlightItem) {
+        withAnimation(.snappy) {
+            if expandedSpotlights.contains(item.id) {
+                expandedSpotlights.remove(item.id)
+            } else {
+                expandedSpotlights.insert(item.id)
+            }
+        }
     }
 }
 
@@ -88,8 +95,9 @@ struct DashboardThermostatCard: View {
     /// an embedded NavigationLink hijack the header's tap).
     @Binding var showControl: Bool
     @State private var showMode = false
-    /// Inline sensor list disclosure. Expanding reveals the paired sensors in place;
-    /// it does not drill into the device — tapping the temperature body does that.
+    /// Inline sensor disclosure. Expanding reveals the participating-sensor
+    /// selection in place; it does not drill into the device — tapping the
+    /// temperature body does that.
     @State private var sensorsExpanded = false
 
     private var device: Device { model.device }
@@ -119,15 +127,17 @@ struct DashboardThermostatCard: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open \(device.name) controls")
 
-                SetpointStepper(low: device.keepMin, high: device.keepMax) { bound, delta in
+                SetpointStepper(low: device.keepMin, high: device.keepMax,
+                                mode: device.systemMode, showsLabel: true) { bound, delta in
                     model.adjustKeep(bound, by: delta)
                 }
             }
             .listRowBackground(SMA.card)
+            .listRowSeparator(.hidden)
 
             if sensorsExpanded {
                 ForEach(device.sensors) { sensor in
-                    SensorRow(sensor: sensor)
+                    SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor) }
                         .listRowBackground(SMA.card)
                 }
             }
@@ -140,9 +150,6 @@ struct DashboardThermostatCard: View {
                         .font(.title3.weight(.bold))
                         .foregroundStyle(SMA.labelPrimary)
                     Spacer()
-                    Text(device.sensorSummary)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(SMA.labelSecondary)
                     Image(systemName: "chevron.right")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(SMA.accent)
@@ -154,14 +161,14 @@ struct DashboardThermostatCard: View {
             }
             .buttonStyle(.plain)
             .textCase(nil)
-            .accessibilityLabel("\(device.name), \(device.sensorSummary)")
-            .accessibilityHint(sensorsExpanded ? "Collapse sensor list" : "Expand sensor list")
+            .accessibilityLabel(device.name)
+            .accessibilityHint(sensorsExpanded ? "Collapse sensors" : "Choose participating sensors")
         } footer: {
             HStack(spacing: 4) {
-                Image(systemName: "location.fill")
+                Image(systemName: footer.icon)
                     .font(.caption2)
                     .accessibilityHidden(true)
-                Text("Until \(device.holdUntil)")
+                Text(footer.text)
             }
             .font(.footnote)
             .foregroundStyle(SMA.labelSecondary)
@@ -172,34 +179,71 @@ struct DashboardThermostatCard: View {
             ModeSheet()
         }
     }
+
+    /// The footer mirrors the schedule settings. On a schedule it counts down to the
+    /// next setpoint; the pin means the geofence can end the period early via auto
+    /// home/away (any preset other than Away is treated as Home).
+    private var footer: (icon: String, text: String) {
+        let geofenced = device.geofenceEnabled
+        let isAway = model.activeProfile.name.lowercased() == "away"
+        let presence = isAway ? "Home" : "Away"
+
+        switch model.controlMode {
+        case .schedule:
+            return geofenced
+                ? ("location.fill", "Until next setpoint or \(presence)")
+                : ("clock", "Until next setpoint")
+        case .hold, .activity:
+            return geofenced
+                ? ("location.fill", "Until \(device.holdUntil)")
+                : ("clock", "Until \(device.holdUntil.replacingOccurrences(of: " or Away", with: ""))")
+        case .vacation:
+            return ("airplane", "Until your vacation ends")
+        case .standard:
+            return ("thermostat.medium", "Held until you change it")
+        }
+    }
 }
 
-/// One paired room sensor in the dashboard card's expandable list.
-struct SensorRow: View {
+/// One paired room sensor in the dashboard card, presented as a selection: tapping
+/// the row toggles whether it participates in the averaged temperature. Temperature
+/// and humidity are shown as plain numbers; the battery icon shifts green → orange →
+/// red as the charge falls.
+struct SensorSelectRow: View {
     let sensor: RoomSensor
+    let onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: sensor.participating ? "sensor.fill" : "sensor")
-                .foregroundStyle(sensor.participating ? SMA.accent : SMA.labelSecondary)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
+        Button(action: onToggle) {
+            HStack(spacing: 12) {
+                Image(systemName: sensor.participating ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(sensor.participating ? SMA.accent : SMA.labelSecondary)
+                    .accessibilityHidden(true)
                 Text(sensor.name)
                     .foregroundStyle(SMA.labelPrimary)
-                Text(sensor.participating ? "Participating" : "Not participating")
-                    .font(.caption)
-                    .foregroundStyle(SMA.labelSecondary)
+                Spacer(minLength: 8)
+                HStack(spacing: 12) {
+                    // Battery first (only for battery-powered models), then humidity, then temp.
+                    if let level = sensor.battery {
+                        Image(systemName: RoomSensor.batterySymbol(level))
+                            .foregroundStyle(RoomSensor.batteryColor(level))
+                            .accessibilityLabel("Battery \(level) percent")
+                    }
+                    Text("\(sensor.humidity)%")
+                    Text("\(sensor.temp)°")
+                }
+                .font(.footnote)
+                .foregroundStyle(SMA.labelSecondary)
+                .monospacedDigit()
             }
-            Spacer(minLength: 8)
-            HStack(spacing: 10) {
-                Label("\(sensor.temp)°", systemImage: "thermometer.medium")
-                Label("\(sensor.humidity)%", systemImage: "humidity.fill")
-            }
-            .font(.footnote)
-            .foregroundStyle(SMA.labelSecondary)
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 2)
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(sensor.participating ? [.isSelected] : [])
+        .accessibilityHint("Toggles whether this sensor participates in the average")
     }
 }
 
@@ -207,160 +251,155 @@ struct SensorRow: View {
 
 struct SpotlightHeader: View {
     let count: Int
-    @Binding var expanded: Bool
 
     var body: some View {
-        Button {
-            withAnimation(.snappy) { expanded.toggle() }
-        } label: {
-            HStack {
-                Text("Spotlight")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(SMA.labelPrimary)
-                Spacer()
-                Text("\(count)")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 22, height: 22)
-                    .background(SMA.accent, in: Circle())
-                    .accessibilityLabel("\(count) spotlights")
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(SMA.accent)
-                    .rotationEffect(.degrees(expanded ? 90 : 0))
-                    .accessibilityHidden(true)
-            }
-            .contentShape(Rectangle())
+        HStack {
+            Text("Spotlight")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(SMA.labelPrimary)
+            Spacer()
+            Text("\(count)")
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(SMA.accent, in: Circle())
+                .accessibilityLabel("\(count) spotlights")
         }
-        .buttonStyle(.plain)
         .textCase(nil)
     }
 }
 
-/// Collapsed presentation of the Spotlight section: the top card shown with the
-/// remaining cards peeking behind it as a stack. Tapping expands the section.
-struct SpotlightStack: View {
-    let items: [SpotlightItem]
-    let onDismiss: (SpotlightItem) -> Void
-
-    private var peek: CGFloat { items.count > 2 ? 14 : (items.count > 1 ? 7 : 0) }
-
-    var body: some View {
-        SpotlightAbbrevCard(item: items[0]) { onDismiss(items[0]) }
-            .background {
-                ZStack {
-                    if items.count > 2 {
-                        cardSurface.padding(.horizontal, 20).offset(y: -14)
-                    }
-                    if items.count > 1 {
-                        cardSurface.padding(.horizontal, 10).offset(y: -7)
-                    }
-                    cardSurface
-                }
-            }
-            // Breathing room so the top peeks and drop shadow aren't clipped by the row.
-            .padding(.top, peek + 10)
-            .padding([.horizontal, .bottom], 12)
-    }
-
-    private var cardSurface: some View {
-        RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(SMA.card)
-            .shadow(color: .black.opacity(0.12), radius: 6, y: 3)
-    }
-}
-
-/// Abbreviated spotlight card for the collapsed stack: provider + title only, with an
-/// overflow menu (Learn More / Dismiss). Kept short so the stack stays compact.
-struct SpotlightAbbrevCard: View {
+/// A single spotlight card that expands in place. Collapsed, it shows the provider
+/// and title with a chevron; expanded, it reveals the full promo body and actions.
+/// Tapping the header row toggles the card; the overflow menu and Learn More are
+/// independent controls.
+struct SpotlightRow: View {
     let item: SpotlightItem
+    let expanded: Bool
+    let onToggle: () -> Void
     let onDismiss: () -> Void
     @State private var showDetail = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "flame.fill")
-                .foregroundStyle(SMA.orange)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.provider)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(SMA.brandNavy)
-                Text(item.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(SMA.labelPrimary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            Menu {
-                Button("Learn More", systemImage: "arrow.up.right") { showDetail = true }
-                Button("Dismiss", systemImage: "xmark", role: .destructive) { onDismiss() }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(SMA.accent)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+        VStack(alignment: .leading, spacing: 12) {
+            // Tapping the header expands/collapses this card. The provider logo
+            // (an SVG asset) will sit ahead of the text once it's added.
+            Button(action: onToggle) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.provider)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(SMA.brandNavy)
+                    Text(item.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SMA.labelPrimary)
+                        .lineLimit(expanded ? nil : 1)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("More options")
-        }
-        .padding(14)
-        .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
-    }
-}
+            .accessibilityHint(expanded ? "Collapse spotlight" : "Expand spotlight")
 
-struct SpotlightCard: View {
-    let item: SpotlightItem
-    var onDismiss: () -> Void = {}
-    @State private var showDetail = false
+            if expanded {
+                Text(item.body)
+                    .font(.subheadline)
+                    .foregroundStyle(SMA.labelSecondary)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(SMA.orange)
-                    .accessibilityHidden(true)
-                Text(item.provider)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(SMA.brandNavy)
+                Text("Offer valid until: \(item.validUntil)")
+                    .font(.footnote)
+                    .foregroundStyle(SMA.labelSecondary.opacity(0.8))
+
+                Divider().overlay(SMA.separator)
             }
 
-            Text(item.title)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(SMA.labelPrimary)
-
-            Text(item.body)
-                .font(.subheadline)
-                .foregroundStyle(SMA.labelSecondary)
-
-            Text("Offer valid until: \(item.validUntil)")
-                .font(.footnote)
-                .foregroundStyle(SMA.labelSecondary.opacity(0.8))
-
-            Divider().overlay(SMA.separator)
-
+            // Bottom action row: Learn More when open, overflow menu in the corner.
             HStack {
-                Button("Learn More") { showDetail = true }
-                    .font(.subheadline.weight(.semibold))
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
-                    .tint(SMA.orange)
+                if expanded {
+                    Button("Learn More") { showDetail = true }
+                        .font(.subheadline.weight(.semibold))
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .tint(SMA.orange)
+                }
                 Spacer()
                 Menu {
+                    if !expanded {
+                        Button("Learn More", systemImage: "arrow.up.right") { showDetail = true }
+                    }
                     Button("Dismiss", systemImage: "xmark", role: .destructive) { onDismiss() }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.footnote.weight(.semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(SMA.accent)
-                        .frame(width: 26, height: 26)
-                        .overlay(Circle().stroke(SMA.accent, lineWidth: 1.5))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("More options")
             }
         }
         .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
+    }
+}
+
+/// The filled onboarding spotlight shown when no thermostat has been added. Unlike
+/// the promo cards it doesn't collapse — it always shows its message and a prominent
+/// "Get Started" action, with the overflow menu in the bottom corner.
+struct WelcomeSpotlightCard: View {
+    @Environment(AppModel.self) private var model
+    let item: SpotlightItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(item.title)
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(.white)
+                Text(item.body)
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Divider().overlay(Color.white.opacity(0.25))
+
+            HStack {
+                Button { model.showAddDevice = true } label: {
+                    Text(item.actionLabel ?? "Get Started")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SMA.brandTeal)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 9)
+                        .background(.white, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Menu {
+                    Button("Get Help", systemImage: "questionmark.circle") { model.showHelp = true }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("More options")
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// The teal fill (with the design's subtle bottom shade) behind the welcome card.
+struct WelcomeCardBackground: View {
+    var body: some View {
+        SMA.brandTeal
+            .overlay(
+                LinearGradient(colors: [.clear, .black.opacity(0.04)],
+                               startPoint: .top, endPoint: .bottom)
+            )
     }
 }
 
@@ -430,9 +469,18 @@ struct SpotlightDetailView: View {
     }
 }
 
-#Preview {
+#Preview("With thermostat") {
     NavigationStack {
         DashboardView()
     }
     .environment(AppModel())
+}
+
+#Preview("No thermostat") {
+    let model = AppModel()
+    model.hasThermostat = false
+    return NavigationStack {
+        DashboardView()
+    }
+    .environment(model)
 }

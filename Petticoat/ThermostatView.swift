@@ -162,83 +162,154 @@ struct ModeSelectPill: View {
     }
 }
 
-/// The reusable range display + steppers. At rest it shows "low · high";
-/// once the user adjusts, it becomes a toggle that picks which bound to change.
+/// The reusable setpoint display + steppers. The numbers never move: at rest they
+/// sit bare with the mode label ("Keep Between" / "Heat To" / "Cool To") floating
+/// above; once the user adjusts, a selection capsule *forms around* the same numbers
+/// so a bound can be picked, and it fades back out after a moment of inactivity. A
+/// "Limit" caption appears below when the picked bound hits its travel limit.
 /// Shared by the Control tab and the dashboard thermostat card.
 struct SetpointStepper: View {
     let low: Int
     let high: Int
+    var mode: SystemMode = .auto
+    /// Whether to float the mode label above the numbers at rest. On the control
+    /// screen this is reserved for profile-driven cards.
+    var showsLabel: Bool = false
     let onAdjust: (SetpointBound, Int) -> Void
 
+    /// Non-nil while the user is actively adjusting — drives the selection capsule.
     @State private var editing: SetpointBound?
+    /// Bumped on every interaction to restart the inactivity fade-out.
+    @State private var activity = 0
+
+    /// Heat targets the low bound, Cool the high; Auto edits either.
+    private var defaultBound: SetpointBound { mode == .cool ? .high : .low }
 
     var body: some View {
-        HStack(spacing: 12) {
-            if let editing {
-                SetpointToggle(low: low, high: high, selected: editing) { self.editing = $0 }
-            } else {
-                HStack(spacing: 8) {
-                    Text("\(low)")
-                    Image(systemName: "circle.fill").font(.system(size: 4))
-                        .foregroundStyle(SMA.labelSecondary)
-                        .accessibilityHidden(true)
-                    Text("\(high)")
-                }
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(SMA.labelPrimary)
+        HStack(spacing: 14) {
+            VStack(spacing: 0) {
+                labelSlot
+                numbers
+                limitSlot
             }
-
-            VStack(spacing: 8) {
+            VStack(spacing: 28) {
                 stepper("plus", delta: 1)
                 stepper("minus", delta: -1)
             }
         }
         .animation(.snappy, value: editing)
+        // Restarts whenever `activity` changes; clears the selection after a pause.
+        .task(id: activity) {
+            guard editing != nil else { return }
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            withAnimation(.snappy) { editing = nil }
+        }
+    }
+
+    // MARK: Numbers
+
+    @ViewBuilder private var numbers: some View {
+        Group {
+            if mode.isRangeSetpoint {
+                HStack(spacing: 2) {
+                    segment(value: low, bound: .low)
+                    segment(value: high, bound: .high)
+                }
+                // The dot rides in the gap at rest without shifting the numbers;
+                // it fades out to make way for the selection capsule while editing.
+                .overlay {
+                    Image(systemName: "circle.fill").font(.system(size: 4))
+                        .foregroundStyle(SMA.labelSecondary)
+                        .opacity(editing == nil ? 1 : 0)
+                        .accessibilityHidden(true)
+                }
+                // Binary selection: a tap anywhere flips to the other bound.
+                .contentShape(Capsule())
+                .onTapGesture { flip() }
+            } else {
+                segment(value: mode == .cool ? high : low, bound: defaultBound)
+                    .contentShape(Capsule())
+                    .onTapGesture { select(defaultBound) }
+            }
+        }
+        .padding(6)
+        .background { if editing != nil { Capsule().fill(SMA.fillTertiary) } }
+    }
+
+    private func segment(value: Int, bound: SetpointBound) -> some View {
+        let selected = editing == bound
+        return Text("\(value)")
+            .font(.title3.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(editing == nil || selected ? SMA.labelPrimary : SMA.labelSecondary)
+            .frame(width: 36, height: 36)
+            .background { if selected { Capsule().fill(SMA.card) } }
+            .accessibilityAddTraits(selected ? [.isSelected] : [])
+            .accessibilityLabel(bound == .low ? "Heat setpoint" : "Cool setpoint")
+    }
+
+    // MARK: Floating label / limit slots (fixed height so numbers stay put)
+
+    private var labelSlot: some View {
+        Text(mode.setpointLabel)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(SMA.labelSecondary)
+            .fixedSize()
+            .opacity(showsLabel && editing == nil ? 1 : 0)
+            .frame(height: 13)
+    }
+
+    private var limitSlot: some View {
+        Text("Limit")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(SMA.labelSecondary)
+            .fixedSize()
+            .opacity(editing != nil && atLimit ? 1 : 0)
+            .frame(height: 13)
+            // Sits closer to the numbers at rest; drops further away while editing.
+            .padding(.top, 8)
+            .accessibilityHidden(!(editing != nil && atLimit))
+    }
+
+    /// Whether the currently-edited bound can no longer move in either direction.
+    private var atLimit: Bool {
+        guard let bound = editing else { return false }
+        switch bound {
+        case .low:  return low <= SetpointConfig.minTemp || low >= SetpointConfig.maxTemp - SetpointConfig.deadband
+        case .high: return high >= SetpointConfig.maxTemp || high <= SetpointConfig.minTemp + SetpointConfig.deadband
+        }
+    }
+
+    // MARK: Interaction
+
+    private func select(_ bound: SetpointBound) {
+        withAnimation(.snappy) { editing = bound }
+        activity += 1
+    }
+
+    /// Starts editing (at the default bound) or, once editing, flips to the other.
+    private func flip() {
+        let target: SetpointBound = editing == nil ? defaultBound : (editing == .low ? .high : .low)
+        withAnimation(.snappy) { editing = target }
+        activity += 1
     }
 
     private func stepper(_ symbol: String, delta: Int) -> some View {
         Button {
-            let bound = editing ?? .low
-            editing = bound
+            let bound = editing ?? defaultBound
+            withAnimation(.snappy) { editing = bound }
+            activity += 1
             onAdjust(bound, delta)
         } label: {
             Image(systemName: symbol)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(SMA.labelPrimary)
-                .frame(width: 32, height: 26)
+                .frame(width: 34, height: 22)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(delta > 0 ? "Increase temperature" : "Decrease temperature")
-    }
-}
-
-private struct SetpointToggle: View {
-    let low: Int
-    let high: Int
-    let selected: SetpointBound
-    let onSelect: (SetpointBound) -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            segment(value: low, bound: .low)
-            segment(value: high, bound: .high)
-        }
-        .padding(4)
-        .background(SMA.fillTertiary, in: Capsule())
-    }
-
-    private func segment(value: Int, bound: SetpointBound) -> some View {
-        Button { onSelect(bound) } label: {
-            Text("\(value)")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(selected == bound ? SMA.labelPrimary : SMA.labelSecondary)
-                .frame(width: 48, height: 38)
-                .background { if selected == bound { Capsule().fill(SMA.card) } }
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected == bound ? [.isSelected] : [])
-        .accessibilityLabel(bound == .low ? "Low setpoint" : "High setpoint")
     }
 }
 
@@ -276,7 +347,9 @@ struct ControllerSection: View {
         HStack(spacing: 14) {
             leading
             Spacer(minLength: 8)
-            SetpointStepper(low: device.keepMin, high: device.keepMax) { bound, delta in
+            SetpointStepper(low: device.keepMin, high: device.keepMax,
+                            mode: device.systemMode,
+                            showsLabel: model.controlMode == .activity) { bound, delta in
                 model.adjustKeep(bound, by: delta)
             }
         }
@@ -330,7 +403,8 @@ struct ControllerSection: View {
         HStack(spacing: 14) {
             profileChip(symbol: model.activeProfile.symbol, colorHex: model.activeProfile.colorHex, name: model.activeProfile.name)
             Spacer(minLength: 8)
-            SetpointStepper(low: device.keepMin, high: device.keepMax) { bound, delta in
+            SetpointStepper(low: device.keepMin, high: device.keepMax,
+                            mode: device.systemMode, showsLabel: true) { bound, delta in
                 model.adjustKeep(bound, by: delta)
             }
         }
