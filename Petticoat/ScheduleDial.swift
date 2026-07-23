@@ -26,6 +26,7 @@ struct RadialScheduleDial: View {
     private let snapMinutes = 15
     private let hourMarkerOpacity: CGFloat = 0.62
     private let hourMarkerFadeFraction: CGFloat = 0.018
+    private let gripMarkerFadeFraction: CGFloat = 0.024
     /// Visual floor for a period: the scrubber can't drag a period shorter than an hour,
     /// so arcs stay large enough to read. Manual time entry bypasses this and still
     /// allows 15-minute granularity for finer sub-hour periods.
@@ -45,6 +46,7 @@ struct RadialScheduleDial: View {
             let radius = ringD / 2
             let center = CGPoint(x: size / 2, y: size / 2)
             let arcs = arcSegments()
+            let gripFraction = selectedEvent.map { frac($0.time) + knobInsetFraction(radius: radius) }
 
             ZStack {
                 Circle()
@@ -65,7 +67,7 @@ struct RadialScheduleDial: View {
                 // at the top and N (noon) at the bottom in place of those two dots.
                 ForEach(0..<24, id: \.self) { h in
                     if h != 0 && h != 12 {
-                        let opacity = markerOpacity(at: CGFloat(h) / 24, arcs: arcs)
+                        let opacity = markerOpacity(at: CGFloat(h) / 24, arcs: arcs, gripFraction: gripFraction)
                         Circle()
                             .fill(.white.opacity(opacity))
                             .frame(width: 3, height: 3)
@@ -75,11 +77,11 @@ struct RadialScheduleDial: View {
                 }
                 Text("M")
                     .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white.opacity(max(0.35, markerOpacity(at: 0, arcs: arcs))))
+                    .foregroundStyle(.white.opacity(markerOpacity(at: 0, arcs: arcs, gripFraction: gripFraction, minimumOpacity: 0.35)))
                     .position(x: center.x, y: center.y - radius)
                 Text("N")
                     .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(.white.opacity(max(0.35, markerOpacity(at: 0.5, arcs: arcs))))
+                    .foregroundStyle(.white.opacity(markerOpacity(at: 0.5, arcs: arcs, gripFraction: gripFraction, minimumOpacity: 0.35)))
                     .position(x: center.x, y: center.y + radius)
 
                 centerReadout
@@ -137,7 +139,7 @@ struct RadialScheduleDial: View {
         // Tuck the grip forward from the start edge so it clears the rounded corner and
         // sits fully inside the arc band instead of straddling the edge. The drag maps the
         // pointer back by the same inset, so grabbing the grip doesn't jump the time.
-        let inset = radius > 0 ? (cornerRadius + 5) / (2 * .pi * radius) : 0
+        let inset = knobInsetFraction(radius: radius)
         let f = frac(e.time) + inset
         let p = point(f, radius: radius, center: center)
         // Two thick white lines forming a grip, rotated so they run radially across the arc.
@@ -229,12 +231,28 @@ struct RadialScheduleDial: View {
         return CGPoint(x: center.x + r * CGFloat(cos(a)), y: center.y + r * CGFloat(sin(a)))
     }
 
-    private func markerOpacity(at fraction: CGFloat, arcs: [Arc]) -> CGFloat {
+    private func knobInsetFraction(radius: CGFloat) -> CGFloat {
+        radius > 0 ? (cornerRadius + 5) / (2 * .pi * radius) : 0
+    }
+
+    private func markerOpacity(
+        at fraction: CGFloat,
+        arcs: [Arc],
+        gripFraction: CGFloat?,
+        minimumOpacity: CGFloat = 0
+    ) -> CGFloat {
         let nearestEdge = arcs.reduce(CGFloat.greatestFiniteMagnitude) { nearest, arc in
             min(nearest, circularDistance(fraction, arc.start), circularDistance(fraction, arc.end))
         }
-        let fade = min(max(nearestEdge / hourMarkerFadeFraction, 0), 1)
-        return hourMarkerOpacity * fade
+        let edgeFade = min(max(nearestEdge / hourMarkerFadeFraction, 0), 1)
+        let gripFade: CGFloat
+        if let gripFraction {
+            let distanceFromGrip = circularDistance(fraction, gripFraction)
+            gripFade = min(max(distanceFromGrip / gripMarkerFadeFraction, 0), 1)
+        } else {
+            gripFade = 1
+        }
+        return max(minimumOpacity, hourMarkerOpacity * edgeFade) * gripFade
     }
 
     private func circularDistance(_ a: CGFloat, _ b: CGFloat) -> CGFloat {
