@@ -31,7 +31,7 @@ struct DeviceTabView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button { dismiss() } label: {
-                    Image(systemName: "square.grid.2x2.fill")
+                    Image(systemName: "rectangle.grid.1x2")
                 }
                 .accessibilityLabel("Back to Dashboard")
             }
