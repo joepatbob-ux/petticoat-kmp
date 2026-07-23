@@ -18,7 +18,7 @@ struct DashboardView: View {
                 // Thermostat cards — a long-press drag reorders them.
                 ForEach(model.devices) { device in
                     DashboardThermostatCard(device: device, showControl: $showControl)
-                        .thermostatCardStyle()
+                        .plainCardRow()
                 }
                 .reorderable()
             }
@@ -126,8 +126,9 @@ struct DashboardThermostatCard: View {
     @State private var sensorsExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header: name + chevron (expands the participating-sensor selection).
+        VStack(alignment: .leading, spacing: 8) {
+            // The device name is this card's own header, sitting on the grouped
+            // background above the card surface. Tapping it discloses the sensors.
             Button {
                 withAnimation(.snappy) { sensorsExpanded.toggle() }
             } label: {
@@ -146,52 +147,60 @@ struct DashboardThermostatCard: View {
                 .accessibilityAddTraits(.isHeader)
             }
             .buttonStyle(.plain)
+            .padding(.horizontal, 4)
             .accessibilityLabel(device.name)
             .accessibilityHint(sensorsExpanded ? "Collapse sensors" : "Choose participating sensors")
 
-            // Main row: mode pill, temperature (drills in), setpoint stepper.
-            HStack(spacing: 14) {
-                ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
-                    model.selectDevice(device.id)
-                    showMode = true
-                }
-
-                Button {
-                    model.selectDevice(device.id)
-                    showControl = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Text("\(device.currentTemp)")
-                            .font(SMA.displayTemp(size: 46, activity: device.activity))
-                            .foregroundStyle(SMA.tempColor(device.activity))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                        Spacer(minLength: 8)
+            // The card surface.
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 14) {
+                    ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
+                        model.selectDevice(device.id)
+                        showMode = true
                     }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(device.name) controls")
 
-                SetpointStepper(low: device.keepMin, high: device.keepMax,
-                                mode: device.systemMode, showsLabel: true) { bound, delta in
-                    model.adjustKeep(bound, by: delta, in: device.id)
-                }
-            }
+                    Button {
+                        model.selectDevice(device.id)
+                        showControl = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text("\(device.currentTemp)")
+                                .font(SMA.displayTemp(size: 46, activity: device.activity))
+                                .foregroundStyle(SMA.tempColor(device.activity))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.5)
+                            Spacer(minLength: 8)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open \(device.name) controls")
 
-            // Participating-sensor selection. No divider above the first sensor;
-            // dividers separate the rows.
-            if sensorsExpanded {
-                VStack(spacing: 0) {
-                    ForEach(Array(device.sensors.enumerated()), id: \.element.id) { index, sensor in
-                        if index > 0 { Divider().overlay(SMA.separator) }
-                        SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor, in: device.id) }
-                            .padding(.vertical, 6)
+                    SetpointStepper(low: device.keepMin, high: device.keepMax,
+                                    mode: device.systemMode, showsLabel: true) { bound, delta in
+                        model.adjustKeep(bound, by: delta, in: device.id)
                     }
                 }
+
+                // Participating-sensor selection. No divider above the first sensor;
+                // dividers separate the rows.
+                if sensorsExpanded {
+                    VStack(spacing: 0) {
+                        ForEach(Array(device.sensors.enumerated()), id: \.element.id) { index, sensor in
+                            if index > 0 { Divider().overlay(SMA.separator) }
+                            SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor, in: device.id) }
+                                .padding(.vertical, 6)
+                        }
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                SMA.card.clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
             }
 
-            // Footer: schedule-aware status.
+            // Footer: schedule-aware status, on the grouped background below the card.
             HStack(spacing: 4) {
                 Image(systemName: footer.icon)
                     .font(.caption2)
@@ -475,15 +484,10 @@ private extension View {
             .listRowSeparator(.hidden)
     }
 
-    /// The white self-contained surface for a thermostat card, so device cards can
-    /// live in one reorderable collection alongside the same 26pt-radius look.
-    func thermostatCardStyle() -> some View {
+    /// A clear, separatorless list row with card insets — for cards that draw their
+    /// own surface (and their own header/footer) inside the row.
+    func plainCardRow() -> some View {
         self
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                SMA.card.clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            }
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .listRowSeparator(.hidden)
