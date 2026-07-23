@@ -2,63 +2,6 @@ import SwiftUI
 
 // MARK: - Shared chrome
 
-/// The custom top bar shared by every install step: back/close · stage title ·
-/// progress bar · help.
-struct InstallTopBar: View {
-    let stage: String
-    let progress: Double
-    let index: Int
-    let count: Int
-    let onBack: () -> Void
-    let onHelp: () -> Void
-    var closeStyle: Bool = false
-    var onLight: Bool = false
-
-    var body: some View {
-        let tint = onLight ? Color.white : SMA.labelPrimary
-        let chipBG = onLight ? Color.black.opacity(0.25) : SMA.fillTertiary
-        ZStack {
-            VStack(spacing: 6) {
-                Text(stage)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(tint)
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(onLight ? Color.white.opacity(0.3) : SMA.fillTertiary)
-                        Capsule().fill(onLight ? Color.white : SMA.accent)
-                            .frame(width: geo.size.width * progress)
-                    }
-                }
-                .frame(width: 140, height: 4)
-                .accessibilityElement()
-                .accessibilityLabel("Step \(index + 1) of \(count)")
-            }
-            HStack {
-                Button { onBack() } label: {
-                    Image(systemName: closeStyle ? "xmark" : "chevron.left")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(tint)
-                        .frame(width: 32, height: 32)
-                        .background(chipBG, in: Circle())
-                }
-                .accessibilityLabel(closeStyle ? "Close" : "Back")
-                Spacer()
-                Button { onHelp() } label: {
-                    Image(systemName: "questionmark.bubble")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(tint)
-                        .frame(width: 32, height: 32)
-                        .background(chipBG, in: Circle())
-                }
-                .accessibilityLabel("Help and Support")
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 8)
-    }
-}
-
 /// The shared bottom action bar: optional help link, optional secondary button,
 /// and a primary button that can be gated with `primaryEnabled`.
 struct InstallButtonBar: View {
@@ -451,8 +394,9 @@ struct TerminalTile: View {
 
 // MARK: - Connect the Wires
 
-/// Shows the terminals the user selected in the wire-picker step as filled tiles,
-/// so the diagram matches their actual wiring instead of a generic photo.
+/// A dynamic illustration of the thermostat's terminal block: every available
+/// terminal is shown as a slot, and the terminals picked in the wire-picker step
+/// get a wire (in its conventional HVAC color) plugged in and labeled.
 struct ConnectWiresContent: View {
     let step: InstallStep
     let selection: Set<String>
@@ -460,33 +404,20 @@ struct ConnectWiresContent: View {
     let onAdvance: () -> Void
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
-
-    /// Selected terminals in the picker's canonical column order.
-    private var orderedSelection: [String] {
-        WirePickerContent.terminalOrder.filter { selection.contains($0) }
-    }
+    private var terminals: [String] { WirePickerContent.terminalOrder }
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 20) {
-                    if orderedSelection.isEmpty {
-                        Text("No terminals selected.")
-                            .font(.footnote)
-                            .foregroundStyle(SMA.labelSecondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 24)
-                    } else {
-                        LazyVGrid(columns: columns, spacing: 10) {
-                            ForEach(orderedSelection, id: \.self) { t in
-                                TerminalTile(label: t, isOn: true)
-                                    .accessibilityLabel("Terminal \(t)")
-                            }
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(terminals, id: \.self) { t in
+                            terminalCell(t)
                         }
-                        .padding(16)
-                        .background(SMA.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .padding(.horizontal, 16)
                     }
+                    .padding(16)
+                    .background(SMA.fillTertiary, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .padding(.horizontal, 16)
 
                     StepHeadline(title: step.title, detail: step.body)
                 }
@@ -496,6 +427,35 @@ struct ConnectWiresContent: View {
 
             InstallButtonBar(link: step.link, onLink: onHelp,
                              primary: "Continue", onPrimary: onAdvance)
+        }
+    }
+
+    /// One terminal slot; connected terminals show a colored wire stub above the tile.
+    private func terminalCell(_ t: String) -> some View {
+        let connected = selection.contains(t)
+        return VStack(spacing: 3) {
+            Capsule()
+                .fill(Self.wireColor(t))
+                .frame(width: 7, height: 16)
+                .overlay(Capsule().stroke(SMA.separator, lineWidth: 0.5))
+                .opacity(connected ? 1 : 0)          // reserve space so tiles stay aligned
+                .accessibilityHidden(true)
+            TerminalTile(label: t, isOn: connected, isEnabled: connected)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(connected ? "Terminal \(t), wire connected" : "Terminal \(t), empty")
+    }
+
+    /// Conventional HVAC wire colors so the illustration reads like real wiring.
+    static func wireColor(_ t: String) -> Color {
+        switch t {
+        case "R", "RC", "RH":             return Color(hex: 0xE0392B)   // red
+        case "W", "W1", "W2", "W/E", "E": return Color(hex: 0xD8DCE0)   // white (tinted for contrast)
+        case "Y", "Y1", "Y2":             return Color(hex: 0xF2C300)   // yellow
+        case "G":                         return Color(hex: 0x34A853)   // green
+        case "C", "B":                    return Color(hex: 0x2F6FE0)   // blue
+        case "O", "O/B":                  return Color(hex: 0xF08A24)   // orange
+        default:                          return SMA.labelSecondary     // aux/misc
         }
     }
 }
