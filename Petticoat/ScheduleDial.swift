@@ -142,10 +142,17 @@ struct RadialScheduleDial: View {
         let inset = knobInsetFraction(radius: radius)
         let f = frac(e.time) + inset
         let p = point(f, radius: radius, center: center)
-        // Two thick white lines forming a grip, rotated so they run radially across the arc.
+        let gripColor = Color(hex: e.colorHex)
+        // Two thick lines forming a grip, rotated so they run radially across the arc.
         return HStack(spacing: 6) {
-            Capsule().fill(.white).frame(width: 5, height: 20)
-            Capsule().fill(.white).frame(width: 5, height: 20)
+            Capsule()
+                .fill(gripColor)
+                .overlay(Capsule().stroke(.white.opacity(0.35), lineWidth: 1))
+                .frame(width: 5, height: 20)
+            Capsule()
+                .fill(gripColor)
+                .overlay(Capsule().stroke(.white.opacity(0.35), lineWidth: 1))
+                .frame(width: 5, height: 20)
         }
         .shadow(color: .black.opacity(0.3), radius: 2)
         .rotationEffect(.degrees(Double(f) * 360))
