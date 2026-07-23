@@ -158,6 +158,7 @@ struct ScheduleEditorView: View {
 
     @State private var preset: SchedulePreset
     @State private var selectedEventID: ScheduleEvent.ID?
+    @State private var showingDetails = false
     @State private var addTarget: GroupTarget?
     @State private var editTarget: EventTarget?
     let onSave: (SchedulePreset) -> Void
@@ -192,40 +193,47 @@ struct ScheduleEditorView: View {
                             onChangeStart: { id, newTime in setEventTime(id, to: newTime) },
                             onSelect: { id in selectedEventID = id }
                         )
-                        .frame(height: 300)
+                        .frame(height: 340)
                         .frame(maxWidth: .infinity)
                         .listRowBackground(SMA.card)
                         .listRowSeparator(.hidden)
 
-                        HStack(spacing: 12) {
-                            Button {
-                                addTarget = GroupTarget(id: group.id)
-                            } label: {
-                                Label("Add Event", systemImage: "plus").frame(maxWidth: .infinity)
+                        HStack {
+                            roundIconButton("trash", tint: SMA.destructive, label: "Remove Event") {
+                                removeSelectedEvent(in: group.id)
                             }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.capsule)
-                            .tint(SMA.accent)
-                            .disabled(group.events.count >= maxEvents)
+                            .disabled(group.events.count <= minEvents)
+
+                            Spacer()
 
                             Button {
-                                removeSelectedEvent(in: group.id)
+                                withAnimation(.snappy) { showingDetails.toggle() }
                             } label: {
-                                Label("Remove Event", systemImage: "minus").frame(maxWidth: .infinity)
+                                Text(showingDetails ? "Hide Details" : "Show Details")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(SMA.accent)
                             }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.capsule)
-                            .tint(SMA.destructive)
-                            .disabled(group.events.count <= minEvents)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(showingDetails ? "Hide event details" : "Show event details")
+
+                            Spacer()
+
+                            roundIconButton("plus", tint: SMA.accent, label: "Add Event") {
+                                addTarget = GroupTarget(id: group.id)
+                            }
+                            .disabled(group.events.count >= maxEvents)
                         }
+                        .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .listRowBackground(SMA.card)
                         .listRowSeparator(.hidden)
 
-                        ForEach(group.events) { event in
-                            eventRow(event, in: group)
+                        if showingDetails {
+                            ForEach(group.events) { event in
+                                eventRow(event, in: group)
+                            }
+                            .onDelete { deleteEvents($0, from: group.id) }
                         }
-                        .onDelete { deleteEvents($0, from: group.id) }
                     } header: {
                         HStack {
                             Text(daysSummary(group.days))
@@ -295,6 +303,20 @@ struct ScheduleEditorView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Round icon button (add / remove)
+
+    private func roundIconButton(_ symbol: String, tint: Color, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 46, height: 46)
+                .background(Circle().fill(tint.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     // MARK: - Event row
