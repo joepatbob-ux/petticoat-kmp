@@ -143,7 +143,7 @@ struct RadialScheduleDial: View {
         let f = frac(e.time) + inset
         let p = point(f, radius: radius, center: center)
         let gripColor = Color(hex: e.colorHex)
-        // Two thick lines forming a grip, rotated to follow the arc angle.
+        // Two thick lines forming a grip, rotated to point toward the ring center.
         return HStack(spacing: 6) {
             Capsule()
                 .fill(gripColor)
@@ -155,7 +155,7 @@ struct RadialScheduleDial: View {
                 .frame(width: 5, height: 20)
         }
         .shadow(color: .black.opacity(0.3), radius: 2)
-        .rotationEffect(.degrees(Double(f) * 360 + 90))
+        .rotationEffect(.degrees(Double(f) * 360))
         .frame(width: 46, height: 46)          // larger, transparent drag target
         .contentShape(Circle())
         .position(p)
