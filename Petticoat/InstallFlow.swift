@@ -88,6 +88,10 @@ struct InstallDevice: Identifiable {
                 body: "Take a photo of your existing thermostat wiring in case you need it for reference later. The photo will be saved to your camera roll.",
                 secondary: "Take Photo Now"),
             InstallStep(
+                stage: "Install", hero: "install.hero.removeJumper", title: "Throw Away Any Jumper Wires",
+                body: "If you see a jumper wire, remove it — your new thermostat has the jumper built-in. Leave all other wires connected to the thermostat.",
+                link: "What to Do if You Have a Jumper Wire"),
+            InstallStep(
                 stage: "Install", kind: .wirePicker, title: "Pick Terminals with Wires Attached",
                 link: "How to Pick Your Wires"),
             InstallStep(
@@ -104,11 +108,6 @@ struct InstallDevice: Identifiable {
                     ChoiceOption(title: "I have one \"R\" wire", image: "install.hero.jumperOneR"),
                     ChoiceOption(title: "I have two \"R\" wires", image: "install.hero.jumperTwoR"),
                 ]),
-            InstallStep(
-                stage: "Install", hero: "install.hero.jumperTwoR", title: "Pull Any Jumper Wires",
-                body: "If your old thermostat has a jumper wire linking two terminals (for example R and RC), remove it now. Your Sensi thermostat manages this connection internally, so jumpers are no longer needed.",
-                warning: "Remove jumpers before disconnecting",
-                link: "How to Identify a Jumper Wire"),
             InstallStep(
                 stage: "Install", hero: "install.hero.removeBase", title: "Disconnect Wires and Remove Base",
                 link: "How to Remove Old Thermostat Base"),
@@ -241,24 +240,60 @@ struct InstallFlowView: View {
     private var progress: Double { Double(index + 1) / Double(device.steps.count) }
 
     var body: some View {
+        let isFullBleed = step.kind == .fullBleed
         Group {
-            if step.kind == .fullBleed {
+            if isFullBleed {
                 fullBleedContent
             } else {
-                VStack(spacing: 0) {
-                    InstallTopBar(stage: step.stage, progress: progress,
-                                  index: index, count: device.steps.count,
-                                  onBack: back, onHelp: { showHelp = true })
-                    stepContent
-                        .id(index)
-                }
-                .background(SMA.groupedBackground.ignoresSafeArea())
+                stepContent
+                    .id(index)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(SMA.groupedBackground.ignoresSafeArea())
             }
         }
+        // Native nav bar: stage as the inline title, back/help in the system's
+        // leading/trailing toolbar slots (Liquid Glass applied automatically).
+        .navigationTitle(isFullBleed ? "" : step.stage)
+        .inlineNavTitle()
         .navigationBarBackButtonHidden(true)
-        .hideNavBar()
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { isFullBleed ? finish() : back() } label: {
+                    Image(systemName: isFullBleed ? "xmark" : "chevron.left")
+                }
+                .accessibilityLabel(isFullBleed ? "Close" : "Back")
+            }
+            if !isFullBleed {
+                ToolbarItem(placement: .subtitle) {
+                    progressBar
+                        .padding(.top, 9)
+                        .padding(.bottom, 4)
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showHelp = true } label: {
+                    Image(systemName: "questionmark.bubble")
+                }
+                .accessibilityLabel("Help and Support")
+            }
+        }
+        .toolbarBackground(isFullBleed ? .hidden : .automatic, for: .navigationBar)
         .animation(.snappy, value: index)
         .sheet(isPresented: $showHelp) { HelpSupportView() }
+    }
+
+    /// Thin step-progress capsule shown just below the nav bar.
+    private var progressBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(SMA.fillTertiary)
+                Capsule().fill(SMA.accent)
+                    .frame(width: geo.size.width * progress)
+            }
+        }
+        .frame(width: 140, height: 4)
+        .accessibilityElement()
+        .accessibilityLabel("Step \(index + 1) of \(device.steps.count)")
     }
 
     @ViewBuilder
@@ -315,10 +350,6 @@ struct InstallFlowView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                InstallTopBar(stage: step.stage, progress: progress,
-                              index: index, count: device.steps.count,
-                              onBack: finish, onHelp: { showHelp = true },
-                              closeStyle: true, onLight: true)
                 Spacer()
                 VStack(spacing: 20) {
                     Text(step.title)
