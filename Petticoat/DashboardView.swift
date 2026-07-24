@@ -40,36 +40,54 @@ struct DashboardView: View {
         }
     }
 
-    /// Spotlight cards (respecting hidden state). The header chevron expands/collapses
-    /// them all at once; tapping a card toggles just that one.
-    /// Spotlight cards in a native collapsible section (system disclosure chevron +
-    /// increased header prominence). Collapsing hides the cards; tapping an
-    /// individual card still toggles just that one between full and abbreviated.
+    /// Spotlight cards (respecting hidden state). The header shows a blue chevron
+    /// (matching the thermostat headers) that collapses/expands the whole section;
+    /// tapping an individual card still toggles just that one.
     @ViewBuilder private var spotlightSection: some View {
         let items = model.visibleSpotlights
         if !items.isEmpty {
-            Section(isExpanded: $spotlightExpanded) {
-                ForEach(items) { item in
-                    SpotlightCard(
-                        item: item,
-                        expanded: !collapsedSpotlights.contains(item.id),
-                        onToggle: { toggleSpotlight(item) },
-                        onDismiss: { model.dismissSpotlight(item) }
-                    )
-                    .spotlightCardStyle(kind: item.kind)
+            Section {
+                if spotlightExpanded {
+                    ForEach(items) { item in
+                        SpotlightCard(
+                            item: item,
+                            expanded: !collapsedSpotlights.contains(item.id),
+                            onToggle: { toggleSpotlight(item) },
+                            onDismiss: { model.dismissSpotlight(item) }
+                        )
+                        .spotlightCardStyle(kind: item.kind)
+                    }
+                } else {
+                    // Keep the section (and its header) rendered while collapsed.
+                    Color.clear
+                        .frame(height: 0)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
                 }
             } header: {
-                HStack {
-                    Text("Spotlight")
-                    Spacer()
-                    Text("\(items.count)")
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background(SMA.accent, in: Circle())
-                        .accessibilityLabel("\(items.count) spotlights")
+                Button {
+                    withAnimation(.snappy) { spotlightExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Spotlight")
+                        Spacer()
+                        Text("\(items.count)")
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(SMA.accent, in: Circle())
+                            .accessibilityLabel("\(items.count) spotlights")
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(SMA.accent)
+                            .rotationEffect(.degrees(spotlightExpanded ? 90 : 0))
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .textCase(nil)
+                .accessibilityHint(spotlightExpanded ? "Collapse Spotlight" : "Expand Spotlight")
             }
             .headerProminence(.increased)
         }
