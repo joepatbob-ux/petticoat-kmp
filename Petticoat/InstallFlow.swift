@@ -175,7 +175,6 @@ struct AddDeviceView: View {
             .scrollContentBackground(.hidden)
             .background(SMA.groupedBackground.ignoresSafeArea())
             .listRowBackground(SMA.card)
-            .foregroundStyle(SMA.labelPrimary)
             .navigationTitle("Add Device")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

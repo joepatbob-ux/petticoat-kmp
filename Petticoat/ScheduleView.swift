@@ -68,7 +68,6 @@ struct ScheduleView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .listRowBackground(SMA.card)
-        .foregroundStyle(SMA.labelPrimary)
         .background(SMA.groupedBackground.ignoresSafeArea())
     }
 }
@@ -181,7 +180,6 @@ struct VacationView: View {
         }
         .scrollContentBackground(.hidden)
         .listRowBackground(SMA.card)
-        .foregroundStyle(SMA.labelPrimary)
         .background(SMA.groupedBackground.ignoresSafeArea())
         .onChange(of: enabled) { _, newValue in
             model.setVacation(newValue)

@@ -77,7 +77,6 @@ struct ModeSheet: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .foregroundStyle(SMA.labelPrimary)
         }
         .background(SMA.groupedBackground.ignoresSafeArea())
         .presentationDetents([.large])

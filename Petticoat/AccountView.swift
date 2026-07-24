@@ -56,7 +56,6 @@ struct AccountView: View {
             .scrollContentBackground(.hidden)
             .background(SMA.groupedBackground.ignoresSafeArea())
             .listRowBackground(SMA.card)
-            .foregroundStyle(SMA.labelPrimary)
             .navigationTitle("Account")
             .inlineNavTitle()
             .toolbar {
@@ -525,7 +524,6 @@ struct AboutApplicationView: View {
         .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
         .listRowBackground(SMA.card)
-        .foregroundStyle(SMA.labelPrimary)
         .navigationTitle("About")
         .inlineNavTitle()
     }

@@ -240,7 +240,6 @@ struct FormContent: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .listRowBackground(SMA.card)
-            .foregroundStyle(SMA.labelPrimary)
 
             InstallButtonBar(secondary: "Locate Me", onSecondary: fillSampleAddress,
                              primary: "Continue", onPrimary: onAdvance)
