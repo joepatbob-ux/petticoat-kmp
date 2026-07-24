@@ -323,6 +323,11 @@ final class AppModel {
     /// Make a device the target of the single-device screens.
     func selectDevice(_ id: Device.ID) { selectedDeviceID = id }
 
+    /// Reorder the dashboard thermostat cards (from the Manage Devices screen).
+    func moveDevices(from source: IndexSet, to destination: Int) {
+        devices.move(fromOffsets: source, toOffset: destination)
+    }
+
     /// Drives the controller UI. Defaults to following the schedule (timeline).
     var controlMode: ControlMode = .schedule
     /// The activity profile shown when `controlMode == .activity` (and as the

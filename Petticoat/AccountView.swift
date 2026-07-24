@@ -18,6 +18,10 @@ struct AccountView: View {
                 }
 
                 Section {
+                    NavigationLink("Manage Devices") { ManageDevicesView() }
+                }
+
+                Section {
                     NavigationLink("Notification Settings") { NotificationSettingsView() }
                 }
 
@@ -142,6 +146,40 @@ struct PersonalInformationView: View {
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(SMA.labelPrimary)
         }
+    }
+}
+
+/// Reorders how thermostat cards appear on the dashboard. Always in edit mode so the
+/// drag handles are visible; dragging applies the new order to `model.devices`.
+struct ManageDevicesView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(model.devices) { device in
+                    HStack(spacing: 12) {
+                        Label(device.name, image: "thermostat.fill")
+                            .foregroundStyle(SMA.labelPrimary)
+                        Spacer()
+                        Text(device.location)
+                            .font(.footnote)
+                            .foregroundStyle(SMA.labelSecondary)
+                    }
+                }
+                .onMove { model.moveDevices(from: $0, to: $1) }
+            } footer: {
+                Text("Drag to reorder how your thermostats appear on the dashboard.")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(SMA.groupedBackground.ignoresSafeArea())
+        .listRowBackground(SMA.card)
+        .foregroundStyle(SMA.labelPrimary)
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("Manage Devices")
+        .inlineNavTitle()
     }
 }
 
@@ -350,5 +388,10 @@ struct AboutApplicationView: View {
 
 #Preview {
     AccountView()
+        .environment(AppModel())
+}
+
+#Preview("Manage Devices") {
+    NavigationStack { ManageDevicesView() }
         .environment(AppModel())
 }
