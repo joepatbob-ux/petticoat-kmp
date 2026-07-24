@@ -145,11 +145,7 @@ struct DashboardThermostatCard: View {
                     showControl = true
                 } label: {
                     HStack(spacing: 8) {
-                        Text("\(device.currentTemp)")
-                            .font(SMA.displayTemp(size: 46, activity: device.activity))
-                            .foregroundStyle(SMA.tempColor(device.activity))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
+                        DisplayTemp(value: device.currentTemp, size: 46, activity: device.activity)
                         Spacer(minLength: 8)
                     }
                     .contentShape(Rectangle())

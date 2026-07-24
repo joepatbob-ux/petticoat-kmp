@@ -23,11 +23,7 @@ struct ControlView: View {
 
             Spacer()
 
-            Text("\(device.currentTemp)")
-                .font(SMA.displayTemp(size: 170, activity: device.activity))
-                .foregroundStyle(SMA.tempColor(device.activity))
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
+            DisplayTemp(value: device.currentTemp, size: 170, activity: device.activity)
 
             HumidityLabel(humidity: device.humidity)
 

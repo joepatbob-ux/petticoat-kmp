@@ -31,3 +31,36 @@ extension SMA {
         }
     }
 }
+
+/// The large temperature readout. When the system starts or stops heating/cooling
+/// it animates between the two type styles. Two custom-font weights (Lato-Light for
+/// idle, Lato-Bold for active) can't interpolate, so the idle and active renderings
+/// are layered and cross-faded; heating↔cooling is a color tween on the active layer.
+struct DisplayTemp: View {
+    let value: Int
+    var size: CGFloat
+    let activity: HVACActivity
+
+    private var activeColor: Color { activity == .cooling ? SMA.accent : SMA.tempOrange }
+
+    var body: some View {
+        ZStack {
+            Text("\(value)")
+                .font(SMA.displayTemp(size: size, activity: .idle))
+                .foregroundStyle(SMA.tempColor(.idle))
+                .opacity(activity == .idle ? 1 : 0)
+
+            Text("\(value)")
+                .font(SMA.displayTemp(size: size, activity: .heating))
+                .foregroundStyle(activeColor)
+                .opacity(activity == .idle ? 0 : 1)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)
+        .contentTransition(.numericText())
+        .animation(.easeInOut(duration: 0.45), value: activity)
+        .animation(.snappy, value: value)
+        .accessibilityElement()
+        .accessibilityLabel("\(value) degrees")
+    }
+}
