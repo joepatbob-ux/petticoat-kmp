@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct RootView: View {
     @State private var model = AppModel()
@@ -18,7 +21,25 @@ struct RootView: View {
             }
         }
         .environment(model)
-        .preferredColorScheme(model.appearance.colorScheme)
+        // Drive the whole window's interface style so the appearance choice also
+        // applies to presented sheets (which don't follow a preferredColorScheme
+        // set on the presenter once they're open).
+        .onChange(of: model.appearance, initial: true) { _, appearance in
+            applyAppearance(appearance)
+        }
+    }
+
+    private func applyAppearance(_ appearance: AppAppearance) {
+        #if canImport(UIKit)
+        let style: UIUserInterfaceStyle = switch appearance {
+        case .light:  .light
+        case .dark:   .dark
+        case .system: .unspecified
+        }
+        for scene in UIApplication.shared.connectedScenes {
+            (scene as? UIWindowScene)?.windows.forEach { $0.overrideUserInterfaceStyle = style }
+        }
+        #endif
     }
 }
 
