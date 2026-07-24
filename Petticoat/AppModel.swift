@@ -299,6 +299,27 @@ enum DashboardSection: String, CaseIterable, Identifiable {
     var title: String { self == .thermostats ? "Thermostats" : "Spotlight" }
 }
 
+/// App appearance preference, shown as a swatch picker in Application Settings.
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case light, system, dark
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .light:  "Light"
+        case .system: "System"
+        case .dark:   "Dark"
+        }
+    }
+    /// The scheme to force, or nil to follow the device (System).
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .light:  .light
+        case .dark:   .dark
+        case .system: nil
+        }
+    }
+}
+
 @Observable
 final class AppModel {
     enum Route { case splash, login, main }
@@ -321,6 +342,10 @@ final class AppModel {
     var dashboardSectionOrder: [DashboardSection] = [.thermostats, .spotlight]
     /// Whether thermostat cards offer the participating-sensor disclosure.
     var showSensorsOnDashboard = true
+    /// App appearance preference (Light / System / Dark).
+    var appearance: AppAppearance = .system
+    /// Whether the outdoor-weather location is shown on the control screen.
+    var showWeatherLocation = true
 
     /// Spotlight cards currently shown on the dashboard (respecting hidden state).
     var visibleSpotlights: [SpotlightItem] {

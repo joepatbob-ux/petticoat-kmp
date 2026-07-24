@@ -18,7 +18,7 @@ struct AccountView: View {
                 }
 
                 Section {
-                    NavigationLink("Organize Dashboard") { OrganizeDashboardView() }
+                    NavigationLink("Application Settings") { ApplicationSettingsView() }
                 }
 
                 Section {
@@ -32,7 +32,6 @@ struct AccountView: View {
 
                 Section {
                     NavigationLink("About Application") { AboutApplicationView() }
-                    NavigationLink("Application Options") { PlaceholderDetail(title: "Application Options") }
                 }
 
                 Section {
@@ -149,23 +148,40 @@ struct PersonalInformationView: View {
     }
 }
 
-/// Configures what appears on the dashboard and in what order: reorder sections,
-/// reorder thermostat cards, show/hide and reorder spotlight cards, plus display
-/// options. Reordering happens in Edit mode (toolbar Edit button); toggles are
-/// interactive otherwise.
-struct OrganizeDashboardView: View {
+/// App-wide settings merged with dashboard organization: appearance, weather
+/// display, section/card ordering, spotlight visibility, and display options.
+/// Reordering happens in Edit mode (toolbar Edit button); toggles and the
+/// appearance picker are interactive otherwise.
+struct ApplicationSettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         @Bindable var model = model
         List {
             Section {
+                AppearancePicker(selection: $model.appearance)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 10, trailing: 16))
+            } header: {
+                Text("Appearance")
+            } footer: {
+                Text("Match appearance to your phone’s Display & Brightness settings.")
+            }
+
+            Section {
+                Toggle("Weather Location", isOn: $model.showWeatherLocation)
+                    .tint(Color(hex: 0x34C759))
+                    .foregroundStyle(SMA.labelPrimary)
+            } footer: {
+                Text("Display the location of the outdoor weather on the control screen.")
+            }
+
+            Section {
                 ForEach(model.dashboardSectionOrder) { section in
                     Text(section.title).foregroundStyle(SMA.labelPrimary)
                 }
                 .onMove { model.moveDashboardSections(from: $0, to: $1) }
             } header: {
-                Text("Sections")
+                Text("Dashboard Sections")
             } footer: {
                 Text("Drag to reorder how sections appear on the dashboard.")
             }
@@ -220,9 +236,97 @@ struct OrganizeDashboardView: View {
         .background(SMA.groupedBackground.ignoresSafeArea())
         .listRowBackground(SMA.card)
         .foregroundStyle(SMA.labelPrimary)
-        .navigationTitle("Organize Dashboard")
+        .navigationTitle("Application Settings")
         .inlineNavTitle()
         .toolbar { EditButton() }
+    }
+}
+
+/// Light / System / Dark picker with mini thermostat-screen swatches.
+struct AppearancePicker: View {
+    @Binding var selection: AppAppearance
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 20) {
+            ForEach(AppAppearance.allCases) { option in
+                VStack(spacing: 8) {
+                    ThermostatSwatch(appearance: option)
+                    Text(option.title)
+                        .font(.subheadline)
+                        .foregroundStyle(SMA.labelPrimary)
+                    Image(systemName: selection == option ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(selection == option ? SMA.accent : SMA.labelSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture { withAnimation(.snappy) { selection = option } }
+                .accessibilityElement()
+                .accessibilityLabel(option.title)
+                .accessibilityAddTraits(selection == option ? [.isButton, .isSelected] : [.isButton])
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// A small thermostat-screen mock for the appearance picker: light, dark, or a
+/// diagonally split "system" preview showing both.
+struct ThermostatSwatch: View {
+    let appearance: AppAppearance
+
+    var body: some View {
+        Group {
+            switch appearance {
+            case .light: face(dark: false)
+            case .dark:  face(dark: true)
+            case .system:
+                ZStack {
+                    face(dark: false)
+                    face(dark: true).mask {
+                        GeometryReader { geo in
+                            Path { p in
+                                p.move(to: .zero)
+                                p.addLine(to: CGPoint(x: geo.size.width, y: 0))
+                                p.addLine(to: CGPoint(x: geo.size.width, y: geo.size.height))
+                                p.closeSubpath()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(width: 60, height: 120)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityHidden(true)
+    }
+
+    private func face(dark: Bool) -> some View {
+        let bar = (dark ? Color.white : Color.black).opacity(0.15)
+        let modeBar = (dark ? Color.white : Color.black).opacity(0.2)
+        return ZStack {
+            (dark ? Color.black : Color(hex: 0xF2F2F7))
+            VStack(spacing: 4) {
+                Capsule().fill(bar).frame(width: 16, height: 6)
+                Text("72")
+                    .font(.custom("Lato-Regular", size: 22))
+                    .foregroundStyle(Color(hex: 0x0093C8))
+                Capsule().fill(bar).frame(width: 14, height: 8)
+            }
+            .offset(y: -6)
+            VStack(spacing: 5) {
+                Spacer()
+                RoundedRectangle(cornerRadius: 3).fill(modeBar)
+                    .frame(height: 16)
+                    .padding(.horizontal, 2)
+                HStack(spacing: 3) {
+                    ForEach(0..<5, id: \.self) { _ in
+                        Capsule().fill(bar).frame(width: 4, height: 8)
+                    }
+                }
+                .padding(.bottom, 6)
+            }
+        }
     }
 }
 
@@ -434,7 +538,7 @@ struct AboutApplicationView: View {
         .environment(AppModel())
 }
 
-#Preview("Organize Dashboard") {
-    NavigationStack { OrganizeDashboardView() }
+#Preview("Application Settings") {
+    NavigationStack { ApplicationSettingsView() }
         .environment(AppModel())
 }

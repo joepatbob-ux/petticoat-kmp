@@ -11,7 +11,7 @@ struct ControlView: View {
     var body: some View {
         VStack(spacing: 0) {
             WeatherSummary(
-                location: device.location,
+                location: model.showWeatherLocation ? device.location : "",
                 temp: device.outdoorTemp,
                 high: device.outdoorHigh,
                 low: device.outdoorLow
@@ -58,9 +58,11 @@ struct WeatherSummary: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            Text(location)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(SMA.labelPrimary)
+            if !location.isEmpty {
+                Text(location)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SMA.labelPrimary)
+            }
             HStack(spacing: 12) {
                 Image(systemName: "sun.max.fill")
                     .foregroundStyle(SMA.labelPrimary)
