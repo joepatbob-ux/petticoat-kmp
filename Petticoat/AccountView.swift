@@ -18,7 +18,7 @@ struct AccountView: View {
                 }
 
                 Section {
-                    NavigationLink("Manage Devices") { ManageDevicesView() }
+                    NavigationLink("Organize Dashboard") { OrganizeDashboardView() }
                 }
 
                 Section {
@@ -149,13 +149,27 @@ struct PersonalInformationView: View {
     }
 }
 
-/// Reorders how thermostat cards appear on the dashboard. Always in edit mode so the
-/// drag handles are visible; dragging applies the new order to `model.devices`.
-struct ManageDevicesView: View {
+/// Configures what appears on the dashboard and in what order: reorder sections,
+/// reorder thermostat cards, show/hide and reorder spotlight cards, plus display
+/// options. Reordering happens in Edit mode (toolbar Edit button); toggles are
+/// interactive otherwise.
+struct OrganizeDashboardView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        @Bindable var model = model
         List {
+            Section {
+                ForEach(model.dashboardSectionOrder) { section in
+                    Text(section.title).foregroundStyle(SMA.labelPrimary)
+                }
+                .onMove { model.moveDashboardSections(from: $0, to: $1) }
+            } header: {
+                Text("Sections")
+            } footer: {
+                Text("Drag to reorder how sections appear on the dashboard.")
+            }
+
             Section {
                 ForEach(model.devices) { device in
                     HStack(spacing: 12) {
@@ -168,8 +182,37 @@ struct ManageDevicesView: View {
                     }
                 }
                 .onMove { model.moveDevices(from: $0, to: $1) }
+            } header: {
+                Text("Thermostats")
+            }
+
+            Section {
+                ForEach(model.spotlights) { item in
+                    Toggle(isOn: Binding(
+                        get: { !model.hiddenSpotlights.contains(item.id) },
+                        set: { model.setSpotlight(item, hidden: !$0) }
+                    )) {
+                        Text(item.title)
+                            .foregroundStyle(SMA.labelPrimary)
+                            .lineLimit(1)
+                    }
+                    .tint(Color(hex: 0x34C759))
+                }
+                .onMove { model.moveSpotlights(from: $0, to: $1) }
+            } header: {
+                Text("Spotlight")
             } footer: {
-                Text("Drag to reorder how your thermostats appear on the dashboard.")
+                Text("Turn cards on or off, or drag to reorder them.")
+            }
+
+            Section {
+                Toggle("Show Sensors on Dashboard", isOn: $model.showSensorsOnDashboard)
+                    .tint(Color(hex: 0x34C759))
+                    .foregroundStyle(SMA.labelPrimary)
+            } header: {
+                Text("Display")
+            } footer: {
+                Text("Show the participating-sensor selection under each thermostat card.")
             }
         }
         .listStyle(.insetGrouped)
@@ -177,9 +220,9 @@ struct ManageDevicesView: View {
         .background(SMA.groupedBackground.ignoresSafeArea())
         .listRowBackground(SMA.card)
         .foregroundStyle(SMA.labelPrimary)
-        .environment(\.editMode, .constant(.active))
-        .navigationTitle("Manage Devices")
+        .navigationTitle("Organize Dashboard")
         .inlineNavTitle()
+        .toolbar { EditButton() }
     }
 }
 
@@ -391,7 +434,7 @@ struct AboutApplicationView: View {
         .environment(AppModel())
 }
 
-#Preview("Manage Devices") {
-    NavigationStack { ManageDevicesView() }
+#Preview("Organize Dashboard") {
+    NavigationStack { OrganizeDashboardView() }
         .environment(AppModel())
 }

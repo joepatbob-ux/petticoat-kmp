@@ -10,39 +10,11 @@ struct DashboardView: View {
 
     var body: some View {
         List {
-            if model.devices.isEmpty {
-                // No thermostat yet: lead with the filled onboarding card.
-                SpotlightCard(item: .welcome, expanded: true, onToggle: {}, onDismiss: {})
-                    .spotlightCardStyle(kind: .promotional)
-            } else {
-                // Each thermostat is its own grouped section — name header, card,
-                // schedule footer. (Resort is deferred to a future approach.)
-                ForEach(model.devices) { device in
-                    DashboardThermostatCard(device: device, showControl: $showControl)
-                }
-            }
-
-            if !model.spotlights.isEmpty {
-                // Each spotlight is its own card. The header chevron expands/collapses
-                // them all at once; tapping a card toggles just that one.
-                ForEach(Array(model.spotlights.enumerated()), id: \.element.id) { index, item in
-                    Section {
-                        SpotlightCard(
-                            item: item,
-                            expanded: !collapsedSpotlights.contains(item.id),
-                            onToggle: { toggleSpotlight(item) },
-                            onDismiss: { model.dismissSpotlight(item) }
-                        )
-                        .spotlightCardStyle(kind: item.kind)
-                    } header: {
-                        if index == 0 {
-                            SpotlightHeader(
-                                count: model.spotlights.count,
-                                allExpanded: collapsedSpotlights.isEmpty,
-                                onToggle: toggleAllSpotlights
-                            )
-                        }
-                    }
+            // Section order is configurable from Account › Organize Dashboard.
+            ForEach(model.dashboardSectionOrder) { section in
+                switch section {
+                case .thermostats: thermostatSection
+                case .spotlight:   spotlightSection
                 }
             }
         }
@@ -52,6 +24,45 @@ struct DashboardView: View {
         .background(SMA.groupedBackground.ignoresSafeArea())
         .navigationDestination(isPresented: $showControl) { DeviceTabView() }
         .toolbar { DashboardToolbar() }
+    }
+
+    /// Thermostat cards (or the onboarding welcome card when there are none).
+    @ViewBuilder private var thermostatSection: some View {
+        if model.devices.isEmpty {
+            SpotlightCard(item: .welcome, expanded: true, onToggle: {}, onDismiss: {})
+                .spotlightCardStyle(kind: .promotional)
+        } else {
+            ForEach(model.devices) { device in
+                DashboardThermostatCard(device: device, showControl: $showControl)
+            }
+        }
+    }
+
+    /// Spotlight cards (respecting hidden state). The header chevron expands/collapses
+    /// them all at once; tapping a card toggles just that one.
+    @ViewBuilder private var spotlightSection: some View {
+        let items = model.visibleSpotlights
+        if !items.isEmpty {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                Section {
+                    SpotlightCard(
+                        item: item,
+                        expanded: !collapsedSpotlights.contains(item.id),
+                        onToggle: { toggleSpotlight(item) },
+                        onDismiss: { model.dismissSpotlight(item) }
+                    )
+                    .spotlightCardStyle(kind: item.kind)
+                } header: {
+                    if index == 0 {
+                        SpotlightHeader(
+                            count: items.count,
+                            allExpanded: collapsedSpotlights.isEmpty,
+                            onToggle: toggleAllSpotlights
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private func toggleSpotlight(_ item: SpotlightItem) {
@@ -154,34 +165,45 @@ struct DashboardThermostatCard: View {
             .listRowBackground(SMA.card)
             .listRowSeparator(.hidden)
 
-            if sensorsExpanded {
+            if sensorsExpanded && model.showSensorsOnDashboard {
                 ForEach(device.sensors) { sensor in
                     SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor, in: device.id) }
                         .listRowBackground(SMA.card)
                 }
             }
         } header: {
-            Button {
-                withAnimation(.snappy) { sensorsExpanded.toggle() }
-            } label: {
-                HStack(spacing: 8) {
+            Group {
+                if model.showSensorsOnDashboard {
+                    // Tappable header discloses the participating-sensor selection.
+                    Button {
+                        withAnimation(.snappy) { sensorsExpanded.toggle() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(device.name)
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(SMA.labelPrimary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(SMA.accent)
+                                .rotationEffect(.degrees(sensorsExpanded ? 90 : 0))
+                                .accessibilityHidden(true)
+                        }
+                        .contentShape(Rectangle())
+                        .accessibilityAddTraits(.isHeader)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(device.name)
+                    .accessibilityHint(sensorsExpanded ? "Collapse sensors" : "Choose participating sensors")
+                } else {
                     Text(device.name)
                         .font(.title3.weight(.bold))
                         .foregroundStyle(SMA.labelPrimary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(SMA.accent)
-                        .rotationEffect(.degrees(sensorsExpanded ? 90 : 0))
-                        .accessibilityHidden(true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityAddTraits(.isHeader)
                 }
-                .contentShape(Rectangle())
-                .accessibilityAddTraits(.isHeader)
             }
-            .buttonStyle(.plain)
             .textCase(nil)
-            .accessibilityLabel(device.name)
-            .accessibilityHint(sensorsExpanded ? "Collapse sensors" : "Choose participating sensors")
         } footer: {
             HStack(spacing: 4) {
                 Image(systemName: footer.icon)

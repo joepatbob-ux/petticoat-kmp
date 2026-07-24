@@ -292,6 +292,13 @@ struct TimelinePeriod: Identifiable, Hashable {
     var startText: String
 }
 
+/// The orderable sections of the dashboard.
+enum DashboardSection: String, CaseIterable, Identifiable {
+    case thermostats, spotlight
+    var id: String { rawValue }
+    var title: String { self == .thermostats ? "Thermostats" : "Spotlight" }
+}
+
 @Observable
 final class AppModel {
     enum Route { case splash, login, main }
@@ -308,6 +315,17 @@ final class AppModel {
     /// The device the single-device screens (Control, Mode, Schedule) act on.
     var selectedDeviceID: Device.ID? = nil
     var spotlights: [SpotlightItem] = SpotlightItem.samples
+    /// Spotlight cards hidden from the dashboard (reversible, unlike dismiss).
+    var hiddenSpotlights: Set<UUID> = []
+    /// The order the dashboard sections appear in.
+    var dashboardSectionOrder: [DashboardSection] = [.thermostats, .spotlight]
+    /// Whether thermostat cards offer the participating-sensor disclosure.
+    var showSensorsOnDashboard = true
+
+    /// Spotlight cards currently shown on the dashboard (respecting hidden state).
+    var visibleSpotlights: [SpotlightItem] {
+        spotlights.filter { !hiddenSpotlights.contains($0.id) }
+    }
 
     /// The currently selected device — a read/write proxy into `devices` so the
     /// existing single-device screens keep working unchanged.
@@ -323,9 +341,24 @@ final class AppModel {
     /// Make a device the target of the single-device screens.
     func selectDevice(_ id: Device.ID) { selectedDeviceID = id }
 
-    /// Reorder the dashboard thermostat cards (from the Manage Devices screen).
+    /// Reorder the dashboard thermostat cards (from the Organize Dashboard screen).
     func moveDevices(from source: IndexSet, to destination: Int) {
         devices.move(fromOffsets: source, toOffset: destination)
+    }
+
+    /// Reorder the spotlight cards.
+    func moveSpotlights(from source: IndexSet, to destination: Int) {
+        spotlights.move(fromOffsets: source, toOffset: destination)
+    }
+
+    /// Reorder the dashboard sections themselves.
+    func moveDashboardSections(from source: IndexSet, to destination: Int) {
+        dashboardSectionOrder.move(fromOffsets: source, toOffset: destination)
+    }
+
+    /// Show or hide a spotlight card on the dashboard (reversible).
+    func setSpotlight(_ item: SpotlightItem, hidden: Bool) {
+        if hidden { hiddenSpotlights.insert(item.id) } else { hiddenSpotlights.remove(item.id) }
     }
 
     /// Drives the controller UI. Defaults to following the schedule (timeline).
