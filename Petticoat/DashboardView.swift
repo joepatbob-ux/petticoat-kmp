@@ -47,29 +47,15 @@ struct DashboardView: View {
         let items = model.visibleSpotlights
         if !items.isEmpty {
             Section {
-                if spotlightExpanded {
-                    ForEach(items) { item in
-                        SpotlightCard(
-                            item: item,
-                            expanded: !collapsedSpotlights.contains(item.id),
-                            onToggle: { toggleSpotlight(item) },
-                            onDismiss: { model.dismissSpotlight(item) }
-                        )
-                        .spotlightCardStyle(kind: item.kind)
-                    }
-                } else {
-                    // Keep the section (and its header) rendered while collapsed.
-                    Color.clear
-                        .frame(height: 0)
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets())
-                }
-            } header: {
+                // Header as an always-visible row so collapsing simply drops the
+                // cards below it (no leftover empty section cell).
                 Button {
                     withAnimation(.snappy) { spotlightExpanded.toggle() }
                 } label: {
                     HStack(spacing: 8) {
                         Text("Spotlight")
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(SMA.labelPrimary)
                         Spacer()
                         Text("\(items.count)")
                             .font(.footnote.weight(.bold))
@@ -86,10 +72,24 @@ struct DashboardView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .textCase(nil)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 2, trailing: 20))
+                .accessibilityAddTraits(.isHeader)
                 .accessibilityHint(spotlightExpanded ? "Collapse Spotlight" : "Expand Spotlight")
+
+                if spotlightExpanded {
+                    ForEach(items) { item in
+                        SpotlightCard(
+                            item: item,
+                            expanded: !collapsedSpotlights.contains(item.id),
+                            onToggle: { toggleSpotlight(item) },
+                            onDismiss: { model.dismissSpotlight(item) }
+                        )
+                        .spotlightCardStyle(kind: item.kind)
+                    }
+                }
             }
-            .headerProminence(.increased)
         }
     }
 
