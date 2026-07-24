@@ -1,0 +1,6 @@
+{
+  "images" : [
+    { "filename" : "install.device.classic.png", "idiom" : "universal" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}

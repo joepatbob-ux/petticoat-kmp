@@ -118,11 +118,14 @@ struct DashboardToolbar: ToolbarContent {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        ToolbarItemGroup(placement: .topBarTrailing) {
+        ToolbarItem(placement: .topBarTrailing) {
             Button { model.showAddDevice = true } label: {
                 Image(systemName: "plus")
             }
             .accessibilityLabel("Add a Device")
+        }
+        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+        ToolbarItemGroup(placement: .topBarTrailing) {
             Button { model.showHelp = true } label: {
                 Image(systemName: "questionmark.bubble")
             }
@@ -177,6 +180,7 @@ struct DashboardThermostatCard: View {
             }
             .listRowBackground(SMA.card)
             .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14))
 
             if sensorsExpanded && model.showSensorsOnDashboard {
                 ForEach(device.sensors) { sensor in
@@ -451,9 +455,10 @@ struct SpotlightRowBackground: View {
     }
 }
 
-private extension View {
+extension View {
     /// Renders a spotlight card as a self-contained rounded surface inside a clear
-    /// list row, so all cards can live in one reorderable section.
+    /// list row, so all cards can live in one reorderable section. Shared by the
+    /// dashboard and the iPad sidebar.
     func spotlightCardStyle(kind: SpotlightItem.Kind) -> some View {
         self
             .padding(16)

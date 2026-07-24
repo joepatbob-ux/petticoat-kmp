@@ -505,3 +505,100 @@ struct ChoiceContent: View {
         .background(SMA.groupedBackground)
     }
 }
+
+// MARK: - Remote Sensor pairing sheet
+
+/// The Remote Sensor pairs through a single guided screen — device image, numbered
+/// instructions, and a Complete button — rather than the multi-step install flow.
+struct RoomSensorView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var showHelp = false
+
+    private let instructions = [
+        "On your thermostat, select the Menu button in the top-left corner.",
+        "Select Remote Sensors.",
+        "Tap Add Sensor in the upper-right corner of the screen.",
+        "Follow the on-screen step-by-step guided instructions.",
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 18) {
+                    Image("install.device.sensor")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 300)
+                        .padding(.top, 8)
+                        .accessibilityHidden(true)
+
+                    Text("Connect Your Room Sensor")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(SMA.labelPrimary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(instructions.enumerated()), id: \.offset) { index, text in
+                            RoomSensorStepRow(number: index + 1, text: text)
+                            if index < instructions.count - 1 {
+                                Divider().padding(.leading, 52)
+                            }
+                        }
+                    }
+                    .background(SMA.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .padding(.horizontal, 16)
+                }
+                .padding(.bottom, 16)
+            }
+
+            InstallButtonBar(link: "Learn More About Sensors", onLink: { showHelp = true },
+                             primary: "Complete", onPrimary: { model.showAddDevice = false })
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(SMA.groupedBackground.ignoresSafeArea())
+        .navigationTitle("Add Sensor")
+        .inlineNavTitle()
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .accessibilityLabel("Back")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showHelp = true } label: {
+                    Image(systemName: "questionmark.bubble")
+                }
+                .accessibilityLabel("Help and Support")
+            }
+        }
+        .sheet(isPresented: $showHelp) { HelpSupportView() }
+    }
+}
+
+/// A numbered instruction row for the Remote Sensor sheet.
+private struct RoomSensorStepRow: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(number)")
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(SMA.accent, in: Circle())
+            Text(text)
+                .font(.body)
+                .foregroundStyle(SMA.labelPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Step \(number). \(text)")
+    }
+}

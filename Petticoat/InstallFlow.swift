@@ -43,7 +43,8 @@ struct InstallStep: Identifiable {
 }
 
 /// A device offered in the Add Device list. An empty `steps` array marks a device
-/// whose guided flow isn't built yet (routes to a "coming soon" screen).
+/// whose guided flow isn't built yet (routes to a "coming soon" screen), unless
+/// `isRoomSensor` routes it to the standalone Remote Sensor pairing sheet.
 struct InstallDevice: Identifiable {
     let id = UUID()
     let name: String
@@ -52,22 +53,60 @@ struct InstallDevice: Identifiable {
     /// Bundled resource (…\.txt) of valid wire configurations for this device's
     /// wire-picker step, or nil if none.
     var wireConfigResource: String? = nil
+    /// Routes to `RoomSensorView` (a single pairing screen) instead of the guided flow.
+    var isRoomSensor: Bool = false
     let steps: [InstallStep]
 
     var isAvailable: Bool { !steps.isEmpty }
 
-    static let all: [InstallDevice] = [touch2, lite, touch, smartThermostat, roomSensor]
+    static let all: [InstallDevice] = [touch2, touch, lite, classic, sensor]
 
-    /// The fully-built flow: Install (with branch screens) → Connect → Register.
+    // The four guided thermostat flows share the same Install and Register
+    // segments and reuse the same hero assets, differing only in their Getting
+    // Started title and whether the jumper-wire branch applies. Each is composed
+    // from the shared segments below rather than hand-listing every screen. The
+    // Touch-family flows also reuse Touch 2's wire-configuration resource.
+
     static let touch2 = InstallDevice(
-        name: "Touch 2",
-        subtitle: "Smart Room Thermostat",
-        thumbnail: "install.device.touch2",
+        name: "Touch 2", subtitle: "Smart Room Thermostat", thumbnail: "install.device.touch2",
         wireConfigResource: "WireConfigsTouchTwo",
-        steps: [
-            // ── Install ──────────────────────────────────────────────
+        steps: thermostatFlow(intro: "Sensi Touch 2", includeJumperChoice: true))
+
+    static let touch = InstallDevice(
+        name: "Touch", subtitle: "Smart Thermostat", thumbnail: "install.device.touch",
+        wireConfigResource: "WireConfigsTouchTwo",
+        steps: thermostatFlow(intro: "Sensi Touch", includeJumperChoice: true))
+
+    static let lite = InstallDevice(
+        name: "Lite", subtitle: "Smart Thermostat", thumbnail: "install.device.lite",
+        wireConfigResource: "WireConfigsTouchTwo",
+        steps: thermostatFlow(intro: "Sensi Lite", includeJumperChoice: false))
+
+    static let classic = InstallDevice(
+        name: "Classic", subtitle: "Smart Thermostat", thumbnail: "install.device.classic",
+        wireConfigResource: "WireConfigsTouchTwo",
+        steps: thermostatFlow(intro: "Sensi Classic", includeJumperChoice: true))
+
+    /// The Remote Sensor pairs through its own single-screen sheet, not the guided
+    /// multi-step flow — hence no steps.
+    static let sensor = InstallDevice(
+        name: "Sensor", subtitle: "Room Sensor", thumbnail: "install.device.sensor",
+        isRoomSensor: true, steps: [])
+
+    // MARK: Shared flow segments
+
+    /// A complete guided thermostat flow: shared Install steps → Connect → Register.
+    static func thermostatFlow(intro: String, includeJumperChoice: Bool) -> [InstallStep] {
+        installSteps(intro: intro, includeJumperChoice: includeJumperChoice) + connectSteps + registerSteps
+    }
+
+    /// Getting Started + the Install-stage steps common to every thermostat. `intro`
+    /// is the device's Getting Started title; `includeJumperChoice` adds the two-"R"
+    /// wire jumper branch used by the Touch family.
+    static func installSteps(intro: String, includeJumperChoice: Bool) -> [InstallStep] {
+        var steps: [InstallStep] = [
             InstallStep(
-                stage: "Getting Started", hero: "install.hero.gettingStarted", title: "Sensi Touch 2",
+                stage: "Getting Started", hero: "install.hero.gettingStarted", title: intro,
                 body: "Is this thermostat already mounted on the wall?",
                 primary: "Not Yet Mounted", secondary: "Already Mounted"),
             InstallStep(
@@ -102,12 +141,16 @@ struct InstallDevice: Identifiable {
                 stage: "Install", kind: .choice, title: "Furnace Type",
                 link: "Identify Furnace Type",
                 options: [ChoiceOption(title: "Gas"), ChoiceOption(title: "Electric"), ChoiceOption(title: "Boiler")]),
-            InstallStep(
+        ]
+        if includeJumperChoice {
+            steps.append(InstallStep(
                 stage: "Install", kind: .choice, title: "Wire Configuration",
                 options: [
                     ChoiceOption(title: "I have one \"R\" wire", image: "install.hero.jumperOneR"),
                     ChoiceOption(title: "I have two \"R\" wires", image: "install.hero.jumperTwoR"),
-                ]),
+                ]))
+        }
+        steps += [
             InstallStep(
                 stage: "Install", hero: "install.hero.removeBase", title: "Disconnect Wires and Remove Base",
                 link: "How to Remove Old Thermostat Base"),
@@ -125,30 +168,35 @@ struct InstallDevice: Identifiable {
             InstallStep(
                 stage: "Install", hero: "install.hero.turnOnPower", title: "Turn On Power",
                 body: "Turn the power to the heating or air conditioning system back on."),
-            // ── Connect ──────────────────────────────────────────────
+        ]
+        return steps
+    }
+
+    /// Wi-Fi pairing steps shared by every thermostat flow.
+    static var connectSteps: [InstallStep] {
+        [
             InstallStep(
                 stage: "Connect", hero: "install.hero.wifiSetup", title: "Wi-Fi Setup",
                 body: "On the thermostat, tap the Menu Button in the top-left corner."),
-            InstallStep(
-                stage: "Connect", kind: .wifiList, title: "Select Wi-Fi"),
+            InstallStep(stage: "Connect", kind: .wifiList, title: "Select Wi-Fi"),
             InstallStep(
                 stage: "Connect", kind: .pin, hero: "install.hero.pinDevice", title: "Enter Security Code",
                 body: "Please enter the Security Code on the screen of your Sensi Thermostat."),
-            // ── Register ─────────────────────────────────────────────
+        ]
+    }
+
+    /// Configuring → location → completion, shared by every thermostat flow.
+    static var registerSteps: [InstallStep] {
+        [
             InstallStep(
                 stage: "Register", kind: .loading, title: "Configuring your thermostat…",
                 body: "This will advance automatically once registration is complete."),
-            InstallStep(
-                stage: "Register", kind: .form, title: "Thermostat Location"),
+            InstallStep(stage: "Register", kind: .form, title: "Thermostat Location"),
             InstallStep(
                 stage: "Setup Complete", kind: .fullBleed, hero: "install.hero.setupComplete",
                 title: "You've successfully set up and registered your Sensi Thermostat!"),
-        ])
-
-    static let lite = InstallDevice(name: "Lite", subtitle: "Smart Thermostat", thumbnail: "install.device.lite", steps: [])
-    static let touch = InstallDevice(name: "Touch", subtitle: "Smart Thermostat", thumbnail: "install.device.touch", steps: [])
-    static let smartThermostat = InstallDevice(name: "Smart Thermostat", subtitle: "Wi-Fi Thermostat", thumbnail: "install.device.smartThermostat", steps: [])
-    static let roomSensor = InstallDevice(name: "Room Sensor", subtitle: "Temperature & Occupancy", thumbnail: "install.device.roomSensor", steps: [])
+        ]
+    }
 }
 
 // MARK: - Add Device list
@@ -191,7 +239,9 @@ struct AddDeviceView: View {
 
     @ViewBuilder
     private func destination(for device: InstallDevice) -> some View {
-        if device.isAvailable {
+        if device.isRoomSensor {
+            RoomSensorView()
+        } else if device.isAvailable {
             InstallFlowView(device: device)
         } else {
             PlaceholderDetail(title: "\(device.name) Setup")
@@ -209,13 +259,8 @@ private struct DeviceRow: View {
                 .scaledToFit()
                 .frame(width: 72, height: 72)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(device.name)
-                    .foregroundStyle(SMA.labelPrimary)
-                Text(device.subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(SMA.labelSecondary)
-            }
+            Text(device.name)
+                .foregroundStyle(SMA.labelPrimary)
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)

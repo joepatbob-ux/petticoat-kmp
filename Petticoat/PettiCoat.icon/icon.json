@@ -4,14 +4,30 @@
     {
       "layers" : [
         {
-          "blend-mode" : "soft-light",
-          "fill-specializations" : [
+          "blend-mode-specializations" : [
             {
-              "value" : "system-dark"
+              "value" : "normal"
             },
             {
               "appearance" : "dark",
-              "value" : "automatic"
+              "value" : "normal"
+            }
+          ],
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.00000,0.00000,0.06096,1.00000"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : "none"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
             }
           ],
           "image-name" : "Vector.svg",
@@ -22,54 +38,149 @@
             },
             {
               "appearance" : "dark",
-              "value" : 0.55
+              "value" : 0.7
             }
           ],
           "position" : {
-            "scale" : 2.0699999999999994,
+            "scale" : 2.619999999999999,
             "translation-in-points" : [
               0.5260462637717183,
               0.5796000000000276
             ]
           }
-        },
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    },
+    {
+      "blur-material" : 1,
+      "layers" : [
         {
           "fill" : "automatic",
+          "hidden" : false,
           "image-name" : "Layer_1.png",
           "name" : "Layer_1",
           "position" : {
-            "scale" : 0.5,
+            "scale" : 1,
             "translation-in-points" : [
-              11.207066263771594,
-              12.5
+              -218.29993373622847,
+              15.4375
             ]
           }
         },
         {
           "fill" : "automatic",
+          "hidden" : false,
           "image-name" : "Layer_1.png",
           "name" : "Layer_1",
           "position" : {
-            "scale" : 0.5,
+            "scale" : 1,
             "translation-in-points" : [
-              11.207066263771594,
-              12.5
+              -218.29993373622847,
+              15.4375
             ]
           }
         },
         {
           "fill" : "automatic",
+          "hidden" : false,
           "image-name" : "Layer_1.png",
           "name" : "Layer_1",
           "position" : {
-            "scale" : 0.5,
+            "scale" : 1,
             "translation-in-points" : [
-              11.2,
-              12.5
+              -218.30700000000007,
+              15.4375
             ]
           }
         }
       ],
+      "lighting" : "individual",
+      "name" : "Group",
+      "position" : {
+        "scale" : 1.4,
+        "translation-in-points" : [
+          320,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0,
+        "enabled" : false,
+        "strength" : 0.5
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.2
+      }
+    },
+    {
+      "blur-material" : 1,
+      "layers" : [
+        {
+          "fill" : "automatic",
+          "hidden" : false,
+          "image-name" : "Layer_1.png",
+          "name" : "Layer_1",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -218.29993373622847,
+              15.4375
+            ]
+          }
+        },
+        {
+          "fill" : "automatic",
+          "hidden" : false,
+          "image-name" : "Layer_1.png",
+          "name" : "Layer_1",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -218.29993373622847,
+              15.4375
+            ]
+          }
+        },
+        {
+          "fill" : "automatic",
+          "hidden" : false,
+          "image-name" : "Layer_1.png",
+          "name" : "Layer_1",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -218.30700000000007,
+              15.4375
+            ]
+          }
+        }
+      ],
+      "name" : "Group",
+      "position" : {
+        "scale" : 0.9,
+        "translation-in-points" : [
+          340,
+          0
+        ]
+      },
+      "refractivity" : {
+        "depth" : 0,
+        "enabled" : false,
+        "strength" : 0.5
+      },
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.6

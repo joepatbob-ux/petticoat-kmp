@@ -139,8 +139,8 @@ struct ModeSelectPill: View {
                 separator
                 FanModeIcon(mode: fanMode, size: 24)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, axis == .horizontal ? 16 : 12)
+            .padding(.vertical, axis == .horizontal ? 10 : 14)
             .background(SMA.fillTertiary, in: Capsule())
         }
         .buttonStyle(.plain)
@@ -177,6 +177,9 @@ struct SetpointStepper: View {
 
     /// Non-nil while the user is actively adjusting — drives the selection capsule.
     @State private var editing: SetpointBound?
+    /// The most recently adjusted bound. Outlives `editing` so the "Limit" caption
+    /// can persist after the selection capsule fades out.
+    @State private var lastAdjusted: SetpointBound?
     /// Bumped on every interaction to restart the inactivity fade-out.
     @State private var activity = 0
 
@@ -193,19 +196,19 @@ struct SetpointStepper: View {
                         .font(.caption2)
                         .foregroundStyle(SMA.labelSecondary)
                         .fixedSize()
-                        .opacity(showsLabel && editing == nil ? 1 : 0)
-                        .offset(y: -10)
+                        .opacity(showsLabel && editing == nil && !atLimit ? 1 : 0)
+                        .offset(y: -4)
                 }
                 .overlay(alignment: .bottom) {
                     Text("Limit")
                         .font(.caption2)
                         .foregroundStyle(SMA.labelSecondary)
                         .fixedSize()
-                        .opacity(editing != nil && atLimit ? 1 : 0)
-                        .offset(y: 10)
-                        .accessibilityHidden(!(editing != nil && atLimit))
+                        .opacity(atLimit ? 1 : 0)
+                        .offset(y: 14)
+                        .accessibilityHidden(!atLimit)
                 }
-            VStack(spacing: 28) {
+            VStack(spacing: 8) {
                 stepper("plus", delta: 1)
                 stepper("minus", delta: -1)
             }
@@ -266,9 +269,11 @@ struct SetpointStepper: View {
             .accessibilityLabel(bound == .low ? "Heat setpoint" : "Cool setpoint")
     }
 
-    /// Whether the currently-edited bound can no longer move in either direction.
+    /// Whether the relevant bound can no longer move in either direction. Uses the
+    /// live selection while editing, falling back to the last-adjusted bound so the
+    /// caption survives the selection capsule fading out.
     private var atLimit: Bool {
-        guard let bound = editing else { return false }
+        guard let bound = editing ?? lastAdjusted else { return false }
         switch bound {
         case .low:  return low <= SetpointConfig.minTemp || low >= SetpointConfig.maxTemp - SetpointConfig.deadband
         case .high: return high >= SetpointConfig.maxTemp || high <= SetpointConfig.minTemp + SetpointConfig.deadband
@@ -293,13 +298,14 @@ struct SetpointStepper: View {
         Button {
             let bound = editing ?? defaultBound
             withAnimation(.snappy) { editing = bound }
+            lastAdjusted = bound
             activity += 1
             onAdjust(bound, delta)
         } label: {
             Image(systemName: symbol)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(SMA.labelPrimary)
-                .frame(width: 34, height: 22)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -323,7 +329,10 @@ struct ControllerSection: View {
 
     var body: some View {
         Group {
-            if model.controlMode == .schedule {
+            if device.systemMode == .off {
+                // Nothing to control while the system is off — no setpoint card.
+                EmptyView()
+            } else if model.controlMode == .schedule {
                 scheduleController
             } else {
                 VStack(spacing: 10) {

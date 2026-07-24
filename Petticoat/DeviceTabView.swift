@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The device detail experience, pushed from the dashboard's thermostat card.
-/// A native bottom TabView scoped to a single device.
+/// The compact device detail experience, pushed from the dashboard's thermostat card.
+/// Uses native bottom tab chrome scoped to a single device.
 struct DeviceTabView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -10,21 +10,22 @@ struct DeviceTabView: View {
     var body: some View {
         TabView(selection: $selection) {
             Tab("Control", image: "thermostat.fill", value: DeviceTab.control) {
-                ControlView()
+                DeviceTabContent(tab: .control)
             }
             Tab("Schedule", image: "schedule.activity", value: DeviceTab.schedule) {
-                ScheduleView()
+                DeviceTabContent(tab: .schedule)
             }
             Tab("Usage", systemImage: "gauge.with.needle.fill", value: DeviceTab.usage) {
-                DeviceTabPlaceholder(title: "Usage", systemImage: "gauge.with.needle.fill")
+                DeviceTabContent(tab: .usage)
             }
             Tab("Reminders", systemImage: "bell", value: DeviceTab.reminders) {
-                DeviceTabPlaceholder(title: "Reminders", systemImage: "bell")
+                DeviceTabContent(tab: .reminders)
             }
             Tab("Settings", systemImage: "gearshape", value: DeviceTab.settings) {
-                DeviceTabPlaceholder(title: "Settings", systemImage: "gearshape")
+                DeviceTabContent(tab: .settings)
             }
         }
+        .tabViewStyle(.tabBarOnly)
         .navigationTitle(title)
         .inlineNavTitle()
         .navigationBarBackButtonHidden(true)
@@ -35,18 +36,42 @@ struct DeviceTabView: View {
                 }
                 .accessibilityLabel("Back to Dashboard")
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {} label: {
-                    Image(systemName: "questionmark.bubble")
-                }
-                .accessibilityLabel("Help and Support")
+            helpButton
+        }
+    }
+
+    @ToolbarContentBuilder private var helpButton: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { model.showHelp = true } label: {
+                Image(systemName: "questionmark.bubble")
             }
+            .accessibilityLabel("Help and Support")
         }
     }
 
     private var title: String {
-        switch selection {
-        case .control:   model.device.name
+        selection.navigationTitle(deviceName: model.device.name)
+    }
+}
+
+enum DeviceTab: Hashable, CaseIterable, Identifiable {
+    case control, schedule, usage, reminders, settings
+
+    var id: Self { self }
+
+    func navigationTitle(deviceName: String) -> String {
+        switch self {
+        case .control:   deviceName
+        case .schedule:  "Schedule"
+        case .usage:     "Usage"
+        case .reminders: "Reminders"
+        case .settings:  "Settings"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .control:   "Control"
         case .schedule:  "Schedule"
         case .usage:     "Usage"
         case .reminders: "Reminders"
@@ -55,8 +80,23 @@ struct DeviceTabView: View {
     }
 }
 
-enum DeviceTab: Hashable {
-    case control, schedule, usage, reminders, settings
+struct DeviceTabContent: View {
+    let tab: DeviceTab
+
+    var body: some View {
+        switch tab {
+        case .control:
+            ControlView()
+        case .schedule:
+            ScheduleView()
+        case .usage:
+            DeviceTabPlaceholder(title: "Usage", systemImage: "gauge.with.needle.fill")
+        case .reminders:
+            DeviceTabPlaceholder(title: "Reminders", systemImage: "bell")
+        case .settings:
+            DeviceTabPlaceholder(title: "Settings", systemImage: "gearshape")
+        }
+    }
 }
 
 /// Placeholder content for the not-yet-built device tabs. Accepts either a system

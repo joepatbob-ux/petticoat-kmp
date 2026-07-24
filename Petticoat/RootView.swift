@@ -44,8 +44,8 @@ struct RootView: View {
 }
 
 /// Signed-in container. On iPhone (compact) the dashboard is the root of a
-/// NavigationStack; on iPad (regular) it becomes a NavigationSplitView. Account is
-/// presented as a sheet in both modes.
+/// NavigationStack; on iPad (regular) device navigation uses an adaptive sidebar/tab
+/// container. Account is presented as a sheet in both modes.
 struct MainView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hSize

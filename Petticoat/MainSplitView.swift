@@ -1,136 +1,130 @@
 import SwiftUI
 
-/// Which sidebar entry is selected in the iPad split view.
-enum SidebarItem: Hashable {
-    case device
-}
-
-/// The iPad (regular width) signed-in experience: a persistent device sidebar with a
-/// detail pane. The compact (iPhone) experience uses `DashboardView` in a
-/// `NavigationStack` instead — see `MainView`.
+/// The iPad (regular width) signed-in experience. Uses SwiftUI's adaptive tab
+/// container so device navigation can present as a sidebar or collapse into a tab bar.
+/// The compact (iPhone) experience uses `DashboardView` in a `NavigationStack`
+/// instead. See `MainView`.
 struct MainSplitView: View {
     @Environment(AppModel.self) private var model
-    @State private var selection: SidebarItem? = .device
+    @State private var selection: DeviceTab = .control
     @State private var spotlightExpanded = true
+    /// Individually collapsed spotlight cards (matches the dashboard behavior).
+    @State private var collapsedSpotlights: Set<UUID> = []
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                Section {
-                    DeviceSidebarRow(device: model.device)
-                        .tag(SidebarItem.device)
-                }
+        TabView(selection: $selection) {
+            Tab("Control", image: "thermostat.fill", value: DeviceTab.control) {
+                destination(for: .control)
+            }
+            Tab("Schedule", image: "schedule.activity", value: DeviceTab.schedule) {
+                destination(for: .schedule)
+            }
+            Tab("Usage", systemImage: "gauge.with.needle.fill", value: DeviceTab.usage) {
+                destination(for: .usage)
+            }
+            Tab("Reminders", systemImage: "bell", value: DeviceTab.reminders) {
+                destination(for: .reminders)
+            }
+            Tab("Settings", systemImage: "gearshape", value: DeviceTab.settings) {
+                destination(for: .settings)
+            }
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        .defaultAdaptableTabBarPlacement(.sidebar)
+        .tabViewSidebarHeader { deviceSidebarHeader }
+        .tabViewSidebarFooter { spotlightSidebarFooter }
+        .toolbarRole(.browser)
+    }
 
-                // Spotlight lives inline in the sidebar under a collapsible header
-                // that shows a card count. The whole area is hidden once every card
-                // has been dismissed.
-                if !model.spotlights.isEmpty {
-                    Section(isExpanded: $spotlightExpanded) {
-                        ForEach(model.spotlights) { item in
-                            SpotlightSidebarCard(item: item) { model.dismissSpotlight(item) }
-                                .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                        }
-                    } header: {
-                        HStack {
-                            Text("Spotlight")
-                            Spacer()
-                            Text("\(model.spotlights.count)")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
+    private func destination(for tab: DeviceTab) -> some View {
+        NavigationStack {
+            DeviceTabContent(tab: tab)
+                .navigationTitle(tab.navigationTitle(deviceName: model.device.name))
+                .inlineNavTitle()
+                .toolbar { DashboardToolbar(showWordmark: true) }
+        }
+    }
+
+    private var deviceSidebarHeader: some View {
+        Text(model.device.name)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(SMA.labelSecondary)
+            .textCase(.uppercase)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    @ViewBuilder private var spotlightSidebarFooter: some View {
+        let items = model.visibleSpotlights
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    withAnimation(.snappy) { spotlightExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Spotlight")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(SMA.labelSecondary)
+                            .textCase(.uppercase)
+                        Spacer()
+                        Text("\(items.count)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 20, height: 20)
+                            .background(SMA.accent, in: Circle())
+                            .accessibilityLabel("\(items.count) spotlights")
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(SMA.accent)
+                            .rotationEffect(.degrees(spotlightExpanded ? 90 : 0))
+                            .accessibilityHidden(true)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityHint(spotlightExpanded ? "Collapse Spotlight" : "Expand Spotlight")
+
+                if spotlightExpanded {
+                    ForEach(items) { item in
+                        SpotlightCard(
+                            item: item,
+                            expanded: !collapsedSpotlights.contains(item.id),
+                            onToggle: { toggleSpotlight(item) },
+                            onDismiss: { model.dismissSpotlight(item) }
+                        )
+                        .spotlightSidebarCardStyle(kind: item.kind)
                     }
                 }
             }
-            .listStyle(.sidebar)
-            .navigationTitle("Devices")
-            .toolbar { DashboardToolbar(showWordmark: true) }
-        } detail: {
-            NavigationStack {
-                switch selection {
-                case .device, .none:
-                    DeviceTabView()
-                }
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
         }
-        .navigationSplitViewStyle(.balanced)
     }
-}
 
-// MARK: - Sidebar rows
-
-struct DeviceSidebarRow: View {
-    let device: Device
-
-    var body: some View {
-        HStack {
-            Label(device.name, image: "thermostat.fill")
-            Spacer()
-            Text("\(device.currentTemp)°")
-                .foregroundStyle(SMA.labelSecondary)
-                .monospacedDigit()
+    private func toggleSpotlight(_ item: SpotlightItem) {
+        withAnimation(.snappy) {
+            if collapsedSpotlights.contains(item.id) {
+                collapsedSpotlights.remove(item.id)
+            } else {
+                collapsedSpotlights.insert(item.id)
+            }
         }
     }
 }
 
-/// A compact, sidebar-native rendering of the Spotlight promo. Restyled from the
-/// dashboard `SpotlightCard` to fit the narrow sidebar column.
-struct SpotlightSidebarCard: View {
-    let item: SpotlightItem
-    var onDismiss: () -> Void = {}
-    @State private var showDetail = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(SMA.orange)
-                    .accessibilityHidden(true)
-                Text(item.provider)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(SMA.brandNavy)
-                Spacer()
-                Menu {
-                    Button("Dismiss", systemImage: "xmark", role: .destructive) { onDismiss() }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(SMA.labelSecondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("More options")
+private extension View {
+    func spotlightSidebarCardStyle(kind: SpotlightItem.Kind) -> some View {
+        self
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                SpotlightRowBackground(kind: kind)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-
-            Text(item.title)
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(SMA.labelPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(item.body)
-                .font(.footnote)
-                .foregroundStyle(SMA.labelSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("Offer valid until: \(item.validUntil)")
-                .font(.caption2)
-                .foregroundStyle(SMA.labelSecondary.opacity(0.8))
-
-            Button { showDetail = true } label: {
-                Text("Learn More")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(SMA.orange, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 2)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SMA.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
     }
 }
 
