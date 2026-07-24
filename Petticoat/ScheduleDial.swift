@@ -161,12 +161,12 @@ struct RadialScheduleDial: View {
                 Image(systemName: e.symbol)
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(Color(hex: e.colorHex))
-                    .offset(y: -10)
-                    .padding(.bottom, 1)
+                    .frame(width: 44, height: 44)
                 Text("\(e.name.uppercased()) START")
                     .font(.caption2.weight(.semibold))
                     .tracking(0.5)
                     .foregroundStyle(SMA.labelSecondary)
+                    .frame(height: 14)
                 Button {
                     onRequestManualTime(e.id)
                 } label: {
@@ -174,15 +174,15 @@ struct RadialScheduleDial: View {
                         .font(.system(size: 30, weight: .bold))
                         .foregroundStyle(SMA.labelPrimary)
                         .monospacedDigit()
+                        .frame(height: 40)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Start time \(e.timeText)")
                 .accessibilityHint("Enter a start time")
-                if let end = endsAt(e) {
-                    Text("ends at \(end)")
-                        .font(.caption2)
-                        .foregroundStyle(SMA.labelSecondary)
-                }
+                Text(endsAt(e).map { "ends at \($0)" } ?? "")
+                    .font(.caption2)
+                    .foregroundStyle(SMA.labelSecondary)
+                    .frame(height: 14)
             }
         }
         .multilineTextAlignment(.center)

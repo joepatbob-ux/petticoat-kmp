@@ -28,11 +28,12 @@ struct ControlView: View {
             HumidityLabel(humidity: device.humidity)
 
             Spacer()
+                .frame(maxHeight: 40)
 
             ModeSelectPill(systemMode: device.systemMode, fanMode: device.fanMode) {
                 showMode = true
             }
-            .padding(.bottom, 24)
+            .padding(.vertical, 20)
 
             ControllerSection()
                 .padding(.bottom, 36)
@@ -332,7 +333,7 @@ struct ControllerSection: View {
             if device.systemMode == .off {
                 // Nothing to control while the system is off — no setpoint card.
                 EmptyView()
-            } else if model.controlMode == .schedule {
+            } else if model.controlMode == .schedule || model.controlMode == .hold {
                 scheduleController
             } else {
                 VStack(spacing: 10) {
@@ -392,7 +393,18 @@ struct ControllerSection: View {
             .frame(height: 92)
 
             HStack(spacing: 12) {
-                scheduleFooter
+                if model.controlMode == .hold {
+                    HStack(spacing: 4) {
+                        Image(systemName: device.geofenceEnabled ? "location.fill" : "clock")
+                            .font(.caption2)
+                            .accessibilityHidden(true)
+                        Text("Until \(device.holdUntil)")
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(SMA.labelSecondary)
+                } else {
+                    scheduleFooter
+                }
                 Spacer()
                 pageDots
             }
@@ -401,10 +413,12 @@ struct ControllerSection: View {
         .animation(.snappy, value: page)
     }
 
-    /// Current period — editable setpoint.
+    /// Current period — editable setpoint. In hold mode the hold button overlays the
+    /// leading edge; the profile chip and stepper remain visible underneath.
     private var currentPeriodCard: some View {
         HStack(spacing: 14) {
             profileChip(symbol: model.activeProfile.symbol, colorHex: model.activeProfile.colorHex, name: model.activeProfile.name)
+                .opacity(model.controlMode == .hold ? 0 : 1)
             Spacer(minLength: 8)
             SetpointStepper(low: device.keepMin, high: device.keepMax,
                             mode: device.systemMode, showsLabel: true) { bound, delta in
@@ -413,6 +427,24 @@ struct ControllerSection: View {
         }
         .frame(height: 64)
         .controllerCard()
+        .overlay {
+            if model.controlMode == .hold {
+                HStack(spacing: 0) {
+                    Button { showStatus = true } label: {
+                        Text("Hold\n(1 Hour)")
+                            .font(.footnote.weight(.semibold))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(SMA.destructive)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 78)
+                    .frame(maxHeight: .infinity)
+                    .background(SMA.destructive.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    Spacer()
+                }
+                .padding(4)
+            }
+        }
     }
 
     /// Upcoming period — read-only preview (no setpoint control).
@@ -451,7 +483,7 @@ struct ControllerSection: View {
         HStack(spacing: 5) {
             ForEach(0..<pageCount, id: \.self) { i in
                 Capsule()
-                    .fill(i == (page ?? 0) ? SMA.accent : SMA.fillTertiary)
+                    .fill(i == (page ?? 0) ? SMA.labelPrimary : SMA.fillTertiary)
                     .frame(width: i == (page ?? 0) ? 16 : 6, height: 6)
             }
         }
@@ -465,20 +497,12 @@ struct ControllerSection: View {
     @ViewBuilder private var leading: some View {
         switch model.controlMode {
         case .standard:
-            Text("Keep Between")
+            Text(device.systemMode.setpointLabel)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(SMA.labelSecondary)
 
         case .hold:
-            Button { showStatus = true } label: {
-                Text("Hold\n(1 Hour)")
-                    .font(.footnote.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(SMA.destructive)
-                    .frame(width: 78, height: 56)
-                    .background(SMA.destructive.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .buttonStyle(.plain)
+            EmptyView()
 
         case .activity:
             profileChip(symbol: model.activeProfile.symbol, colorHex: model.activeProfile.colorHex, name: model.activeProfile.name)
@@ -504,7 +528,16 @@ struct ControllerSection: View {
         switch model.controlMode {
         case .standard, .schedule:
             EmptyView()
-        case .hold, .activity:
+        case .hold:
+            HStack(spacing: 4) {
+                Image(systemName: device.geofenceEnabled ? "location.fill" : "clock")
+                    .font(.caption2)
+                    .accessibilityHidden(true)
+                Text("Until \(device.holdUntil)")
+            }
+            .font(.footnote)
+            .foregroundStyle(SMA.labelSecondary)
+        case .activity:
             untilLabel(device.holdUntil)
         case .vacation:
             Text("Until your vacation ends")
@@ -515,7 +548,7 @@ struct ControllerSection: View {
 
     private func untilLabel(_ text: String) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: "location.fill").font(.caption2)
+            Image(systemName: "clock").font(.caption2)
                 .accessibilityHidden(true)
             Text("Until \(text)")
         }
@@ -523,26 +556,14 @@ struct ControllerSection: View {
         .foregroundStyle(SMA.labelSecondary)
     }
 
-    /// Footer for the schedule pager: the current period shows when it ends
-    /// ("Until …"); upcoming periods show when they begin ("Starts …"). The location
-    /// pin appears on the current period only when geofenced auto home/away is on —
-    /// signalling the period can end early if the fence is crossed.
     private var scheduleFooter: some View {
         let index = page ?? 0
         let isCurrent = index == 0
-        // The pin only means something when the geofence can move the schedule.
-        let icon = isCurrent
-            ? (device.geofenceEnabled ? "location.fill" : "clock")
-            : "clock"
-        // "… or Away" only holds when the geofence can trigger the change.
-        let until = device.geofenceEnabled
-            ? device.holdUntil
-            : device.holdUntil.replacingOccurrences(of: " or Away", with: "")
         let text = isCurrent
-            ? "Until \(until)"
-            : "Starts \(model.upcomingPeriods[index - 1].startText)"
+            ? "Until \(model.upcomingPeriods.first?.startText ?? device.holdUntil)"
+            : model.upcomingPeriods[index - 1].startText
         return HStack(spacing: 4) {
-            Image(systemName: icon).font(.caption2)
+            Image(systemName: "clock").font(.caption2)
                 .accessibilityHidden(true)
             Text(text)
         }

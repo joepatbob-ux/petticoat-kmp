@@ -484,8 +484,11 @@ final class AppModel {
         withAnimation(.snappy) { controlMode = on ? .vacation : .schedule }
     }
 
-    /// Resume the schedule, clearing any hold/vacation.
+    /// Resume the schedule, clearing any hold/vacation and restoring the
+    /// current scheduled period's setpoints.
     func resumeSchedule() {
+        device.keepMin = activeProfile.heatTo
+        device.keepMax = activeProfile.coolTo
         withAnimation(.snappy) { controlMode = .schedule }
     }
 
