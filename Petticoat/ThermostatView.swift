@@ -188,7 +188,7 @@ struct SetpointStepper: View {
     private var defaultBound: SetpointBound { mode == .cool ? .high : .low }
 
     var body: some View {
-        HStack(spacing: 20) {
+        HStack(spacing: 10) {
             // The digits are the only laid-out element, so they stay vertically
             // centered; the label and limit float above/below without moving them.
             numbers
@@ -395,9 +395,11 @@ struct ControllerSection: View {
             HStack(spacing: 12) {
                 if model.controlMode == .hold {
                     HStack(spacing: 4) {
-                        Image(systemName: device.geofenceEnabled ? "location.fill" : "clock")
-                            .font(.caption2)
-                            .accessibilityHidden(true)
+                        if device.geofenceEnabled {
+                            Image(systemName: "location.fill")
+                                .font(.caption2)
+                                .accessibilityHidden(true)
+                        }
                         Text("Until \(device.holdUntil)")
                     }
                     .font(.footnote)
@@ -417,8 +419,6 @@ struct ControllerSection: View {
     /// leading edge; the profile chip and stepper remain visible underneath.
     private var currentPeriodCard: some View {
         HStack(spacing: 14) {
-            profileChip(symbol: model.activeProfile.symbol, colorHex: model.activeProfile.colorHex, name: model.activeProfile.name)
-                .opacity(model.controlMode == .hold ? 0 : 1)
             Spacer(minLength: 8)
             SetpointStepper(low: device.keepMin, high: device.keepMax,
                             mode: device.systemMode, showsLabel: true) { bound, delta in
@@ -450,7 +450,6 @@ struct ControllerSection: View {
     /// Upcoming period — read-only preview (no setpoint control).
     private func periodCard(_ period: TimelinePeriod) -> some View {
         HStack(spacing: 14) {
-            profileChip(symbol: period.symbol, colorHex: period.colorHex, name: period.name)
             Spacer(minLength: 8)
             HStack(spacing: 8) {
                 Text("\(period.heatTo)")
@@ -530,9 +529,11 @@ struct ControllerSection: View {
             EmptyView()
         case .hold:
             HStack(spacing: 4) {
-                Image(systemName: device.geofenceEnabled ? "location.fill" : "clock")
-                    .font(.caption2)
-                    .accessibilityHidden(true)
+                if device.geofenceEnabled {
+                    Image(systemName: "location.fill")
+                        .font(.caption2)
+                        .accessibilityHidden(true)
+                }
                 Text("Until \(device.holdUntil)")
             }
             .font(.footnote)
@@ -547,13 +548,9 @@ struct ControllerSection: View {
     }
 
     private func untilLabel(_ text: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: "clock").font(.caption2)
-                .accessibilityHidden(true)
-            Text("Until \(text)")
-        }
-        .font(.footnote)
-        .foregroundStyle(SMA.labelSecondary)
+        Text("Until \(text)")
+            .font(.footnote)
+            .foregroundStyle(SMA.labelSecondary)
     }
 
     private var scheduleFooter: some View {
@@ -562,13 +559,9 @@ struct ControllerSection: View {
         let text = isCurrent
             ? "Until \(model.upcomingPeriods.first?.startText ?? device.holdUntil)"
             : model.upcomingPeriods[index - 1].startText
-        return HStack(spacing: 4) {
-            Image(systemName: "clock").font(.caption2)
-                .accessibilityHidden(true)
-            Text(text)
-        }
-        .font(.footnote)
-        .foregroundStyle(SMA.labelSecondary)
+        return Text(text)
+            .font(.footnote)
+            .foregroundStyle(SMA.labelSecondary)
     }
 }
 

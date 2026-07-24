@@ -7,9 +7,9 @@ import UIKit
 enum SMA {
     // Core palette — adaptive (light / dark), mapped to iOS system semantics.
     static let accent            = Color(light: 0x0088FF, dark: 0x0A84FF)
-    static let groupedBackground = Color(light: 0xF2F2F7, dark: 0x000000)
-    static let background        = Color(light: 0xFFFFFF, dark: 0x000000)
-    static let card              = Color(light: 0xFFFFFF, dark: 0x1C1C1E)
+    static let groupedBackground = Color(uiColor: .systemGroupedBackground)
+    static let background        = Color(uiColor: .systemBackground)
+    static let card              = Color(uiColor: .secondarySystemGroupedBackground)
     static let labelPrimary      = Color(light: 0x000000, dark: 0xFFFFFF)
     static let labelSecondary    = Color(light: 0x3C3C43, dark: 0xEBEBF5).opacity(0.6)
     static let separator         = Color(light: 0xE6E6E6, dark: 0x38383A)
