@@ -235,7 +235,6 @@ struct ApplicationSettingsView: View {
         .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
         .listRowBackground(SMA.card)
-        .foregroundStyle(SMA.labelPrimary)
         .navigationTitle("Application Settings")
         .inlineNavTitle()
         .toolbar { EditButton() }
@@ -454,7 +453,6 @@ struct HelpSupportView: View {
             .scrollContentBackground(.hidden)
             .background(SMA.groupedBackground.ignoresSafeArea())
             .listRowBackground(SMA.card)
-            .foregroundStyle(SMA.labelPrimary)
             .navigationTitle("Help & Support")
             .inlineNavTitle()
             .toolbar {
