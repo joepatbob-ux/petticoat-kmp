@@ -463,7 +463,8 @@ private extension View {
                     .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
             }
             .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            // Full-bleed: no side insets, so the card spans the screen width.
+            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
             .listRowSeparator(.hidden)
     }
 }
