@@ -56,7 +56,7 @@ struct InstallDevice: Identifiable {
 
     var isAvailable: Bool { !steps.isEmpty }
 
-    static let all: [InstallDevice] = [touch2, lite, touch, smartThermostat, roomSensor]
+    static let all: [InstallDevice] = [touch2, touch, lite, classic, sensor]
 
     /// The fully-built flow: Install (with branch screens) → Connect → Register.
     static let touch2 = InstallDevice(
@@ -147,8 +147,8 @@ struct InstallDevice: Identifiable {
 
     static let lite = InstallDevice(name: "Lite", subtitle: "Smart Thermostat", thumbnail: "install.device.lite", steps: [])
     static let touch = InstallDevice(name: "Touch", subtitle: "Smart Thermostat", thumbnail: "install.device.touch", steps: [])
-    static let smartThermostat = InstallDevice(name: "Smart Thermostat", subtitle: "Wi-Fi Thermostat", thumbnail: "install.device.smartThermostat", steps: [])
-    static let roomSensor = InstallDevice(name: "Room Sensor", subtitle: "Temperature & Occupancy", thumbnail: "install.device.roomSensor", steps: [])
+    static let classic = InstallDevice(name: "Classic", subtitle: "", thumbnail: "install.device.classic", steps: [])
+    static let sensor = InstallDevice(name: "Sensor", subtitle: "", thumbnail: "install.device.sensor", steps: [])
 }
 
 // MARK: - Add Device list
@@ -209,13 +209,8 @@ private struct DeviceRow: View {
                 .scaledToFit()
                 .frame(width: 72, height: 72)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(device.name)
-                    .foregroundStyle(SMA.labelPrimary)
-                Text(device.subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(SMA.labelSecondary)
-            }
+            Text(device.name)
+                .foregroundStyle(SMA.labelPrimary)
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)

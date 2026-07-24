@@ -1,0 +1,6 @@
+{
+  "images" : [
+    { "filename" : "install.device.sensor.png", "idiom" : "universal" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
