@@ -299,6 +299,20 @@ enum DashboardSection: String, CaseIterable, Identifiable {
     var title: String { self == .thermostats ? "Thermostats" : "Spotlight" }
 }
 
+/// Controls whether the setpoint stepper shows +/− buttons or ↑↓ chevrons.
+enum StepperStyle: String, CaseIterable, Identifiable {
+    case plusMinus, chevron
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .plusMinus: "Plus / Minus"
+        case .chevron:   "Chevrons"
+        }
+    }
+    func upSymbol() -> String   { self == .chevron ? "chevron.up"   : "plus"  }
+    func downSymbol() -> String { self == .chevron ? "chevron.down" : "minus" }
+}
+
 /// App appearance preference, shown as a swatch picker in Application Settings.
 enum AppAppearance: String, CaseIterable, Identifiable {
     case light, system, dark
@@ -346,6 +360,8 @@ final class AppModel {
     var appearance: AppAppearance = .system
     /// Whether the outdoor-weather location is shown on the control screen.
     var showWeatherLocation = true
+    /// Whether the setpoint stepper uses +/− or ↑↓ chevrons.
+    var stepperStyle: StepperStyle = .plusMinus
 
     /// Spotlight cards currently shown on the dashboard (respecting hidden state).
     var visibleSpotlights: [SpotlightItem] {

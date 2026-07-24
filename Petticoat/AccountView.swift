@@ -224,6 +224,13 @@ struct ApplicationSettingsView: View {
                 Toggle("Show Sensors on Dashboard", isOn: $model.showSensorsOnDashboard)
                     .tint(Color(hex: 0x34C759))
                     .foregroundStyle(SMA.labelPrimary)
+
+                Picker("Stepper Buttons", selection: $model.stepperStyle) {
+                    ForEach(StepperStyle.allCases) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .foregroundStyle(SMA.labelPrimary)
             } header: {
                 Text("Display")
             } footer: {

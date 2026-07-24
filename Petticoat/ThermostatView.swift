@@ -176,6 +176,8 @@ struct SetpointStepper: View {
     var showsLabel: Bool = false
     let onAdjust: (SetpointBound, Int) -> Void
 
+    @Environment(AppModel.self) private var model
+
     /// Non-nil while the user is actively adjusting — drives the selection capsule.
     @State private var editing: SetpointBound?
     /// The most recently adjusted bound. Outlives `editing` so the "Limit" caption
@@ -209,10 +211,14 @@ struct SetpointStepper: View {
                         .offset(y: 14)
                         .accessibilityHidden(!atLimit)
                 }
-            VStack(spacing: 8) {
-                stepper("plus", delta: 1)
-                stepper("minus", delta: -1)
+            VStack(spacing: 0) {
+                stepper(model.stepperStyle.upSymbol(), delta: 1)
+                Rectangle()
+                    .fill(SMA.separator)
+                    .frame(height: 0.5)
+                stepper(model.stepperStyle.downSymbol(), delta: -1)
             }
+            .background(SMA.fillTertiary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .animation(.snappy, value: editing)
         // Restarts whenever `activity` changes; clears the selection after a pause.
@@ -304,9 +310,9 @@ struct SetpointStepper: View {
             onAdjust(bound, delta)
         } label: {
             Image(systemName: symbol)
-                .font(.title3.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(SMA.labelPrimary)
-                .frame(width: 44, height: 44)
+                .frame(width: 40, height: 28)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -416,9 +422,12 @@ struct ControllerSection: View {
     }
 
     /// Current period — editable setpoint. In hold mode the hold button overlays the
-    /// leading edge; the profile chip and stepper remain visible underneath.
+    /// leading edge.
     private var currentPeriodCard: some View {
         HStack(spacing: 14) {
+            Text(device.systemMode.setpointLabel)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(SMA.labelSecondary)
             Spacer(minLength: 8)
             SetpointStepper(low: device.keepMin, high: device.keepMax,
                             mode: device.systemMode, showsLabel: true) { bound, delta in
@@ -450,6 +459,9 @@ struct ControllerSection: View {
     /// Upcoming period — read-only preview (no setpoint control).
     private func periodCard(_ period: TimelinePeriod) -> some View {
         HStack(spacing: 14) {
+            Text(period.name)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(SMA.labelSecondary)
             Spacer(minLength: 8)
             HStack(spacing: 8) {
                 Text("\(period.heatTo)")
