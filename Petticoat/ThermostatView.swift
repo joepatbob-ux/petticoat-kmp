@@ -186,12 +186,27 @@ struct SetpointStepper: View {
     private var defaultBound: SetpointBound { mode == .cool ? .high : .low }
 
     var body: some View {
-        HStack(spacing: 14) {
-            VStack(spacing: 0) {
-                labelSlot
-                numbers
-                limitSlot
-            }
+        HStack(spacing: 20) {
+            // The digits are the only laid-out element, so they stay vertically
+            // centered; the label and limit float above/below without moving them.
+            numbers
+                .overlay(alignment: .top) {
+                    Text(mode.setpointLabel)
+                        .font(.caption2)
+                        .foregroundStyle(SMA.labelSecondary)
+                        .fixedSize()
+                        .opacity(showsLabel && editing == nil ? 1 : 0)
+                        .offset(y: -10)
+                }
+                .overlay(alignment: .bottom) {
+                    Text("Limit")
+                        .font(.caption2)
+                        .foregroundStyle(SMA.labelSecondary)
+                        .fixedSize()
+                        .opacity(editing != nil && atLimit ? 1 : 0)
+                        .offset(y: 10)
+                        .accessibilityHidden(!(editing != nil && atLimit))
+                }
             VStack(spacing: 28) {
                 stepper("plus", delta: 1)
                 stepper("minus", delta: -1)
@@ -212,17 +227,10 @@ struct SetpointStepper: View {
     @ViewBuilder private var numbers: some View {
         Group {
             if mode.isRangeSetpoint {
-                HStack(spacing: 2) {
+                HStack(spacing: 0) {
                     segment(value: low, bound: .low)
+                    separator
                     segment(value: high, bound: .high)
-                }
-                // The dot rides in the gap at rest without shifting the numbers;
-                // it fades out to make way for the selection capsule while editing.
-                .overlay {
-                    Image(systemName: "circle.fill").font(.system(size: 4))
-                        .foregroundStyle(SMA.labelSecondary)
-                        .opacity(editing == nil ? 1 : 0)
-                        .accessibilityHidden(true)
                 }
                 // Binary selection: a tap anywhere flips to the other bound.
                 .contentShape(Capsule())
@@ -237,39 +245,27 @@ struct SetpointStepper: View {
         .background { if editing != nil { Capsule().fill(SMA.fillTertiary) } }
     }
 
+    /// A constant-width gap between the digits: the dot at rest, an equal-width
+    /// blank while editing — so the digits never shift when the dot appears/vanishes.
+    private var separator: some View {
+        Image(systemName: "circle.fill")
+            .font(.system(size: 4))
+            .foregroundStyle(SMA.labelSecondary)
+            .frame(width: 12)
+            .opacity(editing == nil ? 1 : 0)
+            .accessibilityHidden(true)
+    }
+
     private func segment(value: Int, bound: SetpointBound) -> some View {
         let selected = editing == bound
         return Text("\(value)")
             .font(.title3.weight(.semibold))
             .monospacedDigit()
             .foregroundStyle(editing == nil || selected ? SMA.labelPrimary : SMA.labelSecondary)
-            .frame(width: 36, height: 36)
+            .frame(width: 34, height: 36)
             .background { if selected { Capsule().fill(SMA.card) } }
             .accessibilityAddTraits(selected ? [.isSelected] : [])
             .accessibilityLabel(bound == .low ? "Heat setpoint" : "Cool setpoint")
-    }
-
-    // MARK: Floating label / limit slots (fixed height so numbers stay put)
-
-    private var labelSlot: some View {
-        Text(mode.setpointLabel)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(SMA.labelSecondary)
-            .fixedSize()
-            .opacity(showsLabel && editing == nil ? 1 : 0)
-            .frame(height: 13)
-    }
-
-    private var limitSlot: some View {
-        Text("Limit")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(SMA.labelSecondary)
-            .fixedSize()
-            .opacity(editing != nil && atLimit ? 1 : 0)
-            .frame(height: 13)
-            // Sits closer to the numbers at rest; drops further away while editing.
-            .padding(.top, 8)
-            .accessibilityHidden(!(editing != nil && atLimit))
     }
 
     /// Whether the currently-edited bound can no longer move in either direction.
