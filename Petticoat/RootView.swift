@@ -18,6 +18,7 @@ struct RootView: View {
             }
         }
         .environment(model)
+        .preferredColorScheme(model.appearance.colorScheme)
     }
 }
 
