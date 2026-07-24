@@ -15,12 +15,11 @@ struct DashboardView: View {
                 SpotlightCard(item: .welcome, expanded: true, onToggle: {}, onDismiss: {})
                     .spotlightCardStyle(kind: .promotional)
             } else {
-                // Thermostat cards — a long-press drag reorders them.
+                // Each thermostat is its own grouped section — name header, card,
+                // schedule footer. (Resort is deferred to a future approach.)
                 ForEach(model.devices) { device in
                     DashboardThermostatCard(device: device, showControl: $showControl)
-                        .plainCardRow()
                 }
-                .reorderable()
             }
 
             if !model.spotlights.isEmpty {
@@ -51,9 +50,6 @@ struct DashboardView: View {
         .listSectionSpacing(16)
         .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
-        .reorderContainer(for: Device.self) { difference in
-            withAnimation(.snappy) { difference.apply(to: &model.devices) }
-        }
         .navigationDestination(isPresented: $showControl) { DeviceTabView() }
         .toolbar { DashboardToolbar() }
     }
@@ -126,9 +122,45 @@ struct DashboardThermostatCard: View {
     @State private var sensorsExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // The device name is this card's own header, sitting on the grouped
-            // background above the card surface. Tapping it discloses the sensors.
+        Section {
+            HStack(spacing: 14) {
+                ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
+                    model.selectDevice(device.id)
+                    showMode = true
+                }
+
+                Button {
+                    model.selectDevice(device.id)
+                    showControl = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("\(device.currentTemp)")
+                            .font(SMA.displayTemp(size: 46, activity: device.activity))
+                            .foregroundStyle(SMA.tempColor(device.activity))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                        Spacer(minLength: 8)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(device.name) controls")
+
+                SetpointStepper(low: device.keepMin, high: device.keepMax,
+                                mode: device.systemMode, showsLabel: true) { bound, delta in
+                    model.adjustKeep(bound, by: delta, in: device.id)
+                }
+            }
+            .listRowBackground(SMA.card)
+            .listRowSeparator(.hidden)
+
+            if sensorsExpanded {
+                ForEach(device.sensors) { sensor in
+                    SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor, in: device.id) }
+                        .listRowBackground(SMA.card)
+                }
+            }
+        } header: {
             Button {
                 withAnimation(.snappy) { sensorsExpanded.toggle() }
             } label: {
@@ -147,60 +179,10 @@ struct DashboardThermostatCard: View {
                 .accessibilityAddTraits(.isHeader)
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 4)
+            .textCase(nil)
             .accessibilityLabel(device.name)
             .accessibilityHint(sensorsExpanded ? "Collapse sensors" : "Choose participating sensors")
-
-            // The card surface.
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 14) {
-                    ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
-                        model.selectDevice(device.id)
-                        showMode = true
-                    }
-
-                    Button {
-                        model.selectDevice(device.id)
-                        showControl = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text("\(device.currentTemp)")
-                                .font(SMA.displayTemp(size: 46, activity: device.activity))
-                                .foregroundStyle(SMA.tempColor(device.activity))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.5)
-                            Spacer(minLength: 8)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open \(device.name) controls")
-
-                    SetpointStepper(low: device.keepMin, high: device.keepMax,
-                                    mode: device.systemMode, showsLabel: true) { bound, delta in
-                        model.adjustKeep(bound, by: delta, in: device.id)
-                    }
-                }
-
-                // Participating-sensor selection. No divider above the first sensor;
-                // dividers separate the rows.
-                if sensorsExpanded {
-                    VStack(spacing: 0) {
-                        ForEach(Array(device.sensors.enumerated()), id: \.element.id) { index, sensor in
-                            if index > 0 { Divider().overlay(SMA.separator) }
-                            SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor, in: device.id) }
-                                .padding(.vertical, 6)
-                        }
-                    }
-                }
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                SMA.card.clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-            }
-
-            // Footer: schedule-aware status, on the grouped background below the card.
+        } footer: {
             HStack(spacing: 4) {
                 Image(systemName: footer.icon)
                     .font(.caption2)
@@ -210,6 +192,7 @@ struct DashboardThermostatCard: View {
             .font(.footnote)
             .foregroundStyle(SMA.labelSecondary)
             .frame(maxWidth: .infinity, alignment: .center)
+            .textCase(nil)
         }
         .sheet(isPresented: $showMode) {
             ModeSheet()
@@ -482,43 +465,6 @@ private extension View {
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .listRowSeparator(.hidden)
-    }
-
-    /// A clear, separatorless list row with card insets — for cards that draw their
-    /// own surface (and their own header/footer) inside the row.
-    func plainCardRow() -> some View {
-        self
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-            .listRowSeparator(.hidden)
-    }
-}
-
-/// Applies a single-collection reorder result to a plain array of Identifiable items.
-extension ReorderDifference where CollectionID == ReorderableSingleCollectionIdentifier {
-    func apply<C>(to collection: inout C)
-        where C: RangeReplaceableCollection,
-              C.Element: Identifiable,
-              C.Element.ID == ItemID
-    {
-        let moving = Set(sources)
-        guard !moving.isEmpty else { return }
-
-        var moved: [C.Element] = []
-        moved.reserveCapacity(moving.count)
-        collection.removeAll { element in
-            guard moving.contains(element.id) else { return false }
-            moved.append(element)
-            return true
-        }
-
-        switch destination.position {
-        case .before(let id):
-            let index = collection.firstIndex { $0.id == id } ?? collection.endIndex
-            collection.insert(contentsOf: moved, at: index)
-        case .end:
-            collection.append(contentsOf: moved)
-        }
     }
 }
 
