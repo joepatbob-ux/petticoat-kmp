@@ -19,8 +19,9 @@ final class PetticoatUITests: XCTestCase {
                       "Login button should appear after the splash screen")
         loginButton.tap()
 
-        // Dashboard shows the device row labeled with the device name ("Home").
-        let deviceRow = app.buttons["Home"].firstMatch
+        // Dashboard shows the device card; its temperature button opens the detail
+        // screen (accessibility label "Open <device name> controls").
+        let deviceRow = app.buttons["Open Home controls"].firstMatch
         XCTAssertTrue(deviceRow.waitForExistence(timeout: 5),
                       "The dashboard device row should appear after logging in")
         deviceRow.tap()
