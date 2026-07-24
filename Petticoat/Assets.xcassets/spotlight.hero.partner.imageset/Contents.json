@@ -3,6 +3,16 @@
     {
       "filename" : "spotlight.hero.partner.svg",
       "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "spotlight.hero.partner-dark.svg",
+      "idiom" : "universal"
     }
   ],
   "info" : {

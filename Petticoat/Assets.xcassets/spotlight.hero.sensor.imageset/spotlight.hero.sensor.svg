@@ -1,13 +1,13 @@
 <svg width="34" height="40" viewBox="0 0 34 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="34" height="40" fill="#999999"/>
+
 <g id="Cards">
-<path d="M-79 -536C-79 -537.105 -78.1046 -538 -77 -538H481C482.105 -538 483 -537.105 483 -536V2645C483 2646.1 482.105 2647 481 2647H-77C-78.1046 2647 -79 2646.1 -79 2645V-536Z" fill="white" fill-opacity="0.1"/>
-<path d="M-77 -538V-537H481V-538V-539H-77V-538ZM483 -536H482V2645H483H484V-536H483ZM481 2647V2646H-77V2647V2648H481V2647ZM-79 2645H-78V-536H-79H-80V2645H-79ZM-77 2647V2646C-77.5523 2646 -78 2645.55 -78 2645H-79H-80C-80 2646.66 -78.6569 2648 -77 2648V2647ZM483 2645H482C482 2645.55 481.552 2646 481 2646V2647V2648C482.657 2648 484 2646.66 484 2645H483ZM481 -538V-537C481.552 -537 482 -536.553 482 -536H483H484C484 -537.657 482.657 -539 481 -539V-538ZM-77 -538V-539C-78.6568 -539 -80 -537.657 -80 -536H-79H-78C-78 -536.553 -77.5523 -537 -77 -537V-538Z" fill="black" fill-opacity="0.1"/>
+
+
 <g id="Spotlight Cards">
-<rect x="-27.5" y="-35.5002" width="401" height="861" rx="4.5" stroke="#9747FF" stroke-dasharray="10 5"/>
+
 <g id="Type=Promotional">
-<rect x="-12" y="-20.0002" width="370" height="258" rx="26" fill="#006998"/>
-<rect x="-12" y="-20.0002" width="370" height="258" rx="26" fill="url(#paint0_linear_2_1377)" fill-opacity="0.2"/>
+
+
 <g id="Text Area">
 <g id="Hero Image">
 <g id=".Remote Sensor">
