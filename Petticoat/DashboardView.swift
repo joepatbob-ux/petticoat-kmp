@@ -7,6 +7,8 @@ struct DashboardView: View {
     /// card starts expanded; the header chevron collapses/expands them all at once,
     /// and tapping a card toggles just that one.
     @State private var collapsedSpotlights: Set<UUID> = []
+    /// Whether the Spotlight section is expanded (native collapsible section).
+    @State private var spotlightExpanded = true
 
     var body: some View {
         List {
@@ -40,12 +42,13 @@ struct DashboardView: View {
 
     /// Spotlight cards (respecting hidden state). The header chevron expands/collapses
     /// them all at once; tapping a card toggles just that one.
+    /// Spotlight cards in a native collapsible section (system disclosure chevron +
+    /// increased header prominence). Collapsing hides the cards; tapping an
+    /// individual card still toggles just that one between full and abbreviated.
     @ViewBuilder private var spotlightSection: some View {
         let items = model.visibleSpotlights
         if !items.isEmpty {
-            // One section so the inter-card gap is set by the row insets (tight),
-            // not the larger between-section spacing. Cards keep their own surface.
-            Section {
+            Section(isExpanded: $spotlightExpanded) {
                 ForEach(items) { item in
                     SpotlightCard(
                         item: item,
@@ -56,12 +59,19 @@ struct DashboardView: View {
                     .spotlightCardStyle(kind: item.kind)
                 }
             } header: {
-                SpotlightHeader(
-                    count: items.count,
-                    allExpanded: collapsedSpotlights.isEmpty,
-                    onToggle: toggleAllSpotlights
-                )
+                HStack {
+                    Text("Spotlight")
+                    Spacer()
+                    Text("\(items.count)")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(SMA.accent, in: Circle())
+                        .accessibilityLabel("\(items.count) spotlights")
+                }
+                .textCase(nil)
             }
+            .headerProminence(.increased)
         }
     }
 
@@ -71,17 +81,6 @@ struct DashboardView: View {
                 collapsedSpotlights.remove(item.id)
             } else {
                 collapsedSpotlights.insert(item.id)
-            }
-        }
-    }
-
-    /// Header chevron: collapse every card when all are expanded, else expand all.
-    private func toggleAllSpotlights() {
-        withAnimation(.snappy) {
-            if collapsedSpotlights.isEmpty {
-                collapsedSpotlights = Set(model.spotlights.map(\.id))
-            } else {
-                collapsedSpotlights.removeAll()
             }
         }
     }
@@ -176,8 +175,6 @@ struct DashboardThermostatCard: View {
                     } label: {
                         HStack(spacing: 8) {
                             Text(device.name)
-                                .font(.title3.weight(.bold))
-                                .foregroundStyle(SMA.labelPrimary)
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.subheadline.weight(.semibold))
@@ -193,8 +190,6 @@ struct DashboardThermostatCard: View {
                     .accessibilityHint(sensorsExpanded ? "Collapse sensors" : "Choose participating sensors")
                 } else {
                     Text(device.name)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(SMA.labelPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityAddTraits(.isHeader)
                 }
@@ -212,6 +207,7 @@ struct DashboardThermostatCard: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .textCase(nil)
         }
+        .headerProminence(.increased)
         .sheet(isPresented: $showMode) {
             ModeSheet()
         }
@@ -285,38 +281,6 @@ struct SensorSelectRow: View {
 }
 
 // MARK: - Spotlight
-
-struct SpotlightHeader: View {
-    let count: Int
-    let allExpanded: Bool
-    let onToggle: () -> Void
-
-    var body: some View {
-        Button(action: onToggle) {
-            HStack {
-                Text("Spotlight")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(SMA.labelPrimary)
-                Spacer()
-                Text("\(count)")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 22, height: 22)
-                    .background(SMA.accent, in: Circle())
-                    .accessibilityLabel("\(count) spotlights")
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(SMA.accent)
-                    .rotationEffect(.degrees(allExpanded ? 90 : 0))
-                    .accessibilityHidden(true)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .textCase(nil)
-        .accessibilityHint(allExpanded ? "Collapse all spotlights" : "Expand all spotlights")
-    }
-}
 
 /// A dashboard spotlight card. The three kinds share one layout — hero image, title,
 /// body, an "Expires:" subline, a separator, then an action button with an overflow
