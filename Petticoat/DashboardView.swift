@@ -43,8 +43,10 @@ struct DashboardView: View {
     @ViewBuilder private var spotlightSection: some View {
         let items = model.visibleSpotlights
         if !items.isEmpty {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                Section {
+            // One section so the inter-card gap is set by the row insets (tight),
+            // not the larger between-section spacing. Cards keep their own surface.
+            Section {
+                ForEach(items) { item in
                     SpotlightCard(
                         item: item,
                         expanded: !collapsedSpotlights.contains(item.id),
@@ -52,15 +54,13 @@ struct DashboardView: View {
                         onDismiss: { model.dismissSpotlight(item) }
                     )
                     .spotlightCardStyle(kind: item.kind)
-                } header: {
-                    if index == 0 {
-                        SpotlightHeader(
-                            count: items.count,
-                            allExpanded: collapsedSpotlights.isEmpty,
-                            onToggle: toggleAllSpotlights
-                        )
-                    }
                 }
+            } header: {
+                SpotlightHeader(
+                    count: items.count,
+                    allExpanded: collapsedSpotlights.isEmpty,
+                    onToggle: toggleAllSpotlights
+                )
             }
         }
     }
@@ -485,8 +485,8 @@ private extension View {
                     .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
             }
             .listRowBackground(Color.clear)
-            // Full-bleed: no side insets, so the card spans the screen width.
-            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+            // Full-bleed width; tight vertical gap between stacked cards.
+            .listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0))
             .listRowSeparator(.hidden)
     }
 }
