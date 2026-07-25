@@ -94,7 +94,7 @@ struct DeviceTabContent: View {
         case .reminders:
             DeviceTabPlaceholder(title: "Reminders", systemImage: "bell")
         case .settings:
-            DeviceTabPlaceholder(title: "Settings", systemImage: "gearshape")
+            SettingsView()
         }
     }
 }
