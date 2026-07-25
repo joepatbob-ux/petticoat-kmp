@@ -7,6 +7,8 @@ struct ScheduleView: View {
     @Environment(AppModel.self) private var model
 
     @State private var mode: AutomationMode = .schedule
+    @State private var geofenceRadius = 3
+    @State private var geofenceUnit: DistanceUnit = .miles
 
     var body: some View {
         @Bindable var model = model
@@ -21,7 +23,7 @@ struct ScheduleView: View {
             }
 
             Section {
-                Toggle("Use Presets", isOn: $model.device.usePresets)
+                Toggle("Use Presets", isOn: $model[device: \.usePresets])
                 if model.device.usePresets {
                     NavigationLink {
                         ActivityProfilesList()
@@ -33,22 +35,40 @@ struct ScheduleView: View {
                 Text("A preset switcher will be shown on the control screen when not running a schedule.")
             }
 
-            Section("Schedule") {
-                NavigationLink {
-                    SchedulePresetsList(title: "Schedules", presets: [model.device.scheduleName, "Eco", "Custom 1"])
-                } label: {
-                    LabeledContent("Schedule", value: model.device.scheduleName)
+            Section {
+                if model.device.usePresets {
+                    NavigationLink {
+                        SchedulePresetsList(title: "Schedules", presets: [model.device.scheduleName, "Eco", "Custom 1"])
+                    } label: {
+                        LabeledContent("Schedule", value: model.device.scheduleName)
+                    }
+                } else {
+                    // Without presets, schedules are built per mode: Heating, Cooling, Auto.
+                    ForEach(ScheduleKind.allCases) { kind in
+                        NavigationLink {
+                            ProgramScheduleList(kind: kind)
+                        } label: {
+                            LabeledContent(kind.rowTitle, value: kind.detail)
+                        }
+                    }
                 }
             }
 
             Section {
-                Toggle("Early Start", isOn: $model.device.earlyStart)
+                Toggle("Early Start", isOn: $model[device: \.earlyStart])
             } footer: {
                 Text("Heat or cool ahead of time to reach your set temperature at the scheduled time.")
             }
 
             Section {
-                Toggle("Auto Home/Away", isOn: $model.device.geofenceEnabled)
+                Toggle("Auto Home/Away", isOn: $model[device: \.geofenceEnabled])
+                if model.device.geofenceEnabled {
+                    NavigationLink {
+                        GeofenceRadiusView(radius: $geofenceRadius, unit: $geofenceUnit)
+                    } label: {
+                        LabeledContent("Radius", value: geofenceUnit.valueLabel(geofenceRadius))
+                    }
+                }
             } footer: {
                 Text("Use your phone's location to end the current schedule period early when everyone leaves, and resume when you return.")
             }
@@ -57,18 +77,13 @@ struct ScheduleView: View {
                 NavigationLink {
                     VacationView()
                 } label: {
-                    Text("Set Vacation")
+                    Text("Vacations")
                 }
-            } header: {
-                Text("Vacation")
             } footer: {
                 Text("Hold an energy-saving temperature while you're away, then resume your schedule when you return.")
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .listRowBackground(SMA.card)
-        .background(SMA.groupedBackground.ignoresSafeArea())
+        .groupedListChrome()
     }
 }
 
@@ -101,8 +116,9 @@ struct AutomationModeSelector: View {
     var body: some View {
         PillSegmentedSelector(items: AutomationMode.allCases, selection: $selection, label: \.label) { mode in
             Image(mode.icon)
+                .renderingMode(.template)
                 .font(.title)
-                .symbolRenderingMode(.multicolor)
+                .foregroundStyle(SMA.labelPrimary)
                 .accessibilityHidden(true)
         }
     }
@@ -129,7 +145,7 @@ struct PillSegmentedSelector<Item: Hashable, Icon: View>: View {
                             .background {
                                 if selection == item {
                                     RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                        .fill(SMA.card)
+                                        .fill(SMA.segmentedSelected)
                                         .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
                                 }
                             }
@@ -152,40 +168,6 @@ struct PillSegmentedSelector<Item: Hashable, Icon: View>: View {
             }
         }
         .animation(.snappy, value: selection)
-    }
-}
-
-// MARK: - Vacation drill-in
-
-/// Create-a-vacation screen: enable, then pick a start and end date + time.
-struct VacationView: View {
-    @Environment(AppModel.self) private var model
-    @State private var enabled = true
-    @State private var start = Date()
-    @State private var end = Date().addingTimeInterval(60 * 60 * 24 * 3)
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle("Set Vacation", isOn: $enabled)
-            } footer: {
-                Text("While on vacation, your thermostat holds an energy-saving temperature until the end date.")
-            }
-
-            Section {
-                DatePicker("Start", selection: $start, displayedComponents: [.date, .hourAndMinute])
-                DatePicker("End", selection: $end, in: start..., displayedComponents: [.date, .hourAndMinute])
-            }
-            .disabled(!enabled)
-        }
-        .scrollContentBackground(.hidden)
-        .listRowBackground(SMA.card)
-        .background(SMA.groupedBackground.ignoresSafeArea())
-        .onChange(of: enabled) { _, newValue in
-            model.setVacation(newValue)
-        }
-        .navigationTitle("Vacation")
-        .inlineNavTitle()
     }
 }
 

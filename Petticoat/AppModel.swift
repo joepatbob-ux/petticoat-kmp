@@ -3,7 +3,7 @@ import Observation
 
 // MARK: - Mock models
 
-struct Device: Identifiable {
+struct Device: Identifiable, Equatable {
     let id = UUID()
     let name: String
     let location: String
@@ -127,7 +127,7 @@ struct RoomSensor: Identifiable, Hashable {
     ]
 }
 
-struct SpotlightItem: Identifiable {
+struct SpotlightItem: Identifiable, Equatable {
     /// The three card treatments from the design system. Promotional is the filled
     /// brand card; Generic is a first-party white card; Partner is a co-branded
     /// white card.
@@ -346,9 +346,13 @@ final class AppModel {
     /// All paired thermostats, shown as resortable cards on the dashboard. Empty
     /// means no thermostat has been added yet (the dashboard shows the onboarding
     /// welcome card instead).
-    var devices: [Device] = [.sample, .sampleUpstairs]
+    var devices: [Device] = [.sample, .sampleUpstairs] {
+        didSet { recomputeDevice() }
+    }
     /// The device the single-device screens (Control, Mode, Schedule) act on.
-    var selectedDeviceID: Device.ID? = nil
+    var selectedDeviceID: Device.ID? = nil {
+        didSet { recomputeDevice() }
+    }
     var spotlights: [SpotlightItem] = SpotlightItem.samples
     /// Spotlight cards hidden from the dashboard (reversible, unlike dismiss).
     var hiddenSpotlights: Set<UUID> = []
@@ -368,14 +372,24 @@ final class AppModel {
         spotlights.filter { !hiddenSpotlights.contains($0.id) }
     }
 
-    /// The currently selected device — a read/write proxy into `devices` so the
-    /// existing single-device screens keep working unchanged.
-    var device: Device {
-        get { devices.first { $0.id == selectedDeviceID } ?? devices.first ?? .sample }
+    /// The currently selected device, cached so views that read `model.device.x`
+    /// depend only on this property — not the whole `devices` array. Kept in sync by
+    /// `recomputeDevice()` whenever `devices` or `selectedDeviceID` changes.
+    private(set) var device: Device = .sample
+
+    private func recomputeDevice() {
+        let resolved = devices.first { $0.id == selectedDeviceID } ?? devices.first ?? .sample
+        if resolved != device { device = resolved }
+    }
+
+    /// Write-through projection into the selected device for two-way bindings
+    /// (`$model[device: \.systemMode]`), keeping `devices` the source of truth. Reads
+    /// hit the cached `device`; writes route into `devices`, which refreshes the cache.
+    subscript<Value>(device keyPath: WritableKeyPath<Device, Value>) -> Value {
+        get { device[keyPath: keyPath] }
         set {
-            let i = devices.firstIndex { $0.id == selectedDeviceID } ?? devices.startIndex
-            guard devices.indices.contains(i) else { return }
-            devices[i] = newValue
+            guard let i = devices.firstIndex(where: { $0.id == device.id }) else { return }
+            devices[i][keyPath: keyPath] = newValue
         }
     }
 
@@ -503,8 +517,12 @@ final class AppModel {
     /// Resume the schedule, clearing any hold/vacation and restoring the
     /// current scheduled period's setpoints.
     func resumeSchedule() {
-        device.keepMin = activeProfile.heatTo
-        device.keepMax = activeProfile.coolTo
+        // Write both setpoints through a single array lookup (the `device` setter
+        // would rescan and copy the element once per property).
+        if let i = devices.firstIndex(where: { $0.id == device.id }) {
+            devices[i].keepMin = activeProfile.heatTo
+            devices[i].keepMax = activeProfile.coolTo
+        }
         withAnimation(.snappy) { controlMode = .schedule }
     }
 

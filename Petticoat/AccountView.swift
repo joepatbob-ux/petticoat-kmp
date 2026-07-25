@@ -237,10 +237,7 @@ struct ApplicationSettingsView: View {
                 Text("Show the participating-sensor selection under each thermostat card.")
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(SMA.groupedBackground.ignoresSafeArea())
-        .listRowBackground(SMA.card)
+        .groupedListChrome()
         .navigationTitle("Application Settings")
         .inlineNavTitle()
         .toolbar { EditButton() }
@@ -527,10 +524,7 @@ struct AboutApplicationView: View {
                     .listRowBackground(Color.clear)
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(SMA.groupedBackground.ignoresSafeArea())
-        .listRowBackground(SMA.card)
+        .groupedListChrome()
         .navigationTitle("About")
         .inlineNavTitle()
     }

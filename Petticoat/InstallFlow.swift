@@ -219,10 +219,7 @@ struct AddDeviceView: View {
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(SMA.groupedBackground.ignoresSafeArea())
-            .listRowBackground(SMA.card)
+            .groupedListChrome()
             .navigationTitle("Add Device")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

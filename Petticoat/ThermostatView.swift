@@ -211,14 +211,11 @@ struct SetpointStepper: View {
                         .offset(y: 14)
                         .accessibilityHidden(!atLimit)
                 }
-            VStack(spacing: 0) {
+            VStack(spacing: 8) {
                 stepper(model.stepperStyle.upSymbol(), delta: 1)
-                Rectangle()
-                    .fill(SMA.separator)
-                    .frame(height: 0.5)
                 stepper(model.stepperStyle.downSymbol(), delta: -1)
             }
-            .background(SMA.fillTertiary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.trailing, -8)
         }
         .animation(.snappy, value: editing)
         // Restarts whenever `activity` changes; clears the selection after a pause.
@@ -310,9 +307,9 @@ struct SetpointStepper: View {
             onAdjust(bound, delta)
         } label: {
             Image(systemName: symbol)
-                .font(.subheadline.weight(.semibold))
+                .font(.title2.weight(.bold))
                 .foregroundStyle(SMA.labelPrimary)
-                .frame(width: 40, height: 28)
+                .frame(width: 44, height: 34)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -330,9 +327,16 @@ struct ControllerSection: View {
     @Environment(AppModel.self) private var model
     @State private var showStatus = false
     @State private var page: Int? = 0
+    @State private var creatingProfile = false
 
     private var device: Device { model.device }
     private var pageCount: Int { model.upcomingPeriods.count + 1 }
+
+    /// Whether the non-schedule card shows the preset switcher: Use Presets is on
+    /// and we're not running a schedule.
+    private var showsPresetBox: Bool {
+        device.usePresets && (model.controlMode == .standard || model.controlMode == .activity)
+    }
 
     var body: some View {
         Group {
@@ -349,6 +353,12 @@ struct ControllerSection: View {
             }
         }
         .sheet(isPresented: $showStatus) { ControllerStatusSheet(mode: model.controlMode) }
+        .sheet(isPresented: $creatingProfile) {
+            EditActivityProfileView(profile: .new) { newProfile in
+                model.saveProfile(newProfile)
+                model.activateProfile(newProfile)
+            }
+        }
     }
 
     // MARK: Non-schedule single card
@@ -359,12 +369,65 @@ struct ControllerSection: View {
             Spacer(minLength: 8)
             SetpointStepper(low: device.keepMin, high: device.keepMax,
                             mode: device.systemMode,
-                            showsLabel: model.controlMode == .activity) { bound, delta in
+                            showsLabel: model.controlMode == .activity || showsPresetBox) { bound, delta in
                 model.adjustKeep(bound, by: delta)
             }
         }
         .frame(height: 64)
         .controllerCard()
+    }
+
+    // MARK: Preset switcher
+
+    /// The preset switcher: a fixed 56pt button box tinted with a muted version of the
+    /// active preset's color, shown on the single controller card when Use Presets is on
+    /// and no schedule is running. The menu switches presets (entering activity mode) and
+    /// offers "Create New Profile".
+    private var presetMenu: some View {
+        let color = Color(hex: model.activeProfile.colorHex)
+        return Menu {
+            ForEach(model.activityProfiles) { profile in
+                Button {
+                    model.activateProfile(profile)
+                } label: {
+                    Label(profile.name, systemImage: profile.symbol)
+                }
+            }
+            Divider()
+            Button {
+                creatingProfile = true
+            } label: {
+                Label("Create New Profile", systemImage: "plus")
+            }
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: model.activeProfile.symbol)
+                    .font(.body.weight(.semibold))
+                Text(model.activeProfile.name)
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(color)
+            .frame(width: 78, height: 56)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .accessibilityLabel("Preset: \(model.activeProfile.name)")
+        .accessibilityHint("Switches the active preset")
+    }
+
+    /// The temporary-hold button box that overlays the current period card's leading
+    /// edge while in hold mode.
+    private var holdButton: some View {
+        Button { showStatus = true } label: {
+            Text("Hold\n(1 Hour)")
+                .font(.footnote.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(SMA.destructive)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 78)
+        .frame(maxHeight: .infinity)
+        .background(SMA.destructive.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     // MARK: Schedule pager
@@ -384,7 +447,7 @@ struct ControllerSection: View {
                     HStack(spacing: 8) {
                         currentPeriodCard.frame(width: cardWidth).id(0)
                         ForEach(Array(model.upcomingPeriods.enumerated()), id: \.element.id) { index, period in
-                            periodCard(period).frame(width: cardWidth).id(index + 1)
+                            PeriodCard(period: period).frame(width: cardWidth).id(index + 1)
                         }
                     }
                     .scrollTargetLayout()
@@ -414,7 +477,7 @@ struct ControllerSection: View {
                     scheduleFooter
                 }
                 Spacer()
-                pageDots
+                PageDots(count: pageCount, current: page ?? 0)
             }
             .padding(.horizontal, 16)
         }
@@ -422,15 +485,18 @@ struct ControllerSection: View {
     }
 
     /// Current period — editable setpoint. In hold mode the hold button overlays the
-    /// leading edge.
+    /// leading edge; otherwise the leading shows the active preset's icon + title (when
+    /// Use Presets is on) or the setpoint label.
     private var currentPeriodCard: some View {
         HStack(spacing: 14) {
-            Text(device.systemMode.setpointLabel)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(SMA.labelSecondary)
+            currentPeriodLeading
             Spacer(minLength: 8)
+            // One setpoint title only: the large leading label when presets are off; the
+            // stepper's small floating label otherwise (the profile chip / hold box then
+            // occupies the leading slot).
             SetpointStepper(low: device.keepMin, high: device.keepMax,
-                            mode: device.systemMode, showsLabel: true) { bound, delta in
+                            mode: device.systemMode,
+                            showsLabel: device.usePresets || model.controlMode == .hold) { bound, delta in
                 model.adjustKeep(bound, by: delta)
             }
         }
@@ -439,16 +505,7 @@ struct ControllerSection: View {
         .overlay {
             if model.controlMode == .hold {
                 HStack(spacing: 0) {
-                    Button { showStatus = true } label: {
-                        Text("Hold\n(1 Hour)")
-                            .font(.footnote.weight(.semibold))
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(SMA.destructive)
-                    }
-                    .buttonStyle(.plain)
-                    .frame(width: 78)
-                    .frame(maxHeight: .infinity)
-                    .background(SMA.destructive.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    holdButton
                     Spacer()
                 }
                 .padding(4)
@@ -456,25 +513,21 @@ struct ControllerSection: View {
         }
     }
 
-    /// Upcoming period — read-only preview (no setpoint control).
-    private func periodCard(_ period: TimelinePeriod) -> some View {
-        HStack(spacing: 14) {
-            Text(period.name)
+    /// Leading element of the schedule current-period card: the active preset's icon +
+    /// title when Use Presets is on, otherwise the setpoint label. Hold overlays its own
+    /// box, so the inline leading is empty there.
+    @ViewBuilder private var currentPeriodLeading: some View {
+        if model.controlMode == .hold {
+            EmptyView()
+        } else if device.usePresets {
+            profileChip(symbol: model.activeProfile.symbol,
+                        colorHex: model.activeProfile.colorHex,
+                        name: model.activeProfile.name)
+        } else {
+            Text(device.systemMode.setpointLabel)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(SMA.labelSecondary)
-            Spacer(minLength: 8)
-            HStack(spacing: 8) {
-                Text("\(period.heatTo)")
-                Image(systemName: "circle.fill").font(.system(size: 4))
-                    .accessibilityHidden(true)
-                Text("\(period.coolTo)")
-            }
-            .font(.title3.weight(.semibold))
-            .foregroundStyle(SMA.labelSecondary)
-            .monospacedDigit()
         }
-        .frame(height: 64)
-        .controllerCard()
     }
 
     private func profileChip(symbol: String, colorHex: UInt, name: String) -> some View {
@@ -490,33 +543,29 @@ struct ControllerSection: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var pageDots: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<pageCount, id: \.self) { i in
-                Capsule()
-                    .fill(i == (page ?? 0) ? SMA.labelPrimary : SMA.fillTertiary)
-                    .frame(width: i == (page ?? 0) ? 16 : 6, height: 6)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Page")
-        .accessibilityValue("\((page ?? 0) + 1) of \(pageCount)")
-    }
 
     // MARK: Leading element (single-card modes)
 
     @ViewBuilder private var leading: some View {
         switch model.controlMode {
         case .standard:
-            Text(device.systemMode.setpointLabel)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(SMA.labelSecondary)
+            if showsPresetBox {
+                presetMenu
+            } else {
+                Text(device.systemMode.setpointLabel)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SMA.labelSecondary)
+            }
 
         case .hold:
             EmptyView()
 
         case .activity:
-            profileChip(symbol: model.activeProfile.symbol, colorHex: model.activeProfile.colorHex, name: model.activeProfile.name)
+            if showsPresetBox {
+                presetMenu
+            } else {
+                profileChip(symbol: model.activeProfile.symbol, colorHex: model.activeProfile.colorHex, name: model.activeProfile.name)
+            }
 
         case .vacation:
             Button { showStatus = true } label: {
@@ -567,13 +616,63 @@ struct ControllerSection: View {
 
     private var scheduleFooter: some View {
         let index = page ?? 0
-        let isCurrent = index == 0
-        let text = isCurrent
-            ? "Until \(model.upcomingPeriods.first?.startText ?? device.holdUntil)"
-            : model.upcomingPeriods[index - 1].startText
+        let periods = model.upcomingPeriods
+        // `index` tracks scroll position (0 = current period); guard the upcoming
+        // subscript so a stale/settling page can never read out of range.
+        let text: String
+        if index >= 1, index - 1 < periods.count {
+            text = periods[index - 1].startText
+        } else {
+            text = "Until \(periods.first?.startText ?? device.holdUntil)"
+        }
         return Text(text)
             .font(.footnote)
             .foregroundStyle(SMA.labelSecondary)
+    }
+}
+
+/// Upcoming schedule period — a read-only preview card (no setpoint control).
+private struct PeriodCard: View {
+    let period: TimelinePeriod
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(period.name)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(SMA.labelSecondary)
+            Spacer(minLength: 8)
+            HStack(spacing: 8) {
+                Text("\(period.heatTo)")
+                Image(systemName: "circle.fill").font(.system(size: 4))
+                    .accessibilityHidden(true)
+                Text("\(period.coolTo)")
+            }
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(SMA.labelSecondary)
+            .monospacedDigit()
+        }
+        .frame(height: 64)
+        .controllerCard()
+    }
+}
+
+/// The page indicator beneath the schedule pager: a widened capsule marks the
+/// current page. Depends only on its inputs, not the whole controller state.
+private struct PageDots: View {
+    let count: Int
+    let current: Int
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<count, id: \.self) { i in
+                Capsule()
+                    .fill(i == current ? SMA.labelPrimary : SMA.fillTertiary)
+                    .frame(width: i == current ? 16 : 6, height: 6)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Page")
+        .accessibilityValue("\(current + 1) of \(count)")
     }
 }
 

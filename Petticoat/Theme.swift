@@ -19,6 +19,10 @@ enum SMA {
     static let destructive       = Color(light: 0xFF3B30, dark: 0xFF453A)
     static let fillTertiary      = Color(lightHex: 0x767680, lightAlpha: 0.12,
                                          darkHex: 0x767680, darkAlpha: 0.24)
+    /// Selected-segment fill for the pill segmented selectors: an elevated chip that
+    /// reads *above* the `fillTertiary` track in both modes (white in light; a raised
+    /// gray in dark, where `card` would sink below the track).
+    static let segmentedSelected = Color(light: 0xFFFFFF, dark: 0x545458)
 
     // Thermostat surfaces (intentionally dark surfaces in both modes)
     static let thermostatCard    = Color(hex: 0x485057)
@@ -114,6 +118,17 @@ extension View {
         #else
         self
         #endif
+    }
+
+    /// The shared inset-grouped list chrome used across the grouped screens:
+    /// hidden system background, brand card row backgrounds, and the grouped
+    /// backdrop extended under the safe area.
+    func groupedListChrome() -> some View {
+        self
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .listRowBackground(SMA.card)
+            .background(SMA.groupedBackground.ignoresSafeArea())
     }
 
     /// Constrains free-flowing content (VStack/ScrollView) to a centered readable

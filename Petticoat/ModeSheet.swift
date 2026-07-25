@@ -32,19 +32,19 @@ struct ModeSheet: View {
 
             List {
                 Section("System") {
-                    SystemModeSelector(selected: $model.device.systemMode)
+                    SystemModeSelector(selected: $model[device: \.systemMode])
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
 
                 Section("Fan") {
-                    FanModeSelector(selected: $model.device.fanMode)
+                    FanModeSelector(selected: $model[device: \.fanMode])
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
 
                 Section {
-                    Toggle("Circulate Fan", isOn: $model.device.circulateFan)
+                    Toggle("Circulate Fan", isOn: $model[device: \.circulateFan])
                         .tint(Color(hex: 0x34C759))
 
                     Button {
@@ -66,7 +66,7 @@ struct ModeSheet: View {
                     .disabled(!model.device.circulateFan)
 
                     if showWheel {
-                        Picker("Amount Per Hour", selection: $model.device.circulateAmount) {
+                        Picker("Amount Per Hour", selection: $model[device: \.circulateAmount]) {
                             ForEach(circulateOptions, id: \.self) { Text($0).tag($0) }
                         }
                         .pickerStyle(.wheel)

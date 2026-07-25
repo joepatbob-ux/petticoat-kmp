@@ -78,10 +78,7 @@ struct ActivityProfilesList: View {
                 Text("Profiles set the temperature range and sensors used for each part of your day.")
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .listRowBackground(SMA.card)
-        .background(SMA.groupedBackground.ignoresSafeArea())
+        .groupedListChrome()
         .navigationTitle("Activity Profiles")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -170,22 +167,16 @@ struct EditActivityProfileView: View {
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .listRowBackground(SMA.card)
-            .background(SMA.groupedBackground.ignoresSafeArea())
+            .groupedListChrome()
             .navigationTitle("Edit Activity Profile")
             .inlineNavTitle()
             .presentationDragIndicator(.visible)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    EditorCancelButton { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { onSave(profile); dismiss() }
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.capsule)
-                        .tint(SMA.accent)
+                    EditorSaveButton { onSave(profile); dismiss() }
                 }
             }
         }
@@ -252,10 +243,7 @@ struct ProfileNameView: View {
                 .listRowSeparator(.hidden)
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .listRowBackground(SMA.card)
-        .background(SMA.groupedBackground.ignoresSafeArea())
+        .groupedListChrome()
         .navigationTitle("Profile Name")
         .navigationBarTitleDisplayMode(.large)
     }

@@ -113,11 +113,7 @@ struct SchedulePresetsList: View {
                             Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(preset) }
                             Button("Delete", systemImage: "trash", role: .destructive) { delete(preset) }
                         } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(SMA.accent)
-                                .frame(width: 28, height: 28)
-                                .contentShape(Rectangle())
+                            EllipsisMenuLabel()
                         }
                         .buttonStyle(.borderless)
                         .accessibilityLabel("More options for \(preset.name)")
@@ -173,8 +169,6 @@ struct ScheduleEditorView: View {
     @State private var timeTarget: EventTarget?
     let onSave: (SchedulePreset) -> Void
 
-    private let dayLabels = ["M", "T", "W", "T", "F", "S", "S"]
-    private let dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     private let minEvents = 1
     private let maxEvents = 8
 
@@ -195,7 +189,7 @@ struct ScheduleEditorView: View {
 
                 ForEach(preset.groups) { group in
                     Section {
-                        dayPicker(for: group)
+                        DayPicker(days: group.days) { toggleDay($0, in: group.id) }
 
                         RadialScheduleDial(
                             events: group.events,
@@ -251,7 +245,7 @@ struct ScheduleEditorView: View {
                         }
                     } header: {
                         HStack {
-                            Text(daysSummary(group.days))
+                            Text(WeekDay.summary(group.days))
                                 .font(.headline)
                                 .foregroundStyle(SMA.labelPrimary)
                             Spacer()
@@ -261,11 +255,7 @@ struct ScheduleEditorView: View {
                                 }
                                 .disabled(preset.groups.count <= 1)
                             } label: {
-                                Image(systemName: "ellipsis")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(SMA.accent)
-                                    .frame(width: 28, height: 28)
-                                    .overlay(Circle().stroke(SMA.accent, lineWidth: 1.5))
+                                EllipsisMenuLabel(outlined: true)
                             }
                             .accessibilityLabel("Day group options")
                         }
@@ -292,19 +282,15 @@ struct ScheduleEditorView: View {
             .presentationDragIndicator(.visible)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel("Cancel")
+                    EditorCancelButton { dismiss() }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {} label: { Image(systemName: "questionmark.bubble") }
                         .accessibilityLabel("Help and Support")
-                    Button("Save") {
+                    EditorSaveButton {
                         onSave(preset)
                         dismiss()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
-                    .tint(SMA.accent)
                 }
             }
             .sheet(item: $addTarget) { target in
@@ -361,11 +347,7 @@ struct ScheduleEditorView: View {
                 Button("Delete", systemImage: "trash", role: .destructive) { deleteEvent(event.id, from: group.id) }
                     .disabled(group.events.count <= minEvents)
             } label: {
-                Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(SMA.accent)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+                EllipsisMenuLabel()
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Options for \(event.name)")
@@ -373,30 +355,6 @@ struct ScheduleEditorView: View {
         .contentShape(Rectangle())
         .onTapGesture { selectedEventID = event.id }
         .accessibilityAddTraits(selectedEventID == event.id ? [.isSelected] : [])
-    }
-
-    // MARK: - Day picker
-
-    private func dayPicker(for group: ScheduleDayGroup) -> some View {
-        HStack(spacing: 6) {
-            ForEach(0..<7, id: \.self) { i in
-                let on = group.days.contains(i)
-                Button {
-                    toggleDay(i, in: group.id)
-                } label: {
-                    Text(dayLabels[i])
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(on ? .white : SMA.labelPrimary)
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(on ? SMA.accent : SMA.fillTertiary))
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity)
-                .accessibilityLabel(dayNames[i])
-                .accessibilityAddTraits(on ? [.isSelected] : [])
-            }
-        }
-        .padding(.vertical, 4)
     }
 
     // MARK: - Mutations
@@ -479,14 +437,6 @@ struct ScheduleEditorView: View {
 
     // MARK: - Labels
 
-    private func daysSummary(_ days: Set<Int>) -> String {
-        if days.isEmpty { return "No Days Selected" }
-        if days == Set(0..<7) { return "All Week" }
-        if days == Set(0..<5) { return "Weekdays" }
-        if days == Set(5..<7) { return "Weekend" }
-        let short = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        return days.sorted().map { short[$0] }.joined(separator: ", ")
-    }
 }
 
 /// Identifiable wrapper so a day-group id can drive a `.sheet(item:)` (Add Event).
@@ -527,7 +477,7 @@ struct ScheduleEventEditor: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Start Time") {
+                Section {
                     DatePicker("Start", selection: $time, displayedComponents: .hourAndMinute)
                         .foregroundStyle(SMA.labelPrimary)
                 }
@@ -586,20 +536,15 @@ struct ScheduleEventEditor: View {
             .presentationDragIndicator(.visible)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel("Cancel")
+                    EditorCancelButton { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    EditorSaveButton(isEnabled: selectedProfileID != nil) {
                         if let profile = model.activityProfiles.first(where: { $0.id == selectedProfileID }) {
                             onSave(ScheduleEvent(from: profile, time: time))
                         }
                         dismiss()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
-                    .tint(SMA.accent)
-                    .disabled(selectedProfileID == nil)
                 }
             }
             .sheet(isPresented: $creatingProfile) {
@@ -642,17 +587,13 @@ struct ManualStartTimeSheet: View {
             .presentationDragIndicator(.visible)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel("Cancel")
+                    EditorCancelButton { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Set") {
+                    EditorSaveButton(title: "Set") {
                         onSave(time)
                         dismiss()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
-                    .tint(SMA.accent)
                 }
             }
         }

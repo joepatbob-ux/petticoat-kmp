@@ -106,13 +106,7 @@ struct MainSplitView: View {
     }
 
     private func toggleSpotlight(_ item: SpotlightItem) {
-        withAnimation(.snappy) {
-            if collapsedSpotlights.contains(item.id) {
-                collapsedSpotlights.remove(item.id)
-            } else {
-                collapsedSpotlights.insert(item.id)
-            }
-        }
+        withAnimation(.snappy) { collapsedSpotlights.toggleMembership(item.id) }
     }
 }
 
