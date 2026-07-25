@@ -200,27 +200,209 @@ struct EnergyProgramDetailView: View {
     }
 }
 
-// MARK: - Placeholders for the larger settings screens
+// MARK: - System Configuration
 
-/// A titled "coming soon" placeholder for a settings detail that isn't built yet.
-private struct SettingsStub: View {
-    let title: String
-    let systemImage: String
+struct SystemConfigurationView: View {
+    @State private var lockThermostat = false
+    @State private var coolingMin = 55
+    @State private var heatingMax = 99
+    @State private var humidification = true
+    @State private var humidifyTo = 40
+    @State private var dehumidification = true
+    @State private var dehumidifyTo = 40
+    @State private var coolingBoost = "Comfort"
+    @State private var heatingBoost = "Comfort"
+    @State private var auxBoost = "Comfort"
+    @State private var temperatureOffset = 0
+    @State private var humidityOffset = 0
+    @State private var acProtection = true
+
+    private let boostOptions = ["Off", "Eco", "Comfort", "Fast"]
 
     var body: some View {
-        ContentUnavailableView(title, systemImage: systemImage, description: Text("Prototype screen"))
-            .background(SMA.groupedBackground.ignoresSafeArea())
-            .navigationTitle(title)
-            .inlineNavTitle()
+        List {
+            Section {
+                Toggle("Lock Thermostat", isOn: $lockThermostat)
+            } footer: {
+                Text("Disables functionality on the thermostat allowing control only through the app.")
+            }
+
+            Section("Temperature Limits") {
+                Picker("Cooling Min", selection: $coolingMin) {
+                    ForEach(45...80, id: \.self) { Text("\($0)").tag($0) }
+                }
+                Picker("Heating Max", selection: $heatingMax) {
+                    ForEach(60...99, id: \.self) { Text("\($0)").tag($0) }
+                }
+            }
+
+            Section("Humidity Control") {
+                Toggle("Humidification", isOn: $humidification)
+                Picker("Humidify to", selection: $humidifyTo) {
+                    ForEach(Array(stride(from: 10, through: 60, by: 5)), id: \.self) { Text("\($0)%").tag($0) }
+                }
+            }
+
+            Section {
+                Toggle("Dehumidification", isOn: $dehumidification)
+                Picker("Dehumidify to", selection: $dehumidifyTo) {
+                    ForEach(Array(stride(from: 30, through: 70, by: 5)), id: \.self) { Text("\($0)%").tag($0) }
+                }
+            } footer: {
+                Text("Your desired humidity may not be able to be reached in your home. In some cases too high or too low of humidity can cause damage in your home.")
+            }
+
+            Section {
+                Picker("Cooling", selection: $coolingBoost) { ForEach(boostOptions, id: \.self) { Text($0).tag($0) } }
+                Picker("Heating", selection: $heatingBoost) { ForEach(boostOptions, id: \.self) { Text($0).tag($0) } }
+                Picker("AUX Heat", selection: $auxBoost) { ForEach(boostOptions, id: \.self) { Text($0).tag($0) } }
+            } header: {
+                Text("Boost")
+            } footer: {
+                Text("Faster cycle rates provide tighter temperature control and shorter on/off cycles. Slow cycle rates allow for a wider temperature swing and longer on/off cycles.")
+            }
+
+            Section("Offsets") {
+                Stepper(value: $temperatureOffset, in: -5...5) {
+                    LabeledContent("Temperature", value: "\(temperatureOffset)")
+                }
+                Stepper(value: $humidityOffset, in: -10...10) {
+                    LabeledContent("Humidity", value: "\(humidityOffset)%")
+                }
+            }
+
+            Section {
+                Toggle("AC Protection", isOn: $acProtection)
+            } header: {
+                Text("Miscellaneous")
+            } footer: {
+                Text("Short delay when AC is quickly turned OFF then ON to prevent equipment damage.")
+            }
+        }
+        .groupedListChrome()
+        .navigationTitle("System Configuration")
+        .inlineNavTitle()
     }
 }
 
-struct SystemConfigurationView: View {
-    var body: some View { SettingsStub(title: "System Configuration", systemImage: "gearshape.2") }
-}
+// MARK: - About Thermostat
 
 struct AboutThermostatView: View {
-    var body: some View { SettingsStub(title: "About Thermostat", systemImage: "info.circle") }
+    @State private var name = ""
+    @State private var confirmRemove = false
+
+    var body: some View {
+        List {
+            Section {
+                TextField("Thermostat Name", text: $name)
+            }
+
+            Section {
+                NavigationLink("Thermostat Location") { ThermostatLocationView() }
+            }
+
+            Section {
+                LabeledContent("Wi-Fi Strength", value: "50 RSSI (Good)")
+                MetricBar(progress: 0.8).listRowSeparator(.hidden)
+            }
+
+            Section {
+                LabeledContent("Battery Strength", value: "2.4 V (Fair)")
+                MetricBar(progress: 0.45).listRowSeparator(.hidden)
+            }
+
+            Section("Hardware Information") {
+                LabeledContent("Model", value: "1F86U-42WF")
+                LabeledContent("Firmware Version", value: "6004971003")
+                LabeledContent("MAC Address", value: "34:6F:92:06:E1:C6")
+            }
+
+            Section("HVAC Equipment") {
+                LabeledContent("Current Runtime", value: "0:00:00")
+                LabeledContent("Indoor Configuration", value: "Electric")
+                LabeledContent("Indoor Stages", value: "1")
+                LabeledContent("Outdoor Configuration", value: "AC")
+                LabeledContent("Outdoor Stages", value: "1")
+            }
+
+            Section {
+                Button("Remove Thermostat", role: .destructive) { confirmRemove = true }
+                    .frame(maxWidth: .infinity)
+                    .foregroundStyle(SMA.destructive)
+            }
+        }
+        .groupedListChrome()
+        .navigationTitle("About Thermostat")
+        .inlineNavTitle()
+        .confirmationDialog("Remove this thermostat?", isPresented: $confirmRemove, titleVisibility: .visible) {
+            Button("Remove Thermostat", role: .destructive) { }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("You'll need to set it up again to control it from the app.")
+        }
+    }
+}
+
+/// A colored strength/level bar: green while healthy, yellow as it wanes, red when low.
+struct MetricBar: View {
+    let progress: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 4).fill(SMA.fillTertiary)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(color)
+                    .frame(width: geo.size.width * max(0, min(1, progress)))
+            }
+        }
+        .frame(height: 16)
+        .padding(.vertical, 4)
+        .accessibilityHidden(true)
+    }
+
+    private var color: Color {
+        switch progress {
+        case 0.5...:  return Color(hex: 0x34C759)
+        case 0.25...: return Color(hex: 0xFFCC00)
+        default:      return SMA.destructive
+        }
+    }
+}
+
+// MARK: - Thermostat Location
+
+struct ThermostatLocationView: View {
+    @State private var address = ""
+    @State private var unit = ""
+    @State private var city = ""
+    @State private var state = ""
+    @State private var zip = ""
+    @State private var country = "United States"
+
+    var body: some View {
+        List {
+            Section("Location") {
+                TextField("Address", text: $address)
+                TextField("Apt / Suite", text: $unit)
+                TextField("City", text: $city)
+                TextField("State", text: $state)
+                TextField("ZIP Code", text: $zip)
+                    .keyboardType(.numbersAndPunctuation)
+                TextField("Country", text: $country)
+            }
+
+            Section {
+                Button {
+                } label: {
+                    Label("Use Current Location", systemImage: "location.fill")
+                }
+            }
+        }
+        .groupedListChrome()
+        .navigationTitle("Thermostat Location")
+        .inlineNavTitle()
+    }
 }
 
 #Preview {
