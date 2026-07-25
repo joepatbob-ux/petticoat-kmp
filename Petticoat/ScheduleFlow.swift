@@ -200,6 +200,10 @@ struct ScheduleEditorView: View {
                                 if let event = group.events.first(where: { $0.id == id }) {
                                     timeTarget = EventTarget(groupID: group.id, event: event)
                                 }
+                            },
+                            onBreak: { draggedID, newStart, brokenID, tailStart in
+                                breakEvent(draggedID, newStart: newStart, breaking: brokenID,
+                                           tailStart: tailStart, in: group.id)
                             }
                         )
                         .frame(height: 340)
@@ -405,6 +409,26 @@ struct ScheduleEditorView: View {
                 return
             }
         }
+    }
+
+    /// Break an event into two around a dropped event: move the dragged event to its new
+    /// start and insert a copy of the broken event for the tail, so the broken activity
+    /// resumes after the inserted one. No-ops if the group is already at `maxEvents`.
+    private func breakEvent(_ draggedID: ScheduleEvent.ID, newStart: Date,
+                            breaking brokenID: ScheduleEvent.ID, tailStart: Date,
+                            in id: ScheduleDayGroup.ID) {
+        guard let g = groupIndex(id),
+              preset.groups[g].events.count < maxEvents,
+              let d = preset.groups[g].events.firstIndex(where: { $0.id == draggedID }),
+              let broken = preset.groups[g].events.first(where: { $0.id == brokenID }) else { return }
+        let tail = ScheduleEvent(name: broken.name, symbol: broken.symbol, colorHex: broken.colorHex,
+                                 heatTo: broken.heatTo, coolTo: broken.coolTo, time: tailStart)
+        withAnimation(.snappy) {
+            preset.groups[g].events[d].time = newStart
+            preset.groups[g].events.append(tail)
+            preset.groups[g].events.sort { $0.time < $1.time }
+        }
+        selectedEventID = draggedID
     }
 
     /// Replace an event's profile snapshot + time (from the event editor).

@@ -521,15 +521,17 @@ struct ControllerSection: View {
         }
     }
 
-    /// Leading element of the schedule current-period card. Mirrors the main
-    /// controller's convention: the preset-switcher box when Use Presets is on,
-    /// otherwise the setpoint label. Hold overlays its own box, so the inline leading
-    /// is empty there.
+    /// Leading element of the schedule current-period card. On a profile schedule it
+    /// shows the active profile's icon + title, matching the upcoming period cards so
+    /// the whole timeline reads consistently; otherwise the setpoint label. Hold
+    /// overlays its own box, so the inline leading is empty there.
     @ViewBuilder private var currentPeriodLeading: some View {
         if model.controlMode == .hold {
             EmptyView()
         } else if device.usePresets {
-            presetMenu
+            profileChip(symbol: model.activeProfile.symbol,
+                        colorHex: model.activeProfile.colorHex,
+                        name: model.activeProfile.name)
         } else {
             Text(device.systemMode.setpointLabel)
                 .font(.footnote.weight(.semibold))

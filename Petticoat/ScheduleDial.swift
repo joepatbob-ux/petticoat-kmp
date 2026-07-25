@@ -8,9 +8,10 @@ import UIKit
 /// midnight), with evenly rounded ends. Tapping an arc selects that event; the
 /// selected arc is drawn thicker — its start is editable via the draggable grip, the
 /// end isn't (it's the next event's start). Press-and-hold an arc to pick it up, then
-/// drag it around the ring: it keeps its own duration and swaps places with a neighbor
-/// each time its center passes theirs, so events can be reordered. Tapping the time in
-/// the center opens manual entry. Hour ticks are dots on top of the arcs, with "M"
+/// drag it around the ring: it keeps its own duration and, on drop, is inserted at the
+/// finger — breaking whichever event encloses it into a kept head and a copied tail, so
+/// that activity resumes after the inserted one (every piece stays ≥ the minimum length).
+/// Tapping the time in the center opens manual entry. Hour ticks are dots on top of the arcs, with "M"
 /// (midnight) at the top and "N" (noon) at the bottom.
 struct RadialScheduleDial: View {
     let events: [ScheduleEvent]
@@ -19,6 +20,10 @@ struct RadialScheduleDial: View {
     let onSelect: (ScheduleEvent.ID) -> Void
     /// Tapping the start time in the center asks the host to present manual entry.
     let onRequestManualTime: (ScheduleEvent.ID) -> Void
+    /// Insert-by-breaking on drop: (draggedID, its new start, the event being broken,
+    /// the tail copy's start). The host moves the dragged event and inserts a copy of the
+    /// broken event so its activity resumes after the inserted one.
+    let onBreak: (ScheduleEvent.ID, Date, ScheduleEvent.ID, Date) -> Void
 
     /// Neutral background band; drawn thicker than the arcs so they sit inset within it.
     private let trackWidth: CGFloat = 48
@@ -49,9 +54,6 @@ struct RadialScheduleDial: View {
     @State private var grabOffset: CGFloat = 0
     /// The dragged arc's live start position (day fraction) following the finger.
     @State private var proposedStart: CGFloat = 0
-    /// The dragged arc's center on the previous drag frame, used to detect the moment it
-    /// crosses a neighbor's center (a swap threshold).
-    @State private var prevCenter: CGFloat = 0
 
     private var sortedEvents: [ScheduleEvent] { events.sorted { $0.time < $1.time } }
     private var selectedEvent: ScheduleEvent? {
@@ -228,9 +230,8 @@ struct RadialScheduleDial: View {
 
     /// Press-and-hold anywhere on the ring band to pick up the arc under the finger, then
     /// drag it around the ring. The arc keeps its own duration and floats under the finger;
-    /// each time its center passes a neighbor's center the two events swap places (see
-    /// `swapForward`/`swapBackward`), reordering the schedule while preserving every
-    /// period's length.
+    /// on release it is inserted at the drop point, breaking the enclosing event into a
+    /// kept head + a copied tail (see `commitBreak`).
     private func reorderGesture(center: CGPoint, radius: CGFloat) -> some Gesture {
         LongPressGesture(minimumDuration: 0.28)
             .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(spaceName)))
@@ -257,7 +258,6 @@ struct RadialScheduleDial: View {
         let f = fraction(of: location, center: center)
         grabOffset = f - start
         proposedStart = normalize(f - grabOffset)
-        prevCenter = normalize(proposedStart + draggedDuration(id) / 2)
         // Animate the lift + dim of the other arcs; the arc position itself tracks the
         // finger unanimated so it stays glued to the touch.
         withAnimation(.easeOut(duration: 0.14)) { draggingID = id }
@@ -265,65 +265,67 @@ struct RadialScheduleDial: View {
     }
 
     private func updateDrag(at location: CGPoint, center: CGPoint) {
-        guard let id = draggingID else { return }
+        guard draggingID != nil else { return }
         let f = fraction(of: location, center: center)
         proposedStart = normalize(f - grabOffset)
-
-        let evs = sortedEvents
-        guard evs.count >= 2, let i = evs.firstIndex(where: { $0.id == id }) else {
-            prevCenter = normalize(proposedStart + draggedDuration(id) / 2)
-            return
-        }
-        let n = evs.count
-        let c = normalize(proposedStart + durationFraction(evs, i) / 2)
-
-        // Only test the neighbor in the direction of travel, so a fresh swap can't
-        // immediately reverse itself once the passed neighbor lands behind the arc.
-        if signedShortest(c - prevCenter) >= 0 {
-            let j = (i + 1) % n
-            let cf = normalize(frac(evs[j].time) + durationFraction(evs, j) / 2)
-            if crossedForward(prevCenter, c, cf) {
-                withAnimation(.snappy(duration: 0.18)) { swapForward(evs, i) }
-            }
-        } else {
-            let j = (i - 1 + n) % n
-            let cb = normalize(frac(evs[j].time) + durationFraction(evs, j) / 2)
-            if crossedBackward(prevCenter, c, cb) {
-                withAnimation(.snappy(duration: 0.18)) { swapBackward(evs, i) }
-            }
-        }
-        prevCenter = c
     }
 
     private func endDrag() {
-        // Drop the arc into its (already reordered) slot; the shared ArcBand identity lets
-        // it glide from the finger position to its final resting place.
+        commitBreak()
+        // Drop animation; if nothing was committed the arc glides back to its origin.
         withAnimation(.snappy(duration: 0.25)) { draggingID = nil }
     }
 
-    /// Swap the dragged event with the next one clockwise. The pair keeps its combined
-    /// span [dragged.start, afterNext.start): the next event slides back to the dragged
-    /// event's old start, and the dragged event follows by the next event's own duration —
-    /// so both keep their lengths and only the split between them moves.
-    private func swapForward(_ evs: [ScheduleEvent], _ i: Int) {
-        let n = evs.count
-        let e = evs[i]
-        let next = evs[(i + 1) % n]
-        let tE = dayMinutes(e.time)
-        let durNext = cwDistance(dayMinutes(next.time), dayMinutes(evs[(i + 2) % n].time))
-        onChangeStart(next.id, minutesToDate(tE))
-        onChangeStart(e.id, minutesToDate(tE + durNext))
+    /// On drop, insert the dragged event at the finger position by breaking whichever
+    /// event now encloses it into a kept head + a copied tail, preserving the dragged
+    /// event's own length and keeping every resulting piece ≥ `minDurationMinutes`.
+    /// Does nothing (the arc glides home) when there isn't room or it barely moved.
+    private func commitBreak() {
+        guard let id = draggingID else { return }
+        let evs = sortedEvents
+        guard evs.count >= 2, let s = evs.first(where: { $0.id == id }),
+              let iS = evs.firstIndex(where: { $0.id == id }) else { return }
+
+        // Ignore near-stationary drops so a plain press-and-release doesn't reshuffle.
+        guard circularDistance(normalize(proposedStart), frac(s.time)) >= 0.01 else { return }
+
+        // The dragged event's own length (minutes), preserved through the move.
+        let durS = cwDistance(dayMinutes(s.time), dayMinutes(evs[(iS + 1) % evs.count].time))
+
+        // Snap the finger position to the minute grid.
+        var startMin = Int((normalize(proposedStart) * 1440).rounded())
+        startMin = (((startMin / snapMinutes) * snapMinutes) % 1440 + 1440) % 1440
+
+        // The partition as it looks with the dragged event lifted out (its previous
+        // neighbor fills the vacated slot), so we break the event that truly encloses it.
+        let others = evs.filter { $0.id != id }.sorted { $0.time < $1.time }
+        guard let target = enclosing(startMin, in: others) else { return }
+
+        // Room for head (≥min) + the dragged event + tail (≥min)?
+        let minLen = minDurationMinutes
+        guard target.length >= 2 * minLen + durS else { return }
+
+        let head = min(max(cwDistance(target.start, startMin), minLen), target.length - minLen - durS)
+        let newStart = (target.start + head) % 1440
+        guard newStart != dayMinutes(s.time) else { return }
+        let tailStart = (newStart + durS) % 1440
+
+        onBreak(id, minutesToDate(newStart), target.event.id, minutesToDate(tailStart))
     }
 
-    /// Swap the dragged event with the previous one counter-clockwise (mirror of `swapForward`).
-    private func swapBackward(_ evs: [ScheduleEvent], _ i: Int) {
-        let n = evs.count
-        let e = evs[i]
-        let prev = evs[(i - 1 + n) % n]
-        let tP = dayMinutes(prev.time)
-        let durE = cwDistance(dayMinutes(e.time), dayMinutes(evs[(i + 1) % n].time))
-        onChangeStart(e.id, minutesToDate(tP))
-        onChangeStart(prev.id, minutesToDate(tP + durE))
+    /// The event in `others` (sorted by time) whose arc encloses `minute`, with that
+    /// arc's length and start in minutes. A lone event spans the whole ring.
+    private func enclosing(_ minute: Int, in others: [ScheduleEvent]) -> (event: ScheduleEvent, length: Int, start: Int)? {
+        let n = others.count
+        guard n > 0 else { return nil }
+        if n == 1 { return (others[0], 1440, dayMinutes(others[0].time)) }
+        for (i, e) in others.enumerated() {
+            let start = dayMinutes(e.time)
+            let length = cwDistance(start, dayMinutes(others[(i + 1) % n].time))
+            if cwDistance(start, minute) < length { return (e, length, start) }
+        }
+        let start = dayMinutes(others[0].time)
+        return (others[0], cwDistance(start, dayMinutes(others[1].time)), start)
     }
 
     private func eventStartFraction(_ id: ScheduleEvent.ID) -> CGFloat {
@@ -331,41 +333,8 @@ struct RadialScheduleDial: View {
         return frac(e.time)
     }
 
-    private func draggedDuration(_ id: ScheduleEvent.ID) -> CGFloat {
-        let evs = sortedEvents
-        guard let i = evs.firstIndex(where: { $0.id == id }) else { return 0 }
-        return durationFraction(evs, i)
-    }
-
-    /// Duration of the arc at sorted index `k` as a day fraction (wraps past midnight).
-    private func durationFraction(_ evs: [ScheduleEvent], _ k: Int) -> CGFloat {
-        let n = evs.count
-        guard n > 1 else { return 1 }
-        let s = frac(evs[k].time)
-        var en = frac(evs[(k + 1) % n].time)
-        if en <= s { en += 1 }
-        return en - s
-    }
-
-    /// True when the arc center moved from behind `target` to at/after it this frame.
-    private func crossedForward(_ prev: CGFloat, _ cur: CGFloat, _ target: CGFloat) -> Bool {
-        signedShortest(prev - target) < 0 && signedShortest(cur - target) >= 0
-    }
-
-    /// True when the arc center moved from ahead of `target` to at/before it this frame.
-    private func crossedBackward(_ prev: CGFloat, _ cur: CGFloat, _ target: CGFloat) -> Bool {
-        signedShortest(prev - target) > 0 && signedShortest(cur - target) <= 0
-    }
-
     /// Wrap a day fraction into [0, 1).
     private func normalize(_ f: CGFloat) -> CGFloat { f - floor(f) }
-
-    /// Signed shortest circular distance, in (-0.5, 0.5]; positive means `d` is clockwise-ahead.
-    private func signedShortest(_ d: CGFloat) -> CGFloat {
-        var x = d - floor(d)
-        if x > 0.5 { x -= 1 }
-        return x
-    }
 
     private func minutesToDate(_ minutes: Int) -> Date {
         let m = ((minutes % 1440) + 1440) % 1440
@@ -492,17 +461,14 @@ struct RadialScheduleDial: View {
     /// Opacity applied to the arcs that aren't being dragged, so the picked-up arc stands
     /// out while moving.
     private let dimmedOpacity: Double = 0.3
-    /// Opacity of the ghost placeholder that previews where the dragged arc will drop.
-    private let ghostOpacity: Double = 0.22
 
     /// One arc per event, from its start to the next event's start; the end is inset
     /// by `gap` to leave a visible gap. `end` may exceed 1 when the arc wraps past
     /// midnight — `ArcBand` renders it as one continuous band.
     ///
-    /// While an arc is being dragged the ring reflows to preview the resulting structure:
-    /// the other arcs are dimmed and shown at their live (already-reordered) positions, a
-    /// faint ghost marks the slot where the dragged arc will land, and the solid dragged
-    /// arc floats at `proposedStart` under the finger. Higher-`z` arcs render on top.
+    /// While an arc is being dragged the others dim in place and the solid dragged arc
+    /// floats at `proposedStart` under the finger, previewing where it will drop.
+    /// Higher-`z` arcs render on top.
     private func arcSegments() -> [Arc] {
         let evs = sortedEvents
         guard !evs.isEmpty else { return [] }
@@ -517,13 +483,8 @@ struct RadialScheduleDial: View {
             let ge = en - gap
 
             if e.id == draggingID {
-                // Ghost placeholder at the model slot — previews the drop position; it
-                // glides to a new slot each time a swap reorders the schedule.
-                if ge > s {
-                    result.append(Arc(id: "\(e.id)-ghost", start: s, end: ge, colorHex: e.colorHex,
-                                      thickness: arcWidth, opacity: ghostOpacity, floating: false, z: 1))
-                }
-                // Solid arc under the finger.
+                // Solid arc floating under the finger — previews where the event will be
+                // inserted; on drop it breaks the enclosing event into head + tail.
                 let fs = proposedStart
                 result.append(Arc(id: "\(e.id)-float", start: fs, end: fs + (en - s) - gap,
                                   colorHex: e.colorHex, thickness: selectedArcWidth, opacity: 1,
