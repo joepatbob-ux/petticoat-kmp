@@ -520,11 +520,12 @@ final class AppModel {
         return todaysTimeline[i].period
     }
 
-    /// Upcoming periods (after the current one) today, shown in the controller pager.
+    /// Upcoming periods — every period that still starts later today, so the pager
+    /// matches the saved schedule from now to end of day (wrapping correctly before the
+    /// first start, when the current period is the previous day's carryover).
     var upcomingPeriods: [TimelinePeriod] {
-        let t = todaysTimeline
-        guard let i = currentTimelineIndex, i + 1 < t.count else { return [] }
-        return t[(i + 1)...].map(\.period)
+        let now = minutesSinceMidnight(Date())
+        return todaysTimeline.filter { $0.minutes > now }.map(\.period)
     }
 
     /// Today's WeekDay index (0 = Monday … 6 = Sunday) from Calendar's 1=Sun…7=Sat.
@@ -630,13 +631,9 @@ final class AppModel {
     /// Resume the schedule, clearing any hold/vacation and restoring the
     /// current scheduled period's setpoints.
     func resumeSchedule() {
-        // Write both setpoints through a single array lookup (the `device` setter
-        // would rescan and copy the element once per property).
-        if let i = devices.firstIndex(where: { $0.id == device.id }) {
-            devices[i].keepMin = activeProfile.heatTo
-            devices[i].keepMax = activeProfile.coolTo
-        }
         withAnimation(.snappy) { controlMode = .schedule }
+        // Restore the setpoints of the schedule's current period.
+        syncScheduleSetpoints()
     }
 
     // MARK: - Schedules
@@ -644,7 +641,7 @@ final class AppModel {
     /// Select a schedule to run and snap the current setpoints to its active period.
     func selectSchedule(_ id: SchedulePreset.ID) {
         selectedScheduleID = id
-        applyCurrentPeriodSetpoints()
+        syncScheduleSetpoints()
     }
 
     /// Insert a new schedule or update an existing one (matched by id); a new one
@@ -656,7 +653,7 @@ final class AppModel {
             schedules.append(updated)
             selectedScheduleID = updated.id
         }
-        if activeSchedule?.id == updated.id { applyCurrentPeriodSetpoints() }
+        if activeSchedule?.id == updated.id { syncScheduleSetpoints() }
     }
 
     func duplicateSchedule(_ preset: SchedulePreset) {
@@ -667,12 +664,13 @@ final class AppModel {
     func deleteSchedule(_ id: SchedulePreset.ID) {
         schedules.removeAll { $0.id == id }
         if selectedScheduleID == id { selectedScheduleID = schedules.first?.id }
-        applyCurrentPeriodSetpoints()
+        syncScheduleSetpoints()
     }
 
     /// Push the active period's range onto the selected device's live setpoints, so the
-    /// current-period card reflects the running schedule. Only while following a schedule.
-    private func applyCurrentPeriodSetpoints() {
+    /// current-period card reflects the running schedule. Only while following a schedule
+    /// (a hold keeps its own held value). Call on appear and when the period changes.
+    func syncScheduleSetpoints() {
         guard controlMode == .schedule, let p = currentPeriod,
               let i = devices.firstIndex(where: { $0.id == device.id }) else { return }
         devices[i].keepMin = p.heatTo
@@ -688,7 +686,7 @@ final class AppModel {
 
     func selectProgram(_ id: ScheduleProgram.ID, kind: ScheduleKind) {
         selectedProgramID[kind] = id
-        applyCurrentPeriodSetpoints()
+        syncScheduleSetpoints()
     }
 
     func saveProgram(_ program: ScheduleProgram, kind: ScheduleKind) {
@@ -698,7 +696,7 @@ final class AppModel {
             programs[kind, default: []].append(program)
             selectedProgramID[kind] = program.id
         }
-        applyCurrentPeriodSetpoints()
+        syncScheduleSetpoints()
     }
 
     func duplicateProgram(_ program: ScheduleProgram, kind: ScheduleKind) {
@@ -709,7 +707,7 @@ final class AppModel {
     func deleteProgram(_ id: ScheduleProgram.ID, kind: ScheduleKind) {
         programs[kind]?.removeAll { $0.id == id }
         if selectedProgramID[kind] == id { selectedProgramID[kind] = programs[kind]?.first?.id }
-        applyCurrentPeriodSetpoints()
+        syncScheduleSetpoints()
     }
 
     /// Dismisses a spotlight card. When the last card is dismissed the Spotlight area

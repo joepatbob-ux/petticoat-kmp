@@ -43,6 +43,9 @@ struct ControlView: View {
         .scrollableWhenNeeded()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SMA.groupedBackground.ignoresSafeArea())
+        // Keep the editable current-period setpoints in step with the running schedule,
+        // so the card matches the saved schedule on appear and across period changes.
+        .task(id: model.currentPeriod?.id) { model.syncScheduleSetpoints() }
         .sheet(isPresented: $showMode) {
             ModeSheet()
         }
