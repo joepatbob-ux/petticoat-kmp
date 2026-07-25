@@ -332,6 +332,10 @@ struct ControllerSection: View {
     private var device: Device { model.device }
     private var pageCount: Int { model.upcomingPeriods.count + 1 }
 
+    /// Shared width for the leading control boxes so the preset switcher and the hold
+    /// button always match, whichever mode is showing.
+    private let controlBoxWidth: CGFloat = 92
+
     /// Whether the non-schedule card shows the preset switcher: Use Presets is on
     /// and we're not running a schedule.
     private var showsPresetBox: Bool {
@@ -408,7 +412,7 @@ struct ControllerSection: View {
                     .lineLimit(1)
             }
             .foregroundStyle(color)
-            .frame(width: 78, height: 56)
+            .frame(width: controlBoxWidth, height: 56)
             .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .accessibilityLabel("Preset: \(model.activeProfile.name)")
@@ -419,13 +423,17 @@ struct ControllerSection: View {
     /// edge while in hold mode.
     private var holdButton: some View {
         Button { showStatus = true } label: {
-            Text("Hold\n(1 Hour)")
-                .font(.footnote.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(SMA.destructive)
+            VStack(spacing: 3) {
+                Image(systemName: "hand.raised.fill")
+                    .font(.body.weight(.semibold))
+                Text("Hold\n(1 Hour)")
+                    .font(.caption2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(SMA.destructive)
         }
         .buttonStyle(.plain)
-        .frame(width: 78)
+        .frame(width: controlBoxWidth)
         .frame(maxHeight: .infinity)
         .background(SMA.destructive.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
@@ -447,7 +455,7 @@ struct ControllerSection: View {
                     HStack(spacing: 8) {
                         currentPeriodCard.frame(width: cardWidth).id(0)
                         ForEach(Array(model.upcomingPeriods.enumerated()), id: \.element.id) { index, period in
-                            PeriodCard(period: period).frame(width: cardWidth).id(index + 1)
+                            PeriodCard(period: period, usePresets: device.usePresets).frame(width: cardWidth).id(index + 1)
                         }
                     }
                     .scrollTargetLayout()
@@ -513,16 +521,15 @@ struct ControllerSection: View {
         }
     }
 
-    /// Leading element of the schedule current-period card: the active preset's icon +
-    /// title when Use Presets is on, otherwise the setpoint label. Hold overlays its own
-    /// box, so the inline leading is empty there.
+    /// Leading element of the schedule current-period card. Mirrors the main
+    /// controller's convention: the preset-switcher box when Use Presets is on,
+    /// otherwise the setpoint label. Hold overlays its own box, so the inline leading
+    /// is empty there.
     @ViewBuilder private var currentPeriodLeading: some View {
         if model.controlMode == .hold {
             EmptyView()
         } else if device.usePresets {
-            profileChip(symbol: model.activeProfile.symbol,
-                        colorHex: model.activeProfile.colorHex,
-                        name: model.activeProfile.name)
+            presetMenu
         } else {
             Text(device.systemMode.setpointLabel)
                 .font(.footnote.weight(.semibold))
@@ -634,12 +641,24 @@ struct ControllerSection: View {
 /// Upcoming schedule period — a read-only preview card (no setpoint control).
 private struct PeriodCard: View {
     let period: TimelinePeriod
+    /// On a profile schedule every period leads with its profile icon + title, matching
+    /// the current-period card; otherwise it shows the period name alone.
+    var usePresets: Bool
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(period.name)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(SMA.labelSecondary)
+            if usePresets {
+                HStack(spacing: 8) {
+                    ProfileIcon(symbol: period.symbol, colorHex: period.colorHex, size: 30)
+                    Text(period.name)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(SMA.labelPrimary)
+                }
+            } else {
+                Text(period.name)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SMA.labelSecondary)
+            }
             Spacer(minLength: 8)
             HStack(spacing: 8) {
                 Text("\(period.heatTo)")

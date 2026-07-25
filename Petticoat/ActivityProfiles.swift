@@ -118,6 +118,7 @@ struct EditActivityProfileView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var profile: ActivityProfile
+    @State private var editingName = false
     let onSave: (ActivityProfile) -> Void
 
     init(profile: ActivityProfile, onSave: @escaping (ActivityProfile) -> Void) {
@@ -134,13 +135,14 @@ struct EditActivityProfileView: View {
                         Text(profile.name.isEmpty ? "New Profile" : profile.name)
                             .font(.title2.weight(.semibold))
                             .foregroundStyle(SMA.labelPrimary)
-                        NavigationLink {
-                            ProfileNameView(name: $profile.name, symbol: $profile.symbol, colorHex: $profile.colorHex)
-                        } label: {
+                        // Plain button (not a NavigationLink) so it stays centered with
+                        // no row chevron; navigation is driven programmatically below.
+                        Button { editingName = true } label: {
                             Text("Edit")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(SMA.accent)
                         }
+                        .buttonStyle(.plain)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
@@ -168,6 +170,9 @@ struct EditActivityProfileView: View {
                 }
             }
             .groupedListChrome()
+            .navigationDestination(isPresented: $editingName) {
+                ProfileNameView(name: $profile.name, symbol: $profile.symbol, colorHex: $profile.colorHex)
+            }
             .navigationTitle("Edit Activity Profile")
             .inlineNavTitle()
             .presentationDragIndicator(.visible)

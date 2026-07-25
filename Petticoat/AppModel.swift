@@ -510,7 +510,13 @@ final class AppModel {
         activityProfiles.removeAll { $0.id == profile.id }
     }
 
-    func setVacation(_ on: Bool) {
+    /// Enter or leave vacation mode. When entering with an assigned profile, the
+    /// device holds that profile's setpoints; otherwise it keeps its current setback.
+    func setVacation(_ on: Bool, profile: ActivityProfile? = nil) {
+        if on, let profile, let i = devices.firstIndex(where: { $0.id == device.id }) {
+            devices[i].keepMin = profile.heatTo
+            devices[i].keepMax = profile.coolTo
+        }
         withAnimation(.snappy) { controlMode = on ? .vacation : .schedule }
     }
 

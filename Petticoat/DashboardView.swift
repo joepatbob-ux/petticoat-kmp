@@ -174,7 +174,10 @@ struct DashboardThermostatCard: View {
             }
             .listRowBackground(SMA.card)
             .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14))
+            // Trailing inset matches controllerCard()'s .padding(.horizontal, 18) so the
+            // shared SetpointStepper sits the same distance from the card's trailing edge
+            // here as it does on the Control screen's single and schedule cards.
+            .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 18))
 
             if sensorsExpanded && model.showSensorsOnDashboard {
                 ForEach(device.sensors) { sensor in
