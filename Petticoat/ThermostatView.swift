@@ -5,6 +5,7 @@ struct ControlView: View {
     @Environment(AppModel.self) private var model
 
     @State private var showMode = false
+    @State private var showSensors = false
 
     private var device: Device { model.device }
 
@@ -18,8 +19,11 @@ struct ControlView: View {
             )
             .padding(.top, 8)
 
-            SensorAveragePill(summary: device.sensorSummary)
-                .padding(.top, 20)
+            Button { showSensors = true } label: {
+                SensorAveragePill(summary: device.sensorSummary)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 20)
 
             Spacer()
 
@@ -48,6 +52,9 @@ struct ControlView: View {
         .task(id: model.currentPeriod?.id) { model.syncScheduleSetpoints() }
         .sheet(isPresented: $showMode) {
             ModeSheet()
+        }
+        .sheet(isPresented: $showSensors) {
+            NavigationStack { SensorsView() }
         }
     }
 }
