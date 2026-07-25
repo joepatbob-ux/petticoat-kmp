@@ -283,13 +283,31 @@ enum FanMode: String, CaseIterable, Identifiable {
 
 /// One period in the day's schedule timeline, shown as a swipeable controller page.
 struct TimelinePeriod: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var name: String
     var symbol: String
     var colorHex: UInt
     var heatTo: Int
     var coolTo: Int
     var startText: String
+
+    init(id: UUID = UUID(), name: String, symbol: String, colorHex: UInt,
+         heatTo: Int, coolTo: Int, startText: String) {
+        self.id = id
+        self.name = name
+        self.symbol = symbol
+        self.colorHex = colorHex
+        self.heatTo = heatTo
+        self.coolTo = coolTo
+        self.startText = startText
+    }
+
+    /// Derived from a schedule event, preserving the event's identity so the pager's
+    /// cards keep stable identity as the timeline recomputes.
+    init(from e: ScheduleEvent) {
+        self.init(id: e.id, name: e.name, symbol: e.symbol, colorHex: e.colorHex,
+                  heatTo: e.heatTo, coolTo: e.coolTo, startText: e.timeText)
+    }
 }
 
 /// The orderable sections of the dashboard.
@@ -423,12 +441,101 @@ final class AppModel {
     var activeProfile = ActivityProfile.samples[1]   // Home
     /// All activity profiles (the Presets list). Single source of truth.
     var activityProfiles: [ActivityProfile] = ActivityProfile.samples
-    /// Upcoming schedule periods (after the current one) shown in the controller pager.
-    var upcomingPeriods: [TimelinePeriod] = [
-        .init(name: "Away",  symbol: "figure.walk",     colorHex: 0x30B0C7, heatTo: 62, coolTo: 80, startText: "8:00 AM"),
-        .init(name: "Home",  symbol: "house.fill",      colorHex: 0xFF9500, heatTo: 70, coolTo: 74, startText: "5:30 PM"),
-        .init(name: "Sleep", symbol: "bed.double.fill", colorHex: 0xAF52DE, heatTo: 66, coolTo: 72, startText: "10:00 PM"),
+    /// Saved profile-based schedules (the "Schedules" list, used when Use Presets is on).
+    var schedules: [SchedulePreset] = SchedulePreset.samples()
+    /// The schedule currently driving the controller timeline (falls back to the first).
+    var selectedScheduleID: SchedulePreset.ID?
+    /// Non-preset setpoint programs, one selectable list per mode (Use Presets off).
+    var programs: [ScheduleKind: [ScheduleProgram]] = [
+        .heat: ScheduleProgram.samples(for: .heat),
+        .cool: ScheduleProgram.samples(for: .cool),
+        .auto: ScheduleProgram.samples(for: .auto),
     ]
+    /// The selected program per mode.
+    var selectedProgramID: [ScheduleKind: ScheduleProgram.ID] = [:]
+
+    /// The active schedule — the selected one, or the first available.
+    var activeSchedule: SchedulePreset? {
+        schedules.first { $0.id == selectedScheduleID } ?? schedules.first
+    }
+
+    /// Which non-preset program kind the current system mode uses (nil when off).
+    private var activeKind: ScheduleKind? {
+        switch device.systemMode {
+        case .heat, .auxHeat: return .heat
+        case .cool: return .cool
+        case .auto: return .auto
+        case .off: return nil
+        }
+    }
+
+    /// The active non-preset program for the current mode.
+    var activeProgram: ScheduleProgram? {
+        guard let kind = activeKind, let list = programs[kind], !list.isEmpty else { return nil }
+        return list.first { $0.id == selectedProgramID[kind] } ?? list.first
+    }
+
+    /// Name shown wherever the running schedule is referenced — the active preset
+    /// schedule when Use Presets is on, otherwise the active program for the mode.
+    var scheduleName: String {
+        let name = device.usePresets ? activeSchedule?.name : activeProgram?.name
+        return name ?? device.scheduleName
+    }
+
+    /// Today's timeline — (start minutes, period) pairs sorted by time — drawn from the
+    /// active preset schedule or, when Use Presets is off, the active setpoint program.
+    private var todaysTimeline: [(minutes: Int, period: TimelinePeriod)] {
+        let today = todayWeekdayIndex()
+        if device.usePresets {
+            guard let schedule = activeSchedule, !schedule.groups.isEmpty else { return [] }
+            let group = schedule.groups.first { $0.days.contains(today) } ?? schedule.groups[0]
+            return group.events.sorted { $0.time < $1.time }
+                .map { (minutesSinceMidnight($0.time), TimelinePeriod(from: $0)) }
+        } else {
+            guard let program = activeProgram, !program.groups.isEmpty else { return [] }
+            let group = program.groups.first { $0.days.contains(today) } ?? program.groups[0]
+            return group.events.sorted { $0.time < $1.time }
+                .map { (minutesSinceMidnight($0.time), programPeriod($0)) }
+        }
+    }
+
+    /// A bare setpoint program event as a timeline period (no profile icon/name).
+    private func programPeriod(_ e: ProgramEvent) -> TimelinePeriod {
+        TimelinePeriod(id: e.id, name: "", symbol: "", colorHex: 0,
+                       heatTo: e.heatTo, coolTo: e.coolTo, startText: e.timeText)
+    }
+
+    /// Index of the period running right now — the last one that has started; before the
+    /// first start we're still in the previous day's final period.
+    private var currentTimelineIndex: Int? {
+        let t = todaysTimeline
+        guard !t.isEmpty else { return nil }
+        let now = minutesSinceMidnight(Date())
+        return t.lastIndex { $0.minutes <= now } ?? (t.count - 1)
+    }
+
+    /// The period running right now, derived from the active schedule or program.
+    var currentPeriod: TimelinePeriod? {
+        guard let i = currentTimelineIndex else { return nil }
+        return todaysTimeline[i].period
+    }
+
+    /// Upcoming periods (after the current one) today, shown in the controller pager.
+    var upcomingPeriods: [TimelinePeriod] {
+        let t = todaysTimeline
+        guard let i = currentTimelineIndex, i + 1 < t.count else { return [] }
+        return t[(i + 1)...].map(\.period)
+    }
+
+    /// Today's WeekDay index (0 = Monday … 6 = Sunday) from Calendar's 1=Sun…7=Sat.
+    private func todayWeekdayIndex() -> Int {
+        (Calendar.current.component(.weekday, from: Date()) + 5) % 7
+    }
+
+    private func minutesSinceMidnight(_ date: Date) -> Int {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+    }
 
     /// Adjusts the comfort setpoint. In Auto this moves one bound of the range and,
     /// honoring the two-degree deadband, pushes the opposite bound when they'd
@@ -530,6 +637,79 @@ final class AppModel {
             devices[i].keepMax = activeProfile.coolTo
         }
         withAnimation(.snappy) { controlMode = .schedule }
+    }
+
+    // MARK: - Schedules
+
+    /// Select a schedule to run and snap the current setpoints to its active period.
+    func selectSchedule(_ id: SchedulePreset.ID) {
+        selectedScheduleID = id
+        applyCurrentPeriodSetpoints()
+    }
+
+    /// Insert a new schedule or update an existing one (matched by id); a new one
+    /// becomes selected.
+    func saveSchedule(_ updated: SchedulePreset) {
+        if let i = schedules.firstIndex(where: { $0.id == updated.id }) {
+            schedules[i] = updated
+        } else {
+            schedules.append(updated)
+            selectedScheduleID = updated.id
+        }
+        if activeSchedule?.id == updated.id { applyCurrentPeriodSetpoints() }
+    }
+
+    func duplicateSchedule(_ preset: SchedulePreset) {
+        guard let i = schedules.firstIndex(where: { $0.id == preset.id }) else { return }
+        schedules.insert(SchedulePreset(name: preset.name + " Copy", groups: preset.groups), at: i + 1)
+    }
+
+    func deleteSchedule(_ id: SchedulePreset.ID) {
+        schedules.removeAll { $0.id == id }
+        if selectedScheduleID == id { selectedScheduleID = schedules.first?.id }
+        applyCurrentPeriodSetpoints()
+    }
+
+    /// Push the active period's range onto the selected device's live setpoints, so the
+    /// current-period card reflects the running schedule. Only while following a schedule.
+    private func applyCurrentPeriodSetpoints() {
+        guard controlMode == .schedule, let p = currentPeriod,
+              let i = devices.firstIndex(where: { $0.id == device.id }) else { return }
+        devices[i].keepMin = p.heatTo
+        devices[i].keepMax = p.coolTo
+    }
+
+    // MARK: - Programs (non-preset schedules)
+
+    /// The program shown as selected for a mode (the chosen one, or the first).
+    func activeProgramID(for kind: ScheduleKind) -> ScheduleProgram.ID? {
+        selectedProgramID[kind] ?? programs[kind]?.first?.id
+    }
+
+    func selectProgram(_ id: ScheduleProgram.ID, kind: ScheduleKind) {
+        selectedProgramID[kind] = id
+        applyCurrentPeriodSetpoints()
+    }
+
+    func saveProgram(_ program: ScheduleProgram, kind: ScheduleKind) {
+        if let i = programs[kind]?.firstIndex(where: { $0.id == program.id }) {
+            programs[kind]?[i] = program
+        } else {
+            programs[kind, default: []].append(program)
+            selectedProgramID[kind] = program.id
+        }
+        applyCurrentPeriodSetpoints()
+    }
+
+    func duplicateProgram(_ program: ScheduleProgram, kind: ScheduleKind) {
+        guard let i = programs[kind]?.firstIndex(where: { $0.id == program.id }) else { return }
+        programs[kind]?.insert(ScheduleProgram(name: program.name + " Copy", groups: program.groups), at: i + 1)
+    }
+
+    func deleteProgram(_ id: ScheduleProgram.ID, kind: ScheduleKind) {
+        programs[kind]?.removeAll { $0.id == id }
+        if selectedProgramID[kind] == id { selectedProgramID[kind] = programs[kind]?.first?.id }
+        applyCurrentPeriodSetpoints()
     }
 
     /// Dismisses a spotlight card. When the last card is dismissed the Spotlight area

@@ -442,7 +442,7 @@ struct ControllerSection: View {
 
     private var scheduleController: some View {
         VStack(spacing: 10) {
-            Text("Schedule: \(device.scheduleName)")
+            Text("Schedule: \(model.scheduleName)")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(SMA.labelSecondary)
 
@@ -529,9 +529,10 @@ struct ControllerSection: View {
         if model.controlMode == .hold {
             EmptyView()
         } else if device.usePresets {
-            profileChip(symbol: model.activeProfile.symbol,
-                        colorHex: model.activeProfile.colorHex,
-                        name: model.activeProfile.name)
+            let period = model.currentPeriod
+            profileChip(symbol: period?.symbol ?? model.activeProfile.symbol,
+                        colorHex: period?.colorHex ?? model.activeProfile.colorHex,
+                        name: period?.name ?? model.activeProfile.name)
         } else {
             Text(device.systemMode.setpointLabel)
                 .font(.footnote.weight(.semibold))
@@ -789,7 +790,7 @@ struct ControllerStatusSheet: View {
         case .hold:     "You've adjusted the temperature, overriding the schedule until the next change."
         case .activity: "This activity profile is setting your comfort range."
         case .vacation: "Holding an energy-saving range while you're away."
-        case .schedule: "Your thermostat is following the \(model.device.scheduleName) schedule."
+        case .schedule: "Your thermostat is following the \(model.scheduleName) schedule."
         case .standard: "The schedule is off. Your set temperatures hold until you change them."
         }
     }

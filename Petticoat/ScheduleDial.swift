@@ -462,17 +462,55 @@ struct RadialScheduleDial: View {
     /// out while moving.
     private let dimmedOpacity: Double = 0.3
 
+    /// Geometry (day fractions) of the live break preview while dragging: the enclosing
+    /// event split into a kept head + a copied tail, with the dragged arc between them.
+    private struct BreakPreview {
+        let brokenID: ScheduleEvent.ID
+        let headStart: CGFloat
+        let floatStart: CGFloat
+        let tailStart: CGFloat
+        let tailEnd: CGFloat
+    }
+
+    /// The break that would result from dropping right now — nil when the finger isn't
+    /// over a breakable arc or there's no room for head + dragged + tail (each ≥ min).
+    /// Continuous (not 15-min snapped) so the preview tracks the finger smoothly; the
+    /// actual commit in `commitBreak` snaps to the grid.
+    private var proposedBreak: BreakPreview? {
+        guard let id = draggingID else { return nil }
+        let evs = sortedEvents
+        guard evs.count >= 2, let iS = evs.firstIndex(where: { $0.id == id }) else { return nil }
+        let durS = cwDistance(dayMinutes(evs[iS].time), dayMinutes(evs[(iS + 1) % evs.count].time))
+        let fingerMin = Int((Double(normalize(proposedStart)) * 1440).rounded())
+        let others = evs.filter { $0.id != id }.sorted { $0.time < $1.time }
+        guard let target = enclosing(fingerMin, in: others) else { return nil }
+        let minLen = minDurationMinutes
+        guard target.length >= 2 * minLen + durS else { return nil }
+        var rawHead = fingerMin - target.start
+        if rawHead < 0 { rawHead += 1440 }
+        let head = min(max(rawHead, minLen), target.length - minLen - durS)
+        let tX = CGFloat(target.start)
+        return BreakPreview(
+            brokenID: target.event.id,
+            headStart: tX / 1440,
+            floatStart: (tX + CGFloat(head)) / 1440,
+            tailStart: (tX + CGFloat(head + durS)) / 1440,
+            tailEnd: (tX + CGFloat(target.length)) / 1440
+        )
+    }
+
     /// One arc per event, from its start to the next event's start; the end is inset
     /// by `gap` to leave a visible gap. `end` may exceed 1 when the arc wraps past
     /// midnight — `ArcBand` renders it as one continuous band.
     ///
-    /// While an arc is being dragged the others dim in place and the solid dragged arc
-    /// floats at `proposedStart` under the finger, previewing where it will drop.
-    /// Higher-`z` arcs render on top.
+    /// While dragging, the others dim in place, the enclosing event splits into a dimmed
+    /// head + copied tail (see `proposedBreak`), and the solid dragged arc floats in the
+    /// gap between them — a live preview of the drop. Higher-`z` arcs render on top.
     private func arcSegments() -> [Arc] {
         let evs = sortedEvents
         guard !evs.isEmpty else { return [] }
         let dragging = draggingID != nil
+        let preview = proposedBreak
         var result: [Arc] = []
         for (i, e) in evs.enumerated() {
             let selected = e.id == selectedEvent?.id
@@ -483,12 +521,21 @@ struct RadialScheduleDial: View {
             let ge = en - gap
 
             if e.id == draggingID {
-                // Solid arc floating under the finger — previews where the event will be
-                // inserted; on drop it breaks the enclosing event into head + tail.
-                let fs = proposedStart
-                result.append(Arc(id: "\(e.id)-float", start: fs, end: fs + (en - s) - gap,
+                // Solid dragged arc: snapped into the previewed break gap, or glued to the
+                // finger when no break is possible.
+                let fs = preview?.floatStart ?? proposedStart
+                let fe = preview.map { $0.tailStart - gap } ?? (fs + (en - s) - gap)
+                result.append(Arc(id: "\(e.id)-float", start: fs, end: fe,
                                   colorHex: e.colorHex, thickness: selectedArcWidth, opacity: 1,
                                   floating: true, z: 3))
+            } else if let preview, e.id == preview.brokenID {
+                // The enclosing event previews its split: kept head + copied tail.
+                result.append(Arc(id: "\(e.id)-head", start: preview.headStart, end: preview.floatStart - gap,
+                                  colorHex: e.colorHex, thickness: arcWidth, opacity: dimmedOpacity,
+                                  floating: false, z: 0))
+                result.append(Arc(id: "\(e.id)-tail", start: preview.tailStart, end: preview.tailEnd - gap,
+                                  colorHex: e.colorHex, thickness: arcWidth, opacity: dimmedOpacity,
+                                  floating: false, z: 0))
             } else {
                 guard ge > s else { continue }
                 let thickness = (selected && !dragging) ? selectedArcWidth : arcWidth

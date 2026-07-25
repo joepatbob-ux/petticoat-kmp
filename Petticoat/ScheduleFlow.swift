@@ -8,6 +8,11 @@ struct SchedulePreset: Identifiable, Hashable {
     var name: String
     /// The schedule itself: one or more day groups, each with its own events.
     var groups: [ScheduleDayGroup] = [ScheduleDayGroup(days: Set(0..<7), events: ScheduleEvent.samples())]
+
+    /// Default saved schedules, all week on the sample events.
+    static func samples() -> [SchedulePreset] {
+        [SchedulePreset(name: "Comfort"), SchedulePreset(name: "Eco")]
+    }
 }
 
 /// A set of days sharing the same list of events. A schedule is one or more of
@@ -64,59 +69,67 @@ struct ScheduleEvent: Identifiable, Hashable {
 
 // MARK: - Presets list (Activity Schedule / Schedules)
 
-/// A radio-select list of schedule presets with a per-row menu and an add button.
+/// A radio-select list of schedule presets. Each row selects the running schedule;
+/// tapping it (or the Edit swipe) drills into the editor. Swipe also offers Duplicate
+/// and Delete; a "+" adds a new one.
 struct SchedulePresetsList: View {
     let title: String
 
-    @State private var presets: [SchedulePreset]
-    @State private var selection: UUID?
-    /// Drives the create/edit sheet. A preset whose id isn't in `presets` yet is a
-    /// new one (create); an existing id edits in place. One sheet avoids the
-    /// stacked-`.sheet` presentation bug.
+    @Environment(AppModel.self) private var model
+    /// Drives the drill-in editor. A preset whose id isn't in the model yet is a new one
+    /// (create); an existing id edits in place.
     @State private var editorPreset: SchedulePreset?
 
-    init(title: String, presets: [String]) {
-        self.title = title
-        let items = presets.map { SchedulePreset(name: $0) }
-        _presets = State(initialValue: items)
-        _selection = State(initialValue: items.first?.id)
-    }
+    /// The schedule shown as selected (the model's active one).
+    private var selectedID: SchedulePreset.ID? { model.activeSchedule?.id }
 
     var body: some View {
         List {
             Section {
-                ForEach(presets) { preset in
+                ForEach(model.schedules) { preset in
                     HStack(spacing: 12) {
                         // Sibling controls with .borderless button styles so the List
-                        // hit-tests the row selection and the menu independently — a
-                        // Menu nested in a tappable row otherwise leaks its first
-                        // action ("Edit") to row-body taps.
+                        // hit-tests the radio and the drill-in independently.
                         Button {
-                            selection = preset.id
+                            model.selectSchedule(preset.id)
                         } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: selection == preset.id ? "largecircle.fill.circle" : "circle")
-                                    .font(.title3)
-                                    .foregroundStyle(selection == preset.id ? SMA.accent : SMA.labelSecondary)
-                                    .accessibilityHidden(true)
+                            Image(systemName: selectedID == preset.id ? "largecircle.fill.circle" : "circle")
+                                .font(.title3)
+                                .foregroundStyle(selectedID == preset.id ? SMA.accent : SMA.labelSecondary)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Select \(preset.name)")
+                        .accessibilityAddTraits(selectedID == preset.id ? [.isSelected] : [])
+
+                        Button {
+                            editorPreset = preset
+                        } label: {
+                            HStack {
                                 Text(preset.name)
                                     .foregroundStyle(SMA.labelPrimary)
                                 Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(SMA.labelSecondary)
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityAddTraits(selection == preset.id ? [.isSelected] : [])
-
-                        Menu {
-                            Button("Edit", systemImage: "pencil") { editorPreset = preset }
-                            Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(preset) }
-                            Button("Delete", systemImage: "trash", role: .destructive) { delete(preset) }
-                        } label: {
-                            EllipsisMenuLabel()
+                        .accessibilityLabel("Edit \(preset.name)")
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { model.deleteSchedule(preset.id) } label: {
+                            Label("Delete", systemImage: "trash")
                         }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("More options for \(preset.name)")
+                        Button { model.duplicateSchedule(preset) } label: {
+                            Label("Duplicate", systemImage: "plus.square.on.square")
+                        }
+                        .tint(SMA.accent)
+                        Button { editorPreset = preset } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(.gray)
                     }
                 }
             }
@@ -132,26 +145,14 @@ struct SchedulePresetsList: View {
                 Button { editorPreset = SchedulePreset(name: "") } label: { Image(systemName: "plus") }
             }
         }
-        .sheet(item: $editorPreset) { draft in
-            ScheduleEditorView(preset: draft) { result in
-                if let i = presets.firstIndex(where: { $0.id == result.id }) {
-                    presets[i] = result          // existing preset: edit in place
-                } else {
-                    presets.append(result)       // new preset: add and select it
-                    selection = result.id
-                }
-            }
+        .navigationDestination(item: $editorPreset) { draft in
+            let existing = model.schedules.contains { $0.id == draft.id }
+            ScheduleEditorView(
+                preset: draft,
+                onSave: { model.saveSchedule($0) },
+                onDelete: existing ? { model.deleteSchedule(draft.id) } : nil
+            )
         }
-    }
-
-    private func duplicate(_ preset: SchedulePreset) {
-        guard let i = presets.firstIndex(where: { $0.id == preset.id }) else { return }
-        presets.insert(SchedulePreset(name: preset.name + " Copy", groups: preset.groups), at: i + 1)
-    }
-
-    private func delete(_ preset: SchedulePreset) {
-        presets.removeAll { $0.id == preset.id }
-        if selection == preset.id { selection = presets.first?.id }
     }
 }
 
@@ -163,156 +164,173 @@ struct ScheduleEditorView: View {
 
     @State private var preset: SchedulePreset
     @State private var selectedEventID: ScheduleEvent.ID?
-    @State private var showingDetails = false
+    /// Which day groups have their event details expanded — tracked per group so each
+    /// card's "Show Details" is independent.
+    @State private var detailGroups: Set<ScheduleDayGroup.ID> = []
     @State private var addTarget: GroupTarget?
     @State private var editTarget: EventTarget?
     @State private var timeTarget: EventTarget?
     let onSave: (SchedulePreset) -> Void
+    /// Present when editing an existing schedule — drives the Delete action. Nil while
+    /// creating a new one.
+    var onDelete: (() -> Void)?
 
     private let minEvents = 1
     private let maxEvents = 8
 
-    init(preset: SchedulePreset, onSave: @escaping (SchedulePreset) -> Void) {
+    init(preset: SchedulePreset, onSave: @escaping (SchedulePreset) -> Void, onDelete: (() -> Void)? = nil) {
         _preset = State(initialValue: preset)
         _selectedEventID = State(initialValue: preset.groups.first?.events.first?.id)
         self.onSave = onSave
+        self.onDelete = onDelete
     }
 
-    private var isNew: Bool { preset.name.trimmingCharacters(in: .whitespaces).isEmpty }
-
     var body: some View {
-        NavigationStack {
-            List {
+        List {
+            Section {
+                TextField("Name", text: $preset.name)
+            }
+
+            ForEach(preset.groups) { group in
                 Section {
-                    TextField("Name", text: $preset.name)
-                }
+                    DayPicker(days: group.days) { toggleDay($0, in: group.id) }
 
-                ForEach(preset.groups) { group in
-                    Section {
-                        DayPicker(days: group.days) { toggleDay($0, in: group.id) }
-
-                        RadialScheduleDial(
-                            events: group.events,
-                            selectedID: selectedEventID,
-                            onChangeStart: { id, newTime in setEventTime(id, to: newTime) },
-                            onSelect: { id in selectedEventID = id },
-                            onRequestManualTime: { id in
-                                if let event = group.events.first(where: { $0.id == id }) {
-                                    timeTarget = EventTarget(groupID: group.id, event: event)
-                                }
-                            },
-                            onBreak: { draggedID, newStart, brokenID, tailStart in
-                                breakEvent(draggedID, newStart: newStart, breaking: brokenID,
-                                           tailStart: tailStart, in: group.id)
+                    RadialScheduleDial(
+                        events: group.events,
+                        selectedID: selectedEventID,
+                        onChangeStart: { id, newTime in setEventTime(id, to: newTime) },
+                        onSelect: { id in selectedEventID = id },
+                        onRequestManualTime: { id in
+                            if let event = group.events.first(where: { $0.id == id }) {
+                                timeTarget = EventTarget(groupID: group.id, event: event)
                             }
-                        )
-                        .frame(height: 340)
+                        },
+                        onBreak: { draggedID, newStart, brokenID, tailStart in
+                            breakEvent(draggedID, newStart: newStart, breaking: brokenID,
+                                       tailStart: tailStart, in: group.id)
+                        }
+                    )
+                    .frame(height: 340)
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(SMA.card)
+                    .listRowSeparator(.hidden)
+
+                    HStack {
+                        roundIconButton("trash", tint: SMA.destructive, label: "Remove Event") {
+                            removeSelectedEvent(in: group.id)
+                        }
+                        .disabled(group.events.count <= minEvents)
+
+                        Spacer()
+
+                        let expanded = detailGroups.contains(group.id)
+                        Button {
+                            withAnimation(.snappy) {
+                                if expanded { detailGroups.remove(group.id) } else { detailGroups.insert(group.id) }
+                            }
+                        } label: {
+                            Text(expanded ? "Hide Details" : "Show Details")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(SMA.accent)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(expanded ? "Hide event details" : "Show event details")
+
+                        Spacer()
+
+                        roundIconButton("plus", tint: SMA.accent, label: "Add Event") {
+                            addTarget = GroupTarget(id: group.id)
+                        }
+                        .disabled(group.events.count >= maxEvents)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .listRowBackground(SMA.card)
+                    .listRowSeparator(.hidden)
+
+                    if detailGroups.contains(group.id) {
+                        ForEach(group.events) { event in
+                            eventRow(event, in: group)
+                        }
+                        .onDelete { deleteEvents($0, from: group.id) }
+                    }
+                } header: {
+                    HStack {
+                        Text(WeekDay.summary(group.days))
+                            .font(.headline)
+                            .foregroundStyle(SMA.labelPrimary)
+                        Spacer()
+                        Menu {
+                            Button("Duplicate Day Group", systemImage: "plus.square.on.square") {
+                                duplicateGroup(group.id)
+                            }
+                            Button("Remove Day Group", systemImage: "trash", role: .destructive) {
+                                removeGroup(group.id)
+                            }
+                            .disabled(preset.groups.count <= 1)
+                        } label: {
+                            EllipsisMenuLabel(outlined: true)
+                        }
+                        .accessibilityLabel("Day group options")
+                    }
+                    .textCase(nil)
+                }
+            }
+
+            Section {
+                Button {
+                    addDayGroup()
+                } label: {
+                    Text("Create New Day Group")
                         .frame(maxWidth: .infinity)
-                        .listRowBackground(SMA.card)
-                        .listRowSeparator(.hidden)
-
-                        HStack {
-                            roundIconButton("trash", tint: SMA.destructive, label: "Remove Event") {
-                                removeSelectedEvent(in: group.id)
-                            }
-                            .disabled(group.events.count <= minEvents)
-
-                            Spacer()
-
-                            Button {
-                                withAnimation(.snappy) { showingDetails.toggle() }
-                            } label: {
-                                Text(showingDetails ? "Hide Details" : "Show Details")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(SMA.accent)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(showingDetails ? "Hide event details" : "Show event details")
-
-                            Spacer()
-
-                            roundIconButton("plus", tint: SMA.accent, label: "Add Event") {
-                                addTarget = GroupTarget(id: group.id)
-                            }
-                            .disabled(group.events.count >= maxEvents)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .listRowBackground(SMA.card)
-                        .listRowSeparator(.hidden)
-
-                        if showingDetails {
-                            ForEach(group.events) { event in
-                                eventRow(event, in: group)
-                            }
-                            .onDelete { deleteEvents($0, from: group.id) }
-                        }
-                    } header: {
-                        HStack {
-                            Text(WeekDay.summary(group.days))
-                                .font(.headline)
-                                .foregroundStyle(SMA.labelPrimary)
-                            Spacer()
-                            Menu {
-                                Button("Remove Day Group", systemImage: "trash", role: .destructive) {
-                                    removeGroup(group.id)
-                                }
-                                .disabled(preset.groups.count <= 1)
-                            } label: {
-                                EllipsisMenuLabel(outlined: true)
-                            }
-                            .accessibilityLabel("Day group options")
-                        }
-                        .textCase(nil)
-                    }
+                        .foregroundStyle(SMA.accent)
                 }
+            }
 
+            if let onDelete {
                 Section {
-                    Button {
-                        addDayGroup()
-                    } label: {
-                        Text("Create New Day Group")
-                            .frame(maxWidth: .infinity)
-                            .foregroundStyle(SMA.accent)
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .listRowBackground(SMA.card)
-            .background(SMA.groupedBackground.ignoresSafeArea())
-            .navigationTitle(isNew ? "Create Schedule" : "Edit Schedule")
-            .inlineNavTitle()
-            .presentationDragIndicator(.visible)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    EditorCancelButton { dismiss() }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {} label: { Image(systemName: "questionmark.bubble") }
-                        .accessibilityLabel("Help and Support")
-                    EditorSaveButton {
-                        onSave(preset)
+                    Button(role: .destructive) {
+                        onDelete()
                         dismiss()
+                    } label: {
+                        Text("Delete Schedule")
+                            .frame(maxWidth: .infinity)
+                            .foregroundStyle(SMA.destructive)
                     }
                 }
             }
-            .sheet(item: $addTarget) { target in
-                ScheduleEventEditor(title: "Add Event", initial: nil, profiles: model.activityProfiles) { event in
-                    addEvent(event, to: target.id)
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .listRowBackground(SMA.card)
+        .background(SMA.groupedBackground.ignoresSafeArea())
+        .navigationTitle(onDelete == nil ? "Create Schedule" : "Edit Schedule")
+        .inlineNavTitle()
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {} label: { Image(systemName: "questionmark.bubble") }
+                    .accessibilityLabel("Help and Support")
+                EditorSaveButton {
+                    onSave(preset)
+                    dismiss()
                 }
             }
-            .sheet(item: $editTarget) { target in
-                ScheduleEventEditor(title: "Edit Event", initial: target.event, profiles: model.activityProfiles) { updated in
-                    replaceEvent(target.event.id, with: updated)
-                }
+        }
+        .sheet(item: $addTarget) { target in
+            ScheduleEventEditor(title: "Add Event", initial: nil, profiles: model.activityProfiles) { event in
+                addEvent(event, to: target.id)
             }
-            .sheet(item: $timeTarget) { target in
-                ManualStartTimeSheet(name: target.event.name, time: target.event.time) { newTime in
-                    setEventTime(target.event.id, to: newTime)
-                }
-                .presentationDetents([.height(320)])
+        }
+        .sheet(item: $editTarget) { target in
+            ScheduleEventEditor(title: "Edit Event", initial: target.event, profiles: model.activityProfiles) { updated in
+                replaceEvent(target.event.id, with: updated)
             }
+        }
+        .sheet(item: $timeTarget) { target in
+            ManualStartTimeSheet(name: target.event.name, time: target.event.time) { newTime in
+                setEventTime(target.event.id, to: newTime)
+            }
+            .presentationDetents([.height(320)])
         }
     }
 
@@ -453,6 +471,17 @@ struct ScheduleEditorView: View {
         withAnimation(.snappy) {
             preset.groups.append(ScheduleDayGroup(days: [], events: ScheduleEvent.samples()))
         }
+    }
+
+    private func duplicateGroup(_ id: ScheduleDayGroup.ID) {
+        guard let g = groupIndex(id) else { return }
+        // Copy the events (fresh ids); clear the days so the two groups don't claim the
+        // same days — the user assigns days to the copy.
+        let copy = ScheduleDayGroup(days: [], events: preset.groups[g].events.map {
+            ScheduleEvent(name: $0.name, symbol: $0.symbol, colorHex: $0.colorHex,
+                          heatTo: $0.heatTo, coolTo: $0.coolTo, time: $0.time)
+        })
+        withAnimation(.snappy) { preset.groups.insert(copy, at: g + 1) }
     }
 
     private func removeGroup(_ id: ScheduleDayGroup.ID) {
@@ -656,7 +685,7 @@ private struct IntervalTimePicker: UIViewRepresentable {
 
 #Preview {
     NavigationStack {
-        SchedulePresetsList(title: "Activity Schedule", presets: ["Default", "Custom 1", "Comfort"])
+        SchedulePresetsList(title: "Activity Schedule")
     }
     .environment(AppModel())
 }

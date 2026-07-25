@@ -38,9 +38,9 @@ struct ScheduleView: View {
             Section {
                 if model.device.usePresets {
                     NavigationLink {
-                        SchedulePresetsList(title: "Schedules", presets: [model.device.scheduleName, "Eco", "Custom 1"])
+                        SchedulePresetsList(title: "Schedules")
                     } label: {
-                        LabeledContent("Schedule", value: model.device.scheduleName)
+                        LabeledContent("Schedule", value: model.scheduleName)
                     }
                 } else {
                     // Without presets, schedules are built per mode: Heating, Cooling, Auto.

@@ -96,57 +96,66 @@ struct ScheduleProgram: Identifiable, Hashable {
 
 // MARK: - Program list (Heating / Cooling / Auto Schedule)
 
-/// A radio-select list of schedule programs for one mode, with a per-row menu
-/// and an add button. Mirrors `SchedulePresetsList`.
+/// A radio-select list of schedule programs for one mode. Rows select the running
+/// program and drill into the editor; swipe offers Delete / Duplicate / Edit. Backed by
+/// the model so the selected program drives the controller timeline.
 struct ProgramScheduleList: View {
     let kind: ScheduleKind
 
-    @State private var programs: [ScheduleProgram]
-    @State private var selection: UUID?
-    /// Drives the create/edit sheet. A program whose id isn't in `programs` yet
-    /// is new (create); an existing id edits in place.
+    @Environment(AppModel.self) private var model
+    /// Drives the drill-in editor (new when its id isn't in the model yet).
     @State private var editor: ScheduleProgram?
 
-    init(kind: ScheduleKind) {
-        self.kind = kind
-        let items = ScheduleProgram.samples(for: kind)
-        _programs = State(initialValue: items)
-        _selection = State(initialValue: items.first?.id)
-    }
+    private var programs: [ScheduleProgram] { model.programs[kind] ?? [] }
+    private var selectedID: ScheduleProgram.ID? { model.activeProgramID(for: kind) }
 
     var body: some View {
         List {
             Section {
                 ForEach(programs) { program in
                     HStack(spacing: 12) {
-                        // Sibling borderless buttons so the List hit-tests the row
-                        // selection and the menu independently.
+                        // Sibling borderless buttons so the List hit-tests the radio and
+                        // the drill-in independently.
                         Button {
-                            selection = program.id
+                            model.selectProgram(program.id, kind: kind)
                         } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: selection == program.id ? "largecircle.fill.circle" : "circle")
-                                    .font(.title3)
-                                    .foregroundStyle(selection == program.id ? SMA.accent : SMA.labelSecondary)
-                                    .accessibilityHidden(true)
+                            Image(systemName: selectedID == program.id ? "largecircle.fill.circle" : "circle")
+                                .font(.title3)
+                                .foregroundStyle(selectedID == program.id ? SMA.accent : SMA.labelSecondary)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Select \(program.name)")
+                        .accessibilityAddTraits(selectedID == program.id ? [.isSelected] : [])
+
+                        Button {
+                            editor = program
+                        } label: {
+                            HStack {
                                 Text(program.name)
                                     .foregroundStyle(SMA.labelPrimary)
                                 Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(SMA.labelSecondary)
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityAddTraits(selection == program.id ? [.isSelected] : [])
-
-                        Menu {
-                            Button("Edit", systemImage: "pencil") { editor = program }
-                            Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(program) }
-                            Button("Delete", systemImage: "trash", role: .destructive) { delete(program) }
-                        } label: {
-                            EllipsisMenuLabel()
+                        .accessibilityLabel("Edit \(program.name)")
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { model.deleteProgram(program.id, kind: kind) } label: {
+                            Label("Delete", systemImage: "trash")
                         }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("More options for \(program.name)")
+                        Button { model.duplicateProgram(program, kind: kind) } label: {
+                            Label("Duplicate", systemImage: "plus.square.on.square")
+                        }
+                        .tint(SMA.accent)
+                        Button { editor = program } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(.gray)
                     }
                 }
             }
@@ -163,26 +172,15 @@ struct ProgramScheduleList: View {
                 }
             }
         }
-        .sheet(item: $editor) { draft in
-            ProgramScheduleEditor(kind: kind, program: draft) { result in
-                if let i = programs.firstIndex(where: { $0.id == result.id }) {
-                    programs[i] = result          // existing program: edit in place
-                } else {
-                    programs.append(result)       // new program: add and select it
-                    selection = result.id
-                }
-            }
+        .navigationDestination(item: $editor) { draft in
+            let existing = programs.contains { $0.id == draft.id }
+            ProgramScheduleEditor(
+                kind: kind,
+                program: draft,
+                onSave: { model.saveProgram($0, kind: kind) },
+                onDelete: existing ? { model.deleteProgram(draft.id, kind: kind) } : nil
+            )
         }
-    }
-
-    private func duplicate(_ program: ScheduleProgram) {
-        guard let i = programs.firstIndex(where: { $0.id == program.id }) else { return }
-        programs.insert(ScheduleProgram(name: program.name + " Copy", groups: program.groups), at: i + 1)
-    }
-
-    private func delete(_ program: ScheduleProgram) {
-        programs.removeAll { $0.id == program.id }
-        if selection == program.id { selection = programs.first?.id }
     }
 }
 
@@ -196,97 +194,109 @@ struct ProgramScheduleEditor: View {
     @State private var addTarget: ProgramGroupRef?
     @State private var editTarget: ProgramEventRef?
     let onSave: (ScheduleProgram) -> Void
+    /// Present when editing an existing program — drives the Delete action. Nil while
+    /// creating a new one.
+    var onDelete: (() -> Void)?
 
     private let minEvents = 1
     private let maxEvents = 8
 
-    init(kind: ScheduleKind, program: ScheduleProgram, onSave: @escaping (ScheduleProgram) -> Void) {
+    init(kind: ScheduleKind, program: ScheduleProgram, onSave: @escaping (ScheduleProgram) -> Void, onDelete: (() -> Void)? = nil) {
         self.kind = kind
         _program = State(initialValue: program)
         self.onSave = onSave
+        self.onDelete = onDelete
     }
 
-    private var isNew: Bool { program.name.trimmingCharacters(in: .whitespaces).isEmpty }
-
     var body: some View {
-        NavigationStack {
-            List {
+        List {
+            Section {
+                TextField("Name", text: $program.name)
+            }
+
+            ForEach(program.groups) { group in
                 Section {
-                    TextField("Name", text: $program.name)
-                }
+                    DayPicker(days: group.days) { toggleDay($0, in: group.id) }
 
-                ForEach(program.groups) { group in
-                    Section {
-                        DayPicker(days: group.days) { toggleDay($0, in: group.id) }
-
-                        ForEach(group.events) { event in
-                            eventRow(event, in: group)
-                        }
-
-                        Button {
-                            addTarget = ProgramGroupRef(id: group.id)
-                        } label: {
-                            Text("Add Event")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .foregroundStyle(SMA.accent)
-                        }
-                        .disabled(group.events.count >= maxEvents)
-                    } header: {
-                        HStack {
-                            Text(WeekDay.summary(group.days))
-                                .font(.headline)
-                                .foregroundStyle(SMA.labelPrimary)
-                            Spacer()
-                            Menu {
-                                Button("Remove Day Group", systemImage: "trash", role: .destructive) {
-                                    removeGroup(group.id)
-                                }
-                                .disabled(program.groups.count <= 1)
-                            } label: {
-                                EllipsisMenuLabel(outlined: true)
-                            }
-                            .accessibilityLabel("Day group options")
-                        }
-                        .textCase(nil)
+                    ForEach(group.events) { event in
+                        eventRow(event, in: group)
                     }
-                }
 
-                Section {
                     Button {
-                        addDayGroup()
+                        addTarget = ProgramGroupRef(id: group.id)
                     } label: {
-                        Text("Add Day Group")
-                            .frame(maxWidth: .infinity)
+                        Text("Add Event")
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .foregroundStyle(SMA.accent)
                     }
+                    .disabled(group.events.count >= maxEvents)
+                } header: {
+                    HStack {
+                        Text(WeekDay.summary(group.days))
+                            .font(.headline)
+                            .foregroundStyle(SMA.labelPrimary)
+                        Spacer()
+                        Menu {
+                            Button("Duplicate Day Group", systemImage: "plus.square.on.square") {
+                                duplicateGroup(group.id)
+                            }
+                            Button("Remove Day Group", systemImage: "trash", role: .destructive) {
+                                removeGroup(group.id)
+                            }
+                            .disabled(program.groups.count <= 1)
+                        } label: {
+                            EllipsisMenuLabel(outlined: true)
+                        }
+                        .accessibilityLabel("Day group options")
+                    }
+                    .textCase(nil)
                 }
             }
-            .groupedListChrome()
-            .navigationTitle(isNew ? "New \(kind.detail) Schedule" : "Edit Schedule")
-            .inlineNavTitle()
-            .presentationDragIndicator(.visible)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    EditorCancelButton { dismiss() }
+
+            Section {
+                Button {
+                    addDayGroup()
+                } label: {
+                    Text("Add Day Group")
+                        .frame(maxWidth: .infinity)
+                        .foregroundStyle(SMA.accent)
                 }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {} label: { Image(systemName: "questionmark.bubble") }
-                        .accessibilityLabel("Help and Support")
-                    EditorSaveButton {
-                        onSave(program)
+            }
+
+            if let onDelete {
+                Section {
+                    Button(role: .destructive) {
+                        onDelete()
                         dismiss()
+                    } label: {
+                        Text("Delete Schedule")
+                            .frame(maxWidth: .infinity)
+                            .foregroundStyle(SMA.destructive)
                     }
                 }
             }
-            .sheet(item: $addTarget) { target in
-                ProgramEventEditor(kind: kind, title: "Add Event", initial: nil) { event in
-                    addEvent(event, to: target.id)
+        }
+        .groupedListChrome()
+        .navigationTitle(onDelete == nil ? "New \(kind.detail) Schedule" : "Edit Schedule")
+        .inlineNavTitle()
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {} label: { Image(systemName: "questionmark.bubble") }
+                    .accessibilityLabel("Help and Support")
+                EditorSaveButton {
+                    onSave(program)
+                    dismiss()
                 }
             }
-            .sheet(item: $editTarget) { target in
-                ProgramEventEditor(kind: kind, title: "Edit Event", initial: target.event) { updated in
-                    replaceEvent(target.event.id, with: updated)
-                }
+        }
+        .sheet(item: $addTarget) { target in
+            ProgramEventEditor(kind: kind, title: "Add Event", initial: nil) { event in
+                addEvent(event, to: target.id)
+            }
+        }
+        .sheet(item: $editTarget) { target in
+            ProgramEventEditor(kind: kind, title: "Edit Event", initial: target.event) { updated in
+                replaceEvent(target.event.id, with: updated)
             }
         }
     }
@@ -351,6 +361,16 @@ struct ProgramScheduleEditor: View {
         withAnimation(.snappy) {
             program.groups.append(ProgramDayGroup(days: [], events: ScheduleProgram.sampleEvents()))
         }
+    }
+
+    private func duplicateGroup(_ id: ProgramDayGroup.ID) {
+        guard let g = groupIndex(id) else { return }
+        // Copy the events (fresh ids); clear the days so the copy doesn't claim the
+        // same days — the user assigns days to it.
+        let copy = ProgramDayGroup(days: [], events: program.groups[g].events.map {
+            ProgramEvent(time: $0.time, heatTo: $0.heatTo, coolTo: $0.coolTo)
+        })
+        withAnimation(.snappy) { program.groups.insert(copy, at: g + 1) }
     }
 
     private func removeGroup(_ id: ProgramDayGroup.ID) {
