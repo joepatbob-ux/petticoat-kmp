@@ -31,6 +31,7 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
 }
 
 struct GeofenceRadiusView: View {
+    @Environment(AppModel.self) private var model
     @Binding var radius: Int
     @Binding var unit: DistanceUnit
 
@@ -83,7 +84,7 @@ struct GeofenceRadiusView: View {
         .inlineNavTitle()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {} label: { Image(systemName: "questionmark.bubble") }
+                Button { model.showHelp = true } label: { Image(systemName: "questionmark.bubble") }
                     .accessibilityLabel("Help and Support")
             }
         }

@@ -72,20 +72,32 @@ struct DisplayOptionsView: View {
 
 // MARK: - Contractor Information
 
-struct ContractorInformationView: View {
-    @Environment(\.openURL) private var openURL
+/// The HVAC contractor on file for this thermostat. Stored on `AppModel` so Settings and
+/// the reminder "Call Contractor" action share one source of truth.
+struct Contractor: Hashable {
+    var company: String = ""
+    var address: String = ""
+    var phone: String = ""
+    var city: String = ""
+    var state: String = ""
+    var country: String = ""
 
-    @State private var company = "123 HVAC Contracting Company"
-    @State private var address = "ABC Ave"
-    @State private var phone = "555555"
-    @State private var city = "Villagetownsburg"
-    @State private var state = "Missouri"
-    @State private var country = "United States"
+    /// Digits only, for a `tel:` URL.
+    var phoneDigits: String { phone.filter(\.isNumber) }
+
+    static let sample = Contractor(
+        company: "123 HVAC Contracting Company", address: "ABC Ave", phone: "555555",
+        city: "Villagetownsburg", state: "Missouri", country: "United States"
+    )
+}
+
+struct ContractorInformationView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openURL) private var openURL
     @State private var confirmRemove = false
 
-    private var phoneDigits: String { phone.filter(\.isNumber) }
-
     var body: some View {
+        @Bindable var model = model
         List {
             Section {
                 // Placeholder for the contractor illustration (design asset not bundled).
@@ -98,18 +110,18 @@ struct ContractorInformationView: View {
             }
 
             Section {
-                TextField("Company", text: $company)
-                TextField("Address", text: $address)
-                TextField("Phone", text: $phone)
+                TextField("Company", text: $model.contractor.company)
+                TextField("Address", text: $model.contractor.address)
+                TextField("Phone", text: $model.contractor.phone)
                     .keyboardType(.phonePad)
-                TextField("City", text: $city)
-                TextField("State", text: $state)
-                TextField("Country", text: $country)
+                TextField("City", text: $model.contractor.city)
+                TextField("State", text: $model.contractor.state)
+                TextField("Country", text: $model.contractor.country)
             }
 
             Section {
-                RowActionButton("Call Contractor", isEnabled: !phoneDigits.isEmpty) {
-                    if let url = URL(string: "tel://\(phoneDigits)") { openURL(url) }
+                RowActionButton("Call Contractor", isEnabled: !model.contractor.phoneDigits.isEmpty) {
+                    if let url = URL(string: "tel://\(model.contractor.phoneDigits)") { openURL(url) }
                 }
             }
 
@@ -121,9 +133,7 @@ struct ContractorInformationView: View {
         .navigationTitle("Contractor Information")
         .inlineNavTitle()
         .confirmationDialog("Remove this contractor?", isPresented: $confirmRemove, titleVisibility: .visible) {
-            Button("Remove Contractor", role: .destructive) {
-                company = ""; address = ""; phone = ""; city = ""; state = ""; country = ""
-            }
+            Button("Remove Contractor", role: .destructive) { model.contractor = Contractor() }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Their contact information will be removed from this thermostat.")

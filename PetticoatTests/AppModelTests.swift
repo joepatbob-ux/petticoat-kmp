@@ -262,4 +262,12 @@ struct AppModelTests {
         model.renameSensor(sensor.id, to: "   ", in: model.device.id)
         #expect(model.device.sensors.first?.name == original)
     }
+
+    // MARK: Contractor
+
+    @Test func contractorPhoneDigitsStripsFormatting() {
+        var c = Contractor.sample
+        c.phone = "(314) 555-0123"
+        #expect(c.phoneDigits == "3145550123")
+    }
 }

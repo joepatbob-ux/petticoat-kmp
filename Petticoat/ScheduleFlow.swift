@@ -308,7 +308,7 @@ struct ScheduleEditorView: View {
         .inlineNavTitle()
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {} label: { Image(systemName: "questionmark.bubble") }
+                Button { model.showHelp = true } label: { Image(systemName: "questionmark.bubble") }
                     .accessibilityLabel("Help and Support")
                 EditorSaveButton {
                     onSave(preset)

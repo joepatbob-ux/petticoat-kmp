@@ -188,6 +188,7 @@ struct ProgramScheduleList: View {
 
 struct ProgramScheduleEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var model
 
     let kind: ScheduleKind
     @State private var program: ScheduleProgram
@@ -281,7 +282,7 @@ struct ProgramScheduleEditor: View {
         .inlineNavTitle()
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {} label: { Image(systemName: "questionmark.bubble") }
+                Button { model.showHelp = true } label: { Image(systemName: "questionmark.bubble") }
                     .accessibilityLabel("Help and Support")
                 EditorSaveButton {
                     onSave(program)
