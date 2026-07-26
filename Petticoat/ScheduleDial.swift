@@ -299,33 +299,13 @@ struct RadialScheduleDial: View {
         // The partition as it looks with the dragged event lifted out (its previous
         // neighbor fills the vacated slot), so we break the event that truly encloses it.
         let others = evs.filter { $0.id != id }.sorted { $0.time < $1.time }
-        guard let target = enclosing(startMin, in: others) else { return }
+        guard let placement = DialMath.breakPlacement(fingerMin: startMin, durS: durS,
+                                                       others: others.map { dayMinutes($0.time) },
+                                                       minLen: minDurationMinutes),
+              placement.newStart != dayMinutes(s.time),
+              let broken = others.first(where: { dayMinutes($0.time) == placement.brokenStart }) else { return }
 
-        // Room for head (≥min) + the dragged event + tail (≥min)?
-        let minLen = minDurationMinutes
-        guard target.length >= 2 * minLen + durS else { return }
-
-        let head = min(max(cwDistance(target.start, startMin), minLen), target.length - minLen - durS)
-        let newStart = (target.start + head) % 1440
-        guard newStart != dayMinutes(s.time) else { return }
-        let tailStart = (newStart + durS) % 1440
-
-        onBreak(id, minutesToDate(newStart), target.event.id, minutesToDate(tailStart))
-    }
-
-    /// The event in `others` (sorted by time) whose arc encloses `minute`, with that
-    /// arc's length and start in minutes. A lone event spans the whole ring.
-    private func enclosing(_ minute: Int, in others: [ScheduleEvent]) -> (event: ScheduleEvent, length: Int, start: Int)? {
-        let n = others.count
-        guard n > 0 else { return nil }
-        if n == 1 { return (others[0], 1440, dayMinutes(others[0].time)) }
-        for (i, e) in others.enumerated() {
-            let start = dayMinutes(e.time)
-            let length = cwDistance(start, dayMinutes(others[(i + 1) % n].time))
-            if cwDistance(start, minute) < length { return (e, length, start) }
-        }
-        let start = dayMinutes(others[0].time)
-        return (others[0], cwDistance(start, dayMinutes(others[1].time)), start)
+        onBreak(id, minutesToDate(placement.newStart), broken.id, minutesToDate(placement.tailStart))
     }
 
     private func eventStartFraction(_ id: ScheduleEvent.ID) -> CGFloat {
@@ -390,7 +370,7 @@ struct RadialScheduleDial: View {
     }
 
     /// Clockwise distance in minutes from `a` to `b` around the 24h ring.
-    private func cwDistance(_ a: Int, _ b: Int) -> Int { ((b - a) % 1440 + 1440) % 1440 }
+    private func cwDistance(_ a: Int, _ b: Int) -> Int { DialMath.cwDistance(a, b) }
 
     /// Angle of a point as a day fraction (0 = midnight at top, clockwise).
     private func fraction(of location: CGPoint, center: CGPoint) -> CGFloat {
@@ -483,19 +463,17 @@ struct RadialScheduleDial: View {
         let durS = cwDistance(dayMinutes(evs[iS].time), dayMinutes(evs[(iS + 1) % evs.count].time))
         let fingerMin = Int((Double(normalize(proposedStart)) * 1440).rounded())
         let others = evs.filter { $0.id != id }.sorted { $0.time < $1.time }
-        guard let target = enclosing(fingerMin, in: others) else { return nil }
-        let minLen = minDurationMinutes
-        guard target.length >= 2 * minLen + durS else { return nil }
-        var rawHead = fingerMin - target.start
-        if rawHead < 0 { rawHead += 1440 }
-        let head = min(max(rawHead, minLen), target.length - minLen - durS)
-        let tX = CGFloat(target.start)
+        guard let placement = DialMath.breakPlacement(fingerMin: fingerMin, durS: durS,
+                                                       others: others.map { dayMinutes($0.time) },
+                                                       minLen: minDurationMinutes),
+              let broken = others.first(where: { dayMinutes($0.time) == placement.brokenStart }) else { return nil }
+        let tX = CGFloat(placement.brokenStart)
         return BreakPreview(
-            brokenID: target.event.id,
+            brokenID: broken.id,
             headStart: tX / 1440,
-            floatStart: (tX + CGFloat(head)) / 1440,
-            tailStart: (tX + CGFloat(head + durS)) / 1440,
-            tailEnd: (tX + CGFloat(target.length)) / 1440
+            floatStart: (tX + CGFloat(placement.head)) / 1440,
+            tailStart: (tX + CGFloat(placement.head + durS)) / 1440,
+            tailEnd: (tX + CGFloat(placement.length)) / 1440
         )
     }
 

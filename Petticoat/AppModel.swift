@@ -515,12 +515,9 @@ final class AppModel {
     }
 
     /// Index of the period running right now — the last one that has started; before the
-    /// first start we're still in the previous day's final period.
+    /// first start we're still in the previous day's final period. (See `TimelineMath`.)
     private var currentTimelineIndex: Int? {
-        let t = todaysTimeline
-        guard !t.isEmpty else { return nil }
-        let now = minutesSinceMidnight(Date())
-        return t.lastIndex { $0.minutes <= now } ?? (t.count - 1)
+        TimelineMath.currentIndex(starts: todaysTimeline.map(\.minutes), now: minutesSinceMidnight(Date()))
     }
 
     /// The period running right now, derived from the active schedule or program.
@@ -533,8 +530,8 @@ final class AppModel {
     /// matches the saved schedule from now to end of day (wrapping correctly before the
     /// first start, when the current period is the previous day's carryover).
     var upcomingPeriods: [TimelinePeriod] {
-        let now = minutesSinceMidnight(Date())
-        return todaysTimeline.filter { $0.minutes > now }.map(\.period)
+        let t = todaysTimeline
+        return TimelineMath.upcomingIndices(starts: t.map(\.minutes), now: minutesSinceMidnight(Date())).map { t[$0].period }
     }
 
     /// Today's WeekDay index (0 = Monday … 6 = Sunday) from Calendar's 1=Sun…7=Sat.
