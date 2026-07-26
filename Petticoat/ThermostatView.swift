@@ -23,6 +23,9 @@ struct ControlView: View {
                 SensorAveragePill(summary: device.sensorSummary)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("sensorAveragePill")
+            .accessibilityLabel("Sensors")
+            .accessibilityHint("Opens the sensors screen")
             .padding(.top, 20)
 
             Spacer()

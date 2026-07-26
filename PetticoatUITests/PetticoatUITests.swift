@@ -55,4 +55,37 @@ final class PetticoatUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["New Reminder"].waitForExistence(timeout: 5),
                       "Tapping add should present the New Reminder editor")
     }
+
+    /// The Control screen's sensor pill opens the Sensors screen with its sensors listed.
+    @MainActor
+    func testSensorsScreenFromControl() {
+        let app = launchToDeviceDetail()
+
+        app.buttons["sensorAveragePill"].tap()
+        XCTAssertTrue(app.navigationBars["Sensors"].waitForExistence(timeout: 5),
+                      "Tapping the sensor pill should open the Sensors screen")
+        XCTAssertTrue(app.staticTexts["Thermostat"].waitForExistence(timeout: 3),
+                      "The Sensors screen should list the thermostat sensor")
+    }
+
+    /// The Settings tab drills into Display Options.
+    @MainActor
+    func testSettingsTabDisplayOptions() {
+        let app = launchToDeviceDetail()
+
+        app.buttons["Settings"].firstMatch.tap()
+        app.buttons["Display Options"].tap()
+        XCTAssertTrue(app.switches["Continuous Backlight"].waitForExistence(timeout: 5),
+                      "Display Options should show the Continuous Backlight toggle")
+    }
+
+    /// The Usage tab shows the runtime range control.
+    @MainActor
+    func testUsageTab() {
+        let app = launchToDeviceDetail()
+
+        app.buttons["Usage"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["This Week"].waitForExistence(timeout: 5),
+                      "The Usage tab should show the range selector")
+    }
 }
