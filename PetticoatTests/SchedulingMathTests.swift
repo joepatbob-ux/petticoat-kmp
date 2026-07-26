@@ -64,11 +64,43 @@ struct SchedulingMathTests {
 
     @Test func breakPlacementSplitsEnclosingArc() {
         let p = DialMath.breakPlacement(fingerMin: 600, durS: 120, others: [360, 480, 1020], minLen: 60)
+        #expect(p?.kind == .breakInto)
         #expect(p?.brokenStart == 480)
         #expect(p?.newStart == 600)
         #expect(p?.tailStart == 720)
         #expect(p?.head == 120)
         #expect(p?.length == 540)
+    }
+
+    @Test func boundarySnapInsertsAtLeadingEdge() {
+        // Finger 10 min into the arc (start 480), within the 24-min snap zone → slot flush
+        // at the boundary: no head, dragged event takes 480 and pushes the arc to 600.
+        let p = DialMath.breakPlacement(fingerMin: 490, durS: 120, others: [360, 480, 1020],
+                                        minLen: 60, boundarySnap: 24)
+        #expect(p?.kind == .insertLeading)
+        #expect(p?.head == 0)
+        #expect(p?.newStart == 480)
+        #expect(p?.tailStart == 600)
+    }
+
+    @Test func boundarySnapInsertsAtTrailingEdge() {
+        // Finger near the arc's end (arc 480..1020, len 540) → slot flush at the trailing
+        // boundary: head fills the arc, dragged event ends exactly at 1020.
+        let p = DialMath.breakPlacement(fingerMin: 1010, durS: 120, others: [360, 480, 1020],
+                                        minLen: 60, boundarySnap: 24)
+        #expect(p?.kind == .insertTrailing)
+        #expect(p?.head == 420)
+        #expect(p?.newStart == 900)
+        #expect(p?.tailStart == 1020)
+    }
+
+    @Test func boundarySnapInsertsWhereMidBreakWouldNotFit() {
+        // Arc 0..200 (len 200) can't mid-break (needs 2*60+120=240) but a boundary insert
+        // needs only durS+minLen=180, so a drop near the edge still lands.
+        let p = DialMath.breakPlacement(fingerMin: 5, durS: 120, others: [0, 200, 600],
+                                        minLen: 60, boundarySnap: 24)
+        #expect(p?.kind == .insertLeading)
+        #expect(p?.newStart == 0)
     }
 
     @Test func breakPlacementClampsHeadToMinimum() {

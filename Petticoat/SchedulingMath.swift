@@ -42,19 +42,44 @@ enum DialMath {
         return (start, cwDistance(start, others[1]))
     }
 
-    /// Where dropping a dragged event of length `durS` at `fingerMin` breaks the enclosing
-    /// arc into a kept head + a copied tail, keeping head, dragged, and tail each
-    /// ≥ `minLen`. Returns the enclosing arc's `brokenStart`, the dragged event's clamped
-    /// `newStart`, the tail copy's `tailStart` (all wrapped into 0..<1440), plus the raw
-    /// `head` length and enclosing `length` (for the live preview's geometry). `nil` when
-    /// the finger isn't over a breakable arc or there isn't room for all three pieces.
-    static func breakPlacement(fingerMin: Int, durS: Int, others: [Int], minLen: Int)
-        -> (brokenStart: Int, newStart: Int, tailStart: Int, head: Int, length: Int)? {
+    /// How a drop resolves against the enclosing arc.
+    /// - `breakInto`: the finger is in the arc's interior — split it into a kept head, the
+    ///   dropped event, and a copied tail (a new event is created for the tail).
+    /// - `insertLeading`: the finger is snapped to the arc's leading boundary — the dropped
+    ///   event slots in flush at the boundary and pushes the enclosing arc later (no copy;
+    ///   the enclosing event just moves). `head` is 0.
+    /// - `insertTrailing`: the finger is snapped to the arc's trailing boundary — the dropped
+    ///   event slots in flush at the end (no copy); the enclosing arc keeps the whole head.
+    enum BreakKind { case breakInto, insertLeading, insertTrailing }
+
+    /// Where dropping a dragged event of length `durS` at `fingerMin` lands within the
+    /// enclosing arc. When the finger is within `boundarySnap` of either boundary the drop
+    /// snaps flush against it (a reorder — the neighbor donates the time, no event copied);
+    /// otherwise the arc breaks into a kept head + a copied tail, keeping head, dragged, and
+    /// tail each ≥ `minLen`. Returns the resolution `kind`, the enclosing arc's `brokenStart`,
+    /// the dragged event's `newStart`, the tail/next-boundary `tailStart` (all wrapped into
+    /// 0..<1440), plus the raw `head` length and enclosing `length` (for the live preview's
+    /// geometry). `nil` when the finger isn't over a breakable arc or there isn't room.
+    static func breakPlacement(fingerMin: Int, durS: Int, others: [Int], minLen: Int,
+                               boundarySnap: Int = 0)
+        -> (kind: BreakKind, brokenStart: Int, newStart: Int, tailStart: Int, head: Int, length: Int)? {
         guard let target = enclosing(fingerMin, others: others) else { return nil }
-        guard target.length >= 2 * minLen + durS else { return nil }
-        let head = min(max(cwDistance(target.start, fingerMin), minLen), target.length - minLen - durS)
+        let length = target.length
+        let rawHead = cwDistance(target.start, fingerMin)
+        // A boundary insert only needs the single remaining piece to keep the minimum.
+        let canBoundary = length >= durS + minLen
+        if canBoundary && rawHead <= boundarySnap {
+            let newStart = target.start % 1440
+            return (.insertLeading, target.start, newStart, (newStart + durS) % 1440, 0, length)
+        }
+        if canBoundary && rawHead >= length - boundarySnap {
+            let head = length - durS
+            let newStart = (target.start + head) % 1440
+            return (.insertTrailing, target.start, newStart, (newStart + durS) % 1440, head, length)
+        }
+        guard length >= 2 * minLen + durS else { return nil }
+        let head = min(max(rawHead, minLen), length - minLen - durS)
         let newStart = (target.start + head) % 1440
-        let tailStart = (newStart + durS) % 1440
-        return (target.start, newStart, tailStart, head, target.length)
+        return (.breakInto, target.start, newStart, (newStart + durS) % 1440, head, length)
     }
 }

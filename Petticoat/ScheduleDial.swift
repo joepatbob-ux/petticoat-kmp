@@ -11,6 +11,8 @@ import UIKit
 /// drag it around the ring: it keeps its own duration and, on drop, is inserted at the
 /// finger — breaking whichever event encloses it into a kept head and a copied tail, so
 /// that activity resumes after the inserted one (every piece stays ≥ the minimum length).
+/// Dropping near an existing boundary instead snaps flush against it, reordering the event
+/// between two arcs without splitting either (see `DialMath.breakPlacement`).
 /// Tapping the time in the center opens manual entry. Hour ticks are dots on top of the arcs, with "M"
 /// (midnight) at the top and "N" (noon) at the bottom.
 struct RadialScheduleDial: View {
@@ -20,10 +22,11 @@ struct RadialScheduleDial: View {
     let onSelect: (ScheduleEvent.ID) -> Void
     /// Tapping the start time in the center asks the host to present manual entry.
     let onRequestManualTime: (ScheduleEvent.ID) -> Void
-    /// Insert-by-breaking on drop: (draggedID, its new start, the event being broken,
-    /// the tail copy's start). The host moves the dragged event and inserts a copy of the
-    /// broken event so its activity resumes after the inserted one.
-    let onBreak: (ScheduleEvent.ID, Date, ScheduleEvent.ID, Date) -> Void
+    /// Drop resolution: (draggedID, its new start, the enclosing/neighbor event, the
+    /// tail-or-next-boundary start, the kind). For `.breakInto` the host moves the dragged
+    /// event and inserts a copy of the broken event so its activity resumes after; for the
+    /// boundary inserts it reorders flush against a boundary without copying.
+    let onBreak: (ScheduleEvent.ID, Date, ScheduleEvent.ID, Date, DialMath.BreakKind) -> Void
 
     /// Neutral background band; drawn thicker than the arcs so they sit inset within it.
     private let trackWidth: CGFloat = 48
@@ -42,6 +45,9 @@ struct RadialScheduleDial: View {
     /// so arcs stay large enough to read. Manual time entry bypasses this and still
     /// allows 15-minute granularity for finer sub-hour periods.
     private let minDurationMinutes = 60
+    /// Within this many minutes of an existing boundary, a drop snaps flush against it and
+    /// reorders between arcs (no split) instead of breaking the enclosing arc in two.
+    private let boundarySnapMinutes = 24
     private let spaceName = "scheduleDial"
 
     // MARK: - Drag-to-reorder state
@@ -304,11 +310,12 @@ struct RadialScheduleDial: View {
         let others = evs.filter { $0.id != id }.sorted { $0.time < $1.time }
         guard let placement = DialMath.breakPlacement(fingerMin: startMin, durS: durS,
                                                        others: others.map { dayMinutes($0.time) },
-                                                       minLen: minDurationMinutes),
+                                                       minLen: minDurationMinutes,
+                                                       boundarySnap: boundarySnapMinutes),
               placement.newStart != dayMinutes(s.time),
               let broken = others.first(where: { dayMinutes($0.time) == placement.brokenStart }) else { return }
 
-        onBreak(id, minutesToDate(placement.newStart), broken.id, minutesToDate(placement.tailStart))
+        onBreak(id, minutesToDate(placement.newStart), broken.id, minutesToDate(placement.tailStart), placement.kind)
     }
 
     private func eventStartFraction(_ id: ScheduleEvent.ID) -> CGFloat {
@@ -453,6 +460,10 @@ struct RadialScheduleDial: View {
         let floatStart: CGFloat
         let tailStart: CGFloat
         let tailEnd: CGFloat
+        /// A boundary insert drops one of the two pieces (the dragged arc sits flush against
+        /// a boundary), so the preview only draws the piece that survives.
+        let hasHead: Bool
+        let hasTail: Bool
     }
 
     /// The break that would result from dropping right now — nil when the finger isn't
@@ -468,7 +479,8 @@ struct RadialScheduleDial: View {
         let others = evs.filter { $0.id != id }.sorted { $0.time < $1.time }
         guard let placement = DialMath.breakPlacement(fingerMin: fingerMin, durS: durS,
                                                        others: others.map { dayMinutes($0.time) },
-                                                       minLen: minDurationMinutes),
+                                                       minLen: minDurationMinutes,
+                                                       boundarySnap: boundarySnapMinutes),
               let broken = others.first(where: { dayMinutes($0.time) == placement.brokenStart }) else { return nil }
         let tX = CGFloat(placement.brokenStart)
         return BreakPreview(
@@ -476,7 +488,9 @@ struct RadialScheduleDial: View {
             headStart: tX / 1440,
             floatStart: (tX + CGFloat(placement.head)) / 1440,
             tailStart: (tX + CGFloat(placement.head + durS)) / 1440,
-            tailEnd: (tX + CGFloat(placement.length)) / 1440
+            tailEnd: (tX + CGFloat(placement.length)) / 1440,
+            hasHead: placement.kind != .insertLeading,
+            hasTail: placement.kind != .insertTrailing
         )
     }
 
@@ -510,13 +524,18 @@ struct RadialScheduleDial: View {
                                   colorHex: e.colorHex, thickness: selectedArcWidth, opacity: 1,
                                   floating: true, z: 3))
             } else if let preview, e.id == preview.brokenID {
-                // The enclosing event previews its split: kept head + copied tail.
-                result.append(Arc(id: "\(e.id)-head", start: preview.headStart, end: preview.floatStart - gap,
-                                  colorHex: e.colorHex, thickness: arcWidth, opacity: dimmedOpacity,
-                                  floating: false, z: 0))
-                result.append(Arc(id: "\(e.id)-tail", start: preview.tailStart, end: preview.tailEnd - gap,
-                                  colorHex: e.colorHex, thickness: arcWidth, opacity: dimmedOpacity,
-                                  floating: false, z: 0))
+                // The enclosing event previews its split: kept head + copied tail. A boundary
+                // insert keeps only one piece (the dragged arc sits flush against a boundary).
+                if preview.hasHead {
+                    result.append(Arc(id: "\(e.id)-head", start: preview.headStart, end: preview.floatStart - gap,
+                                      colorHex: e.colorHex, thickness: arcWidth, opacity: dimmedOpacity,
+                                      floating: false, z: 0))
+                }
+                if preview.hasTail {
+                    result.append(Arc(id: "\(e.id)-tail", start: preview.tailStart, end: preview.tailEnd - gap,
+                                      colorHex: e.colorHex, thickness: arcWidth, opacity: dimmedOpacity,
+                                      floating: false, z: 0))
+                }
             } else {
                 guard ge > s else { continue }
                 let thickness = (selected && !dragging) ? selectedArcWidth : arcWidth
