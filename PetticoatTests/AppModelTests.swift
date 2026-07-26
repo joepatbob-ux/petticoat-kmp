@@ -270,4 +270,31 @@ struct AppModelTests {
         c.phone = "(314) 555-0123"
         #expect(c.phoneDigits == "3145550123")
     }
+
+    // MARK: Single-mode setpoint + vacation
+
+    @Test func adjustingInHeatModeMovesHeatTarget() {
+        let model = AppModel()
+        model.devices[0].systemMode = .heat
+        let before = model.device.keepMin
+        model.adjustKeep(.high, by: 2)   // bound is ignored in single-target modes
+        #expect(model.device.keepMin == before + 2)
+    }
+
+    @Test func adjustingInCoolModeMovesCoolTarget() {
+        let model = AppModel()
+        model.devices[0].systemMode = .cool
+        let before = model.device.keepMax
+        model.adjustKeep(.low, by: -3)
+        #expect(model.device.keepMax == before - 3)
+    }
+
+    @Test func vacationWithProfileAppliesItsSetpoints() {
+        let model = AppModel()
+        let profile = model.activityProfiles[0]
+        model.setVacation(true, profile: profile)
+        #expect(model.controlMode == .vacation)
+        #expect(model.device.keepMin == profile.heatTo)
+        #expect(model.device.keepMax == profile.coolTo)
+    }
 }
