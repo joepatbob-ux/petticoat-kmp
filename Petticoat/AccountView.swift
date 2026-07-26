@@ -26,7 +26,7 @@ struct AccountView: View {
                 }
 
                 Section {
-                    NavigationLink("Energy Programs") { PlaceholderDetail(title: "Energy Programs") }
+                    NavigationLink("Energy Programs") { EnergyProgramsView() }
                     NavigationLink("Smart Integrations") { PlaceholderDetail(title: "Smart Integrations") }
                 }
 

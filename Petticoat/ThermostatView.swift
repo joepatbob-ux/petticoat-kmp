@@ -819,7 +819,9 @@ struct ControllerStatusSheet: View {
             let next = model.upcomingPeriods.first
             return [("Schedule", model.device.scheduleName),
                     ("Current Range", keep),
-                    ("Up Next", next.map { "\($0.name) · \($0.startText)" } ?? "—")]
+                    // Program periods have no profile name (name == start time), so avoid
+                    // printing the time twice.
+                    ("Up Next", next.map { $0.name == $0.startText ? $0.startText : "\($0.name) · \($0.startText)" } ?? "—")]
         case .standard:
             return [("Range", keep)]
         }

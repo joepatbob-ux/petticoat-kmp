@@ -151,6 +151,7 @@ struct SensorDetailView: View {
         List {
             Section {
                 TextField("Name", text: $name)
+                    .onChange(of: name) { _, _ in commitName() }
                     .onSubmit(commitName)
             }
 
