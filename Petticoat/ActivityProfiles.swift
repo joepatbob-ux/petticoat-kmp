@@ -58,21 +58,31 @@ struct ActivityProfilesList: View {
                             Text(profile.rangeText)
                                 .foregroundStyle(SMA.labelSecondary)
                                 .monospacedDigit()
-                            Menu {
-                                Button("Edit", systemImage: "pencil") { editing = profile }
-                                Button("Duplicate", systemImage: "plus.square.on.square") { model.duplicateProfile(profile) }
-                                Button("Delete", systemImage: "trash", role: .destructive) { model.deleteProfile(profile) }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(SMA.accent)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("More options for \(profile.name)")
                         }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    // Edit / Duplicate / Delete via swipe (icon-only — the titles are too wide
+                    // for three actions). Replaces the nested overflow menu, whose tap was
+                    // swallowed by the row button.
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) { model.deleteProfile(profile) } label: {
+                            Image(systemName: "trash")
+                        }
+                        .accessibilityLabel("Delete \(profile.name)")
+
+                        Button { model.duplicateProfile(profile) } label: {
+                            Image(systemName: "plus.square.on.square")
+                        }
+                        .tint(SMA.accent)
+                        .accessibilityLabel("Duplicate \(profile.name)")
+
+                        Button { editing = profile } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .tint(.gray)
+                        .accessibilityLabel("Edit \(profile.name)")
+                    }
                 }
             } footer: {
                 Text("Profiles set the temperature range and sensors used for each part of your day.")
