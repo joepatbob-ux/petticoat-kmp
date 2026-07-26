@@ -33,7 +33,6 @@ struct ActivityProfile: Identifiable, Hashable {
 /// The Presets area: a list of activity profiles you can create, edit, and reorder.
 struct ActivityProfilesList: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
     @State private var editing: ActivityProfile?
     @State private var creatingNew = false
 
@@ -42,8 +41,7 @@ struct ActivityProfilesList: View {
             Section {
                 ForEach(model.activityProfiles) { profile in
                     Button {
-                        model.activateProfile(profile)
-                        dismiss()
+                        editing = profile
                     } label: {
                         HStack(spacing: 12) {
                             ProfileIcon(symbol: profile.symbol, colorHex: profile.colorHex, size: 30)
@@ -62,9 +60,9 @@ struct ActivityProfilesList: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    // Edit / Duplicate / Delete via swipe (icon-only — the titles are too wide
-                    // for three actions). Replaces the nested overflow menu, whose tap was
-                    // swallowed by the row button.
+                    // Tapping the row opens the editor; swipe covers Duplicate / Delete
+                    // (icon-only — titles are too wide). Replaces the nested overflow menu,
+                    // whose tap was swallowed by the row button.
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) { model.deleteProfile(profile) } label: {
                             Image(systemName: "trash")
@@ -76,12 +74,6 @@ struct ActivityProfilesList: View {
                         }
                         .tint(SMA.accent)
                         .accessibilityLabel("Duplicate \(profile.name)")
-
-                        Button { editing = profile } label: {
-                            Image(systemName: "pencil")
-                        }
-                        .tint(.gray)
-                        .accessibilityLabel("Edit \(profile.name)")
                     }
                 }
             } footer: {
