@@ -4,7 +4,8 @@ import SwiftUI
 //
 // The Reminders device tab: HVAC service reminders (air filter changes, maintenance)
 // shown as life-tracked cards. Each reminder tracks a percentage of life remaining,
-// a next-service date, and can be marked complete. Prototype-local state.
+// a next-service date, and can be added, edited, completed, or deleted.
+// Prototype-local state.
 
 enum ReminderBasis: String, CaseIterable, Identifiable {
     case runtime = "Runtime"
@@ -13,7 +14,7 @@ enum ReminderBasis: String, CaseIterable, Identifiable {
 }
 
 struct ServiceReminder: Identifiable, Hashable {
-    let id = UUID()
+    var id = UUID()
     var name: String
     var type: String
     var basedOn: ReminderBasis
@@ -31,10 +32,10 @@ struct ServiceReminder: Identifiable, Hashable {
         let now = Date()
         func day(_ offset: Int) -> Date { cal.date(byAdding: .day, value: offset, to: now) ?? now }
         return [
-            ServiceReminder(name: "Reminder", type: "Air Filter", basedOn: .runtime,
+            ServiceReminder(name: "Upstairs Air Filter", type: "Air Filter", basedOn: .runtime,
                             durationText: "300 Hours", nextService: day(60), lastCompleted: day(-305),
                             spec: "16” x 25” x 2” - MERV8", lifeRemaining: 0.8),
-            ServiceReminder(name: "Reminder", type: "Air Filter", basedOn: .runtime,
+            ServiceReminder(name: "Downstairs Air Filter", type: "Air Filter", basedOn: .runtime,
                             durationText: "300 Hours", nextService: day(24), lastCompleted: day(-305),
                             spec: "16” x 25” x 2” - MERV8", lifeRemaining: 0.4, hasContractor: true),
         ]
@@ -44,10 +45,9 @@ struct ServiceReminder: Identifiable, Hashable {
 // MARK: - Reminders list
 
 struct RemindersView: View {
-    @Environment(AppModel.self) private var model
-
     @State private var reminders: [ServiceReminder] = ServiceReminder.samples()
-    @State private var creating = false
+    /// Drives the add/edit sheet: a nil `reminder` is a new one, otherwise an edit.
+    @State private var editTarget: ReminderEditTarget?
 
     var body: some View {
         Group {
@@ -56,14 +56,19 @@ struct RemindersView: View {
                     Label("No Reminders", systemImage: "bell.badge")
                 } description: {
                     Text("Tap ‘+’ to set up your first service reminder — like air filter changes or HVAC maintenance. You can opt for updates via Email or Push notifications.")
+                } actions: {
+                    Button("Add Reminder") { editTarget = ReminderEditTarget(reminder: nil) }
+                        .buttonStyle(.borderedProminent)
                 }
                 .background(SMA.groupedBackground.ignoresSafeArea())
             } else {
                 List {
-                    ForEach($reminders) { $reminder in
-                        ServiceReminderSection(reminder: reminder) {
-                            markComplete(reminder.id)
-                        }
+                    ForEach(reminders) { reminder in
+                        ServiceReminderSection(
+                            reminder: reminder,
+                            onComplete: { markComplete(reminder.id) },
+                            onEdit: { editTarget = ReminderEditTarget(reminder: reminder) }
+                        )
                     }
                     .onDelete { reminders.remove(atOffsets: $0) }
                 }
@@ -72,13 +77,33 @@ struct RemindersView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { creating = true } label: { Image(systemName: "plus") }
-                    .accessibilityLabel("Add Reminder")
+                Button { editTarget = ReminderEditTarget(reminder: nil) } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("Add Reminder")
             }
         }
-        .sheet(isPresented: $creating) {
-            NewReminderEditor { reminders.append($0) }
+        .sheet(item: $editTarget) { target in
+            ReminderEditor(
+                initial: target.reminder,
+                onSave: { upsert($0) },
+                onDelete: target.reminder.map { existing in { delete(existing.id) } }
+            )
         }
+    }
+
+    // MARK: Mutations
+
+    private func upsert(_ reminder: ServiceReminder) {
+        if let i = reminders.firstIndex(where: { $0.id == reminder.id }) {
+            reminders[i] = reminder
+        } else {
+            reminders.append(reminder)
+        }
+    }
+
+    private func delete(_ id: ServiceReminder.ID) {
+        withAnimation(.snappy) { reminders.removeAll { $0.id == id } }
     }
 
     private func markComplete(_ id: ServiceReminder.ID) {
@@ -91,30 +116,39 @@ struct RemindersView: View {
     }
 }
 
+/// Identifiable wrapper so a new-or-existing reminder can drive `.sheet(item:)`.
+struct ReminderEditTarget: Identifiable {
+    let id = UUID()
+    let reminder: ServiceReminder?
+}
+
 /// One reminder rendered as a grouped card: a life bar, next-service date, the part
-/// spec, and the mark-complete (and optional call-contractor) actions.
+/// spec, and the mark-complete (and optional call-contractor) actions. The info button
+/// opens the editor.
 private struct ServiceReminderSection: View {
     let reminder: ServiceReminder
     let onComplete: () -> Void
+    let onEdit: () -> Void
 
     var body: some View {
         Section {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(reminder.name)
+                        .font(.headline)
                         .foregroundStyle(SMA.labelPrimary)
                     Text(reminder.type)
                         .font(.footnote)
                         .foregroundStyle(SMA.labelSecondary)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 Text("\(Int((reminder.lifeRemaining * 100).rounded()))%")
                     .foregroundStyle(SMA.labelSecondary)
                     .monospacedDigit()
-                Button { } label: { Image(systemName: "info.circle") }
+                Button(action: onEdit) { Image(systemName: "info.circle") }
                     .buttonStyle(.borderless)
                     .foregroundStyle(SMA.accent)
-                    .accessibilityLabel("About this reminder")
+                    .accessibilityLabel("Edit \(reminder.name)")
             }
 
             ReminderLifeBar(progress: reminder.lifeRemaining)
@@ -125,19 +159,24 @@ private struct ServiceReminderSection: View {
                     .foregroundStyle(SMA.accent)
             }
 
-            Text(reminder.spec)
-                .foregroundStyle(SMA.labelPrimary)
+            if !reminder.spec.isEmpty {
+                Text(reminder.spec)
+                    .foregroundStyle(SMA.labelPrimary)
+            }
 
             HStack(spacing: 12) {
                 if reminder.hasContractor {
-                    Button("Call Contractor") { }
-                        .buttonStyle(.bordered)
-                        .frame(maxWidth: .infinity)
+                    Button { } label: {
+                        Text("Call Contractor").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                Button("Mark Complete", action: onComplete)
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
+                Button(action: onComplete) {
+                    Text("Mark Complete").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
             }
+            .controlSize(.large)
             .tint(SMA.accent)
             .listRowSeparator(.hidden)
         } footer: {
@@ -155,14 +194,14 @@ private struct ReminderLifeBar: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4).fill(SMA.fillTertiary)
-                RoundedRectangle(cornerRadius: 4)
+                Capsule().fill(SMA.fillTertiary)
+                Capsule()
                     .fill(color)
                     .frame(width: geo.size.width * max(0, min(1, progress)))
             }
         }
-        .frame(height: 16)
-        .padding(.vertical, 4)
+        .frame(height: 12)
+        .padding(.vertical, 6)
         .accessibilityLabel("Life remaining \(Int((progress * 100).rounded())) percent")
     }
 
@@ -175,25 +214,41 @@ private struct ReminderLifeBar: View {
     }
 }
 
-// MARK: - New Reminder editor
+// MARK: - Add / Edit reminder
 
-struct NewReminderEditor: View {
+struct ReminderEditor: View {
     @Environment(\.dismiss) private var dismiss
-    let onSave: (ServiceReminder) -> Void
 
-    @State private var name = ""
-    @State private var type = "Air Filter"
-    @State private var basedOn: ReminderBasis = .runtime
-    @State private var duration = "300 Hours"
-    @State private var lastCompleted = Date()
-    @State private var notes = ""
+    let initial: ServiceReminder?
+    let onSave: (ServiceReminder) -> Void
+    var onDelete: (() -> Void)?
+
+    @State private var name: String
+    @State private var type: String
+    @State private var basedOn: ReminderBasis
+    @State private var duration: String
+    @State private var lastCompleted: Date
+    @State private var notes: String
 
     private let types = ["Air Filter", "Humidifier Pad", "UV Bulb", "Blower Motor", "Custom"]
     private let runtimeDurations = ["100 Hours", "200 Hours", "300 Hours", "500 Hours", "1000 Hours"]
     private let calendarDurations = ["1 Month", "3 Months", "6 Months", "12 Months"]
 
+    init(initial: ServiceReminder?, onSave: @escaping (ServiceReminder) -> Void, onDelete: (() -> Void)? = nil) {
+        self.initial = initial
+        self.onSave = onSave
+        self.onDelete = onDelete
+        _name = State(initialValue: initial?.name ?? "")
+        _type = State(initialValue: initial?.type ?? "Air Filter")
+        _basedOn = State(initialValue: initial?.basedOn ?? .runtime)
+        _duration = State(initialValue: initial?.durationText ?? "300 Hours")
+        _lastCompleted = State(initialValue: initial?.lastCompleted ?? Date())
+        _notes = State(initialValue: initial?.spec ?? "")
+    }
+
     private var durations: [String] { basedOn == .runtime ? runtimeDurations : calendarDurations }
     private var isValid: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var isNew: Bool { initial == nil }
 
     var body: some View {
         NavigationStack {
@@ -204,13 +259,13 @@ struct NewReminderEditor: View {
 
                 Section {
                     Picker("Reminder Type", selection: $type) {
-                        ForEach(types, id: \.self) { Text($0) }
+                        ForEach(types, id: \.self) { Text($0).tag($0) }
                     }
                     Picker("Based On", selection: $basedOn) {
                         ForEach(ReminderBasis.allCases) { Text($0.rawValue).tag($0) }
                     }
                     Picker("Duration", selection: $duration) {
-                        ForEach(durations, id: \.self) { Text($0) }
+                        ForEach(durations, id: \.self) { Text($0).tag($0) }
                     }
                     DatePicker("Last Completed", selection: $lastCompleted, displayedComponents: .date)
                 }
@@ -218,11 +273,22 @@ struct NewReminderEditor: View {
                 Section("Notes") {
                     TextField("Size, Rating, Brand", text: $notes)
                 }
+
+                if !isNew, let onDelete {
+                    Section {
+                        Button("Delete Reminder", role: .destructive) {
+                            onDelete()
+                            dismiss()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .foregroundStyle(SMA.destructive)
+                    }
+                }
             }
             .scrollContentBackground(.hidden)
             .listRowBackground(SMA.card)
             .background(SMA.groupedBackground.ignoresSafeArea())
-            .navigationTitle("New Reminder")
+            .navigationTitle(isNew ? "New Reminder" : "Edit Reminder")
             .inlineNavTitle()
             .presentationDragIndicator(.visible)
             .onChange(of: basedOn) { _, _ in
@@ -243,11 +309,17 @@ struct NewReminderEditor: View {
     }
 
     private func makeReminder() -> ServiceReminder {
-        let component: Calendar.Component = basedOn == .runtime ? .month : .month
-        let next = Calendar.current.date(byAdding: component, value: 3, to: Date()) ?? Date()
-        return ServiceReminder(name: name, type: type, basedOn: basedOn, durationText: duration,
-                               nextService: next, lastCompleted: lastCompleted, spec: notes,
-                               lifeRemaining: 1)
+        let next = initial?.nextService
+            ?? Calendar.current.date(byAdding: .month, value: 3, to: Date())
+            ?? Date()
+        var result = ServiceReminder(
+            name: name, type: type, basedOn: basedOn, durationText: duration,
+            nextService: next, lastCompleted: lastCompleted, spec: notes,
+            lifeRemaining: initial?.lifeRemaining ?? 1,
+            hasContractor: initial?.hasContractor ?? false
+        )
+        if let initial { result.id = initial.id }   // preserve identity when editing
+        return result
     }
 }
 
