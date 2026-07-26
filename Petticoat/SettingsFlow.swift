@@ -37,7 +37,10 @@ enum TemperatureUnit: String, CaseIterable, Identifiable {
 
 /// All persisted thermostat settings (Display Options, System Configuration, About, and
 /// Location). Stored on `AppModel` so edits survive navigating away and back.
-struct ThermostatSettings {
+@Observable final class ThermostatSettings {
+    // A reference type so SwiftUI observes each field individually — flipping one
+    // toggle/picker only invalidates that control, not the whole Settings screen.
+
     // Display Options
     var continuousBacklight = true
     var displayHumidity = true
@@ -105,22 +108,33 @@ struct DisplayOptionsView: View {
 // MARK: - Contractor Information
 
 /// The HVAC contractor on file for this thermostat. Stored on `AppModel` so Settings and
-/// the reminder "Call Contractor" action share one source of truth.
-struct Contractor: Hashable {
-    var company: String = ""
-    var address: String = ""
-    var phone: String = ""
-    var city: String = ""
-    var state: String = ""
-    var country: String = ""
+/// the reminder "Call Contractor" action share one source of truth. A reference type so
+/// editing one field doesn't invalidate every field's view.
+@Observable final class Contractor {
+    var company: String
+    var address: String
+    var phone: String
+    var city: String
+    var state: String
+    var country: String
+
+    init(company: String = "", address: String = "", phone: String = "",
+         city: String = "", state: String = "", country: String = "") {
+        self.company = company
+        self.address = address
+        self.phone = phone
+        self.city = city
+        self.state = state
+        self.country = country
+    }
 
     /// Digits only, for a `tel:` URL.
     var phoneDigits: String { phone.filter(\.isNumber) }
 
-    static let sample = Contractor(
-        company: "123 HVAC Contracting Company", address: "ABC Ave", phone: "555555",
-        city: "Villagetownsburg", state: "Missouri", country: "United States"
-    )
+    static var sample: Contractor {
+        Contractor(company: "123 HVAC Contracting Company", address: "ABC Ave", phone: "555555",
+                   city: "Villagetownsburg", state: "Missouri", country: "United States")
+    }
 }
 
 struct ContractorInformationView: View {
