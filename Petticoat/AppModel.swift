@@ -453,6 +453,9 @@ final class AppModel {
     ]
     /// The selected program per mode.
     var selectedProgramID: [ScheduleKind: ScheduleProgram.ID] = [:]
+    /// HVAC service reminders shown in the Reminders tab. Single source of truth so
+    /// edits persist across the session.
+    var serviceReminders: [ServiceReminder] = ServiceReminder.samples()
 
     /// The active schedule — the selected one, or the first available.
     var activeSchedule: SchedulePreset? {
@@ -499,9 +502,10 @@ final class AppModel {
         }
     }
 
-    /// A bare setpoint program event as a timeline period (no profile icon/name).
+    /// A bare setpoint program event as a timeline period (no profile). Its start time
+    /// stands in for the missing profile name so program cards don't read blank.
     private func programPeriod(_ e: ProgramEvent) -> TimelinePeriod {
-        TimelinePeriod(id: e.id, name: "", symbol: "", colorHex: 0,
+        TimelinePeriod(id: e.id, name: e.timeText, symbol: "", colorHex: 0,
                        heatTo: e.heatTo, coolTo: e.coolTo, startText: e.timeText)
     }
 
@@ -708,6 +712,33 @@ final class AppModel {
         programs[kind]?.removeAll { $0.id == id }
         if selectedProgramID[kind] == id { selectedProgramID[kind] = programs[kind]?.first?.id }
         syncScheduleSetpoints()
+    }
+
+    // MARK: - Service reminders
+
+    /// Insert a new reminder or update an existing one (matched by id).
+    func saveReminder(_ reminder: ServiceReminder) {
+        if let i = serviceReminders.firstIndex(where: { $0.id == reminder.id }) {
+            serviceReminders[i] = reminder
+        } else {
+            serviceReminders.append(reminder)
+        }
+    }
+
+    func deleteReminder(_ id: ServiceReminder.ID) {
+        serviceReminders.removeAll { $0.id == id }
+    }
+
+    func deleteReminders(_ offsets: IndexSet) {
+        serviceReminders.remove(atOffsets: offsets)
+    }
+
+    /// Mark a reminder serviced: reset its life and push the next-service date out.
+    func completeReminder(_ id: ServiceReminder.ID) {
+        guard let i = serviceReminders.firstIndex(where: { $0.id == id }) else { return }
+        serviceReminders[i].lastCompleted = Date()
+        serviceReminders[i].lifeRemaining = 1
+        serviceReminders[i].nextService = Calendar.current.date(byAdding: .month, value: 3, to: Date()) ?? Date()
     }
 
     /// Dismisses a spotlight card. When the last card is dismissed the Spotlight area

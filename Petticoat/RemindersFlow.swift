@@ -45,13 +45,13 @@ struct ServiceReminder: Identifiable, Hashable {
 // MARK: - Reminders list
 
 struct RemindersView: View {
-    @State private var reminders: [ServiceReminder] = ServiceReminder.samples()
+    @Environment(AppModel.self) private var model
     /// Drives the add/edit sheet: a nil `reminder` is a new one, otherwise an edit.
     @State private var editTarget: ReminderEditTarget?
 
     var body: some View {
         Group {
-            if reminders.isEmpty {
+            if model.serviceReminders.isEmpty {
                 ContentUnavailableView {
                     Label("No Reminders", systemImage: "bell.badge")
                 } description: {
@@ -63,14 +63,14 @@ struct RemindersView: View {
                 .background(SMA.groupedBackground.ignoresSafeArea())
             } else {
                 List {
-                    ForEach(reminders) { reminder in
+                    ForEach(model.serviceReminders) { reminder in
                         ServiceReminderSection(
                             reminder: reminder,
-                            onComplete: { markComplete(reminder.id) },
+                            onComplete: { withAnimation(.snappy) { model.completeReminder(reminder.id) } },
                             onEdit: { editTarget = ReminderEditTarget(reminder: reminder) }
                         )
                     }
-                    .onDelete { reminders.remove(atOffsets: $0) }
+                    .onDelete { model.deleteReminders($0) }
                 }
                 .groupedListChrome()
             }
@@ -86,32 +86,9 @@ struct RemindersView: View {
         .sheet(item: $editTarget) { target in
             ReminderEditor(
                 initial: target.reminder,
-                onSave: { upsert($0) },
-                onDelete: target.reminder.map { existing in { delete(existing.id) } }
+                onSave: { model.saveReminder($0) },
+                onDelete: target.reminder.map { existing in { model.deleteReminder(existing.id) } }
             )
-        }
-    }
-
-    // MARK: Mutations
-
-    private func upsert(_ reminder: ServiceReminder) {
-        if let i = reminders.firstIndex(where: { $0.id == reminder.id }) {
-            reminders[i] = reminder
-        } else {
-            reminders.append(reminder)
-        }
-    }
-
-    private func delete(_ id: ServiceReminder.ID) {
-        withAnimation(.snappy) { reminders.removeAll { $0.id == id } }
-    }
-
-    private func markComplete(_ id: ServiceReminder.ID) {
-        guard let i = reminders.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(.snappy) {
-            reminders[i].lastCompleted = Date()
-            reminders[i].lifeRemaining = 1
-            reminders[i].nextService = Calendar.current.date(byAdding: .month, value: 3, to: Date()) ?? Date()
         }
     }
 }
