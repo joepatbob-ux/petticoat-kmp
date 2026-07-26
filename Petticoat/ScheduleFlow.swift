@@ -177,6 +177,10 @@ struct ScheduleEditorView: View {
 
     private let minEvents = 1
     private let maxEvents = 8
+    /// The dial's visual floor (an hour minimum per period) and 15-minute grid, enforced
+    /// for manual time entry too — see `DialMath.clampStart`.
+    private let minDurationMinutes = 60
+    private let snapMinutes = 15
 
     init(preset: SchedulePreset, onSave: @escaping (SchedulePreset) -> Void, onDelete: (() -> Void)? = nil) {
         _preset = State(initialValue: preset)
@@ -418,14 +422,27 @@ struct ScheduleEditorView: View {
         selectedEventID = preset.groups[g].events.first?.id
     }
 
-    /// Replace a selected event's start time (from the dial), keeping the list sorted.
+    /// Replace a selected event's start time (from the dial's grip or the manual sheet),
+    /// snapping to the 15-min grid and clamping so the event and its neighbors each keep the
+    /// one-hour minimum — the same rules the dial's drag enforces, now applied to manual
+    /// entry too. Keeps the list sorted.
     private func setEventTime(_ eventID: ScheduleEvent.ID, to newTime: Date) {
         for g in preset.groups.indices {
-            if let e = preset.groups[g].events.firstIndex(where: { $0.id == eventID }) {
-                preset.groups[g].events[e].time = newTime
+            guard let e = preset.groups[g].events.firstIndex(where: { $0.id == eventID }) else { continue }
+            let sorted = preset.groups[g].events.sorted { $0.time < $1.time }
+            let n = sorted.count
+            guard n > 1, let s = sorted.firstIndex(where: { $0.id == eventID }) else {
+                preset.groups[g].events[e].time = dateAtMinutes(DialMath.snapToGrid(minutesOfDay(newTime), snap: snapMinutes))
                 preset.groups[g].events.sort { $0.time < $1.time }
                 return
             }
+            let prev = minutesOfDay(sorted[(s - 1 + n) % n].time)
+            let next = minutesOfDay(sorted[(s + 1) % n].time)
+            let clamped = DialMath.clampStart(proposed: minutesOfDay(newTime), prev: prev, next: next,
+                                              wholeRing: n <= 2, minLen: minDurationMinutes, snap: snapMinutes)
+            preset.groups[g].events[e].time = dateAtMinutes(clamped)
+            preset.groups[g].events.sort { $0.time < $1.time }
+            return
         }
     }
 
@@ -510,6 +527,18 @@ private struct GroupTarget: Identifiable {
 }
 
 /// Identifiable wrapper for the Edit Event sheet, carrying the event + its group.
+/// Minutes since midnight for a time-of-day `Date`.
+private func minutesOfDay(_ date: Date) -> Int {
+    let c = Calendar.current.dateComponents([.hour, .minute], from: date)
+    return (c.hour ?? 0) * 60 + (c.minute ?? 0)
+}
+
+/// A today-anchored `Date` at the given minutes since midnight.
+private func dateAtMinutes(_ minutes: Int) -> Date {
+    let m = ((minutes % 1440) + 1440) % 1440
+    return Calendar.current.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: Date()) ?? Date()
+}
+
 private struct EventTarget: Identifiable {
     var id: ScheduleEvent.ID { event.id }
     let groupID: ScheduleDayGroup.ID
@@ -542,9 +571,9 @@ struct ScheduleEventEditor: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    DatePicker("Start", selection: $time, displayedComponents: .hourAndMinute)
-                        .foregroundStyle(SMA.labelPrimary)
+                Section("Start") {
+                    IntervalTimePicker(time: $time, minuteInterval: 15)
+                        .frame(height: 180)
                 }
 
                 Section("Activity") {
@@ -666,8 +695,9 @@ struct ManualStartTimeSheet: View {
 }
 
 /// A wheels-style time picker with a fixed minute interval. SwiftUI's `DatePicker`
-/// has no minute-interval option, so this wraps `UIDatePicker`.
-private struct IntervalTimePicker: UIViewRepresentable {
+/// has no minute-interval option, so this wraps `UIDatePicker`. Shared by the manual
+/// start sheet and the Add/Edit event editors so every start time lands on the grid.
+struct IntervalTimePicker: UIViewRepresentable {
     @Binding var time: Date
     var minuteInterval: Int = 15
 

@@ -123,6 +123,35 @@ struct SchedulingMathTests {
         #expect(DialMath.breakPlacement(fingerMin: 150, durS: 120, others: [0, 100, 200], minLen: 60) == nil)
     }
 
+    // MARK: DialMath.snapToGrid / clampStart
+
+    @Test func snapToGridRoundsToNearest() {
+        #expect(DialMath.snapToGrid(487, snap: 15) == 480)   // 8:07 → 8:00
+        #expect(DialMath.snapToGrid(493, snap: 15) == 495)   // 8:13 → 8:15
+        #expect(DialMath.snapToGrid(1433, snap: 15) == 0)    // 23:53 → midnight (wraps)
+    }
+
+    @Test func clampStartSnapsWhenInRange() {
+        // Room between neighbors (360..1020); 8:07 snaps to 8:00, well within bounds.
+        let m = DialMath.clampStart(proposed: 487, prev: 360, next: 1020,
+                                    wholeRing: false, minLen: 60, snap: 15)
+        #expect(m == 480)
+    }
+
+    @Test func clampStartHoldsMinimumFromPrev() {
+        // Dropping 10 min after the previous event (360) clamps up to the 60-min minimum.
+        let m = DialMath.clampStart(proposed: 370, prev: 360, next: 1020,
+                                    wholeRing: false, minLen: 60, snap: 15)
+        #expect(m == 420)
+    }
+
+    @Test func clampStartHoldsMinimumBeforeNext() {
+        // Dropping right on the next event (1020) clamps back so the gap to next stays ≥ 60.
+        let m = DialMath.clampStart(proposed: 1020, prev: 360, next: 1020,
+                                    wholeRing: false, minLen: 60, snap: 15)
+        #expect(m == 960)
+    }
+
     @Test func breakPlacementLoneArcWrapsTail() {
         let p = DialMath.breakPlacement(fingerMin: 700, durS: 120, others: [500], minLen: 60)
         #expect(p?.brokenStart == 500)

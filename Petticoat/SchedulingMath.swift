@@ -28,6 +28,29 @@ enum DialMath {
     /// Clockwise distance in minutes from `a` to `b` around the 24h (1440-minute) ring.
     static func cwDistance(_ a: Int, _ b: Int) -> Int { ((b - a) % 1440 + 1440) % 1440 }
 
+    /// Round `minutes` to the nearest multiple of `snap`, wrapped into 0..<1440.
+    static func snapToGrid(_ minutes: Int, snap: Int) -> Int {
+        let m = ((minutes % 1440) + 1440) % 1440
+        let r = Int((Double(m) / Double(snap)).rounded()) * snap
+        return ((r % 1440) + 1440) % 1440
+    }
+
+    /// Snap `proposed` (minutes) to the `snap` grid, then clamp it between the moved event's
+    /// neighbor starts `prev` and `next` so the event and the neighbor before it each keep at
+    /// least `minLen`. `wholeRing` (a 1- or 2-event schedule) frees the whole 1440-min ring,
+    /// clamped only against the lone neighbor on either side. Used to enforce the same
+    /// minimum-length + grid rules for manual time entry as the dial's drag.
+    static func clampStart(proposed: Int, prev: Int, next: Int, wholeRing: Bool,
+                           minLen: Int, snap: Int) -> Int {
+        let snapped = snapToGrid(proposed, snap: snap)
+        let span = wholeRing ? 1440 : cwDistance(prev, next)
+        let lo = minLen
+        let hi = span - minLen
+        guard hi >= lo else { return (prev + span / 2) % 1440 }
+        let d = min(max(cwDistance(prev, snapped), lo), hi)
+        return (prev + d) % 1440
+    }
+
     /// The arc in `others` (sorted, distinct start minutes) whose span encloses `minute`,
     /// as `(start, length)` in minutes. A lone arc spans the whole ring.
     static func enclosing(_ minute: Int, others: [Int]) -> (start: Int, length: Int)? {

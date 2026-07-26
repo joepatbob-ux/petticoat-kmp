@@ -255,6 +255,20 @@ struct AppModelTests {
         #expect(model.device.sensors.first?.name == "Living Room")
     }
 
+    @Test func cannotDeselectLastParticipatingSensor() {
+        let model = AppModel()
+        let dev = model.device.id
+        // Turn participants off one by one; the guard stops it at the final one.
+        for sensor in model.device.sensors where sensor.participating {
+            model.toggleSensor(sensor, in: dev)
+        }
+        #expect(model.device.sensors.filter { $0.participating }.count == 1)
+        // Toggling the sole remaining participant is a no-op.
+        let last = model.device.sensors.first { $0.participating }!
+        model.toggleSensor(last, in: dev)
+        #expect(model.device.sensors.filter { $0.participating }.count == 1)
+    }
+
     @Test func renamingSensorIgnoresBlank() {
         let model = AppModel()
         guard let sensor = model.device.sensors.first else { return }

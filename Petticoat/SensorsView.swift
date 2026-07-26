@@ -17,6 +17,10 @@ struct SensorsView: View {
     /// the room sensors.
     private var wiredSensors: [RoomSensor] { device.sensors.filter { $0.battery == nil } }
     private var roomSensors: [RoomSensor] { device.sensors.filter { $0.battery != nil } }
+    /// How many sensors currently feed the average — at least one must, so when it's down
+    /// to one that sensor's toggle locks on.
+    private var participatingCount: Int { device.sensors.filter { $0.participating }.count }
+    private func lockedOn(_ sensor: RoomSensor) -> Bool { sensor.participating && participatingCount <= 1 }
 
     var body: some View {
         List {
@@ -32,7 +36,7 @@ struct SensorsView: View {
 
             Section("Thermostat") {
                 ForEach(wiredSensors) { sensor in
-                    SensorRow(sensor: sensor, showsDrillIn: false,
+                    SensorRow(sensor: sensor, showsDrillIn: false, lockedOn: lockedOn(sensor),
                               onToggle: { model.toggleSensor(sensor, in: device.id) },
                               onDrill: {})
                 }
@@ -40,7 +44,7 @@ struct SensorsView: View {
 
             Section {
                 ForEach(roomSensors) { sensor in
-                    SensorRow(sensor: sensor, showsDrillIn: true,
+                    SensorRow(sensor: sensor, showsDrillIn: true, lockedOn: lockedOn(sensor),
                               onToggle: { model.toggleSensor(sensor, in: device.id) },
                               onDrill: { detailSensor = sensor })
                 }
@@ -91,6 +95,9 @@ private struct SensorMetricTile: View {
 private struct SensorRow: View {
     let sensor: RoomSensor
     let showsDrillIn: Bool
+    /// The last participating sensor can't be deselected (the average needs a source), so
+    /// its toggle is disabled.
+    var lockedOn: Bool = false
     let onToggle: () -> Void
     let onDrill: () -> Void
 
@@ -103,8 +110,10 @@ private struct SensorRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
+            .disabled(lockedOn)
             .accessibilityLabel("\(sensor.name) participates in average")
             .accessibilityAddTraits(sensor.participating ? [.isSelected] : [])
+            .accessibilityHint(lockedOn ? "At least one sensor must feed the average" : "")
 
             Button(action: showsDrillIn ? onDrill : onToggle) {
                 HStack(spacing: 12) {

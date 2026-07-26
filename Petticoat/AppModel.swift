@@ -585,10 +585,13 @@ final class AppModel {
         adjustKeep(bound, by: delta, in: device.id)
     }
 
-    /// Toggle whether a paired sensor feeds the averaged temperature on a device.
+    /// Toggle whether a paired sensor feeds the averaged temperature on a device. At least
+    /// one sensor must always feed the average, so deselecting the last participant is a no-op.
     func toggleSensor(_ sensor: RoomSensor, in id: Device.ID) {
         guard let di = devices.firstIndex(where: { $0.id == id }),
               let si = devices[di].sensors.firstIndex(where: { $0.id == sensor.id }) else { return }
+        if devices[di].sensors[si].participating,
+           devices[di].sensors.filter({ $0.participating }).count <= 1 { return }
         withAnimation(.snappy) { devices[di].sensors[si].participating.toggle() }
     }
 

@@ -417,9 +417,9 @@ struct ProgramEventEditor: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    DatePicker("Start", selection: $time, displayedComponents: .hourAndMinute)
-                        .foregroundStyle(SMA.labelPrimary)
+                Section("Start") {
+                    IntervalTimePicker(time: $time, minuteInterval: 15)
+                        .frame(height: 180)
                 }
 
                 Section("Setpoint") {
