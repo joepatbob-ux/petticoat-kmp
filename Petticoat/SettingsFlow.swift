@@ -343,33 +343,6 @@ struct AboutThermostatView: View {
     }
 }
 
-/// A colored strength/level bar: green while healthy, yellow as it wanes, red when low.
-struct MetricBar: View {
-    let progress: Double
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4).fill(SMA.fillTertiary)
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(color)
-                    .frame(width: geo.size.width * max(0, min(1, progress)))
-            }
-        }
-        .frame(height: 16)
-        .padding(.vertical, 4)
-        .accessibilityHidden(true)
-    }
-
-    private var color: Color {
-        switch progress {
-        case 0.5...:  return Color(hex: 0x34C759)
-        case 0.25...: return Color(hex: 0xFFCC00)
-        default:      return SMA.destructive
-        }
-    }
-}
-
 // MARK: - Thermostat Location
 
 struct ThermostatLocationView: View {

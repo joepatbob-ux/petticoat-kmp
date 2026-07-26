@@ -83,6 +83,37 @@ struct SensiWordmark: View {
     }
 }
 
+/// A colored strength/level bar: green while healthy, yellow as it wanes, red when low.
+/// Shared by reminder life and the thermostat's Wi-Fi/battery strength readouts.
+struct MetricBar: View {
+    let progress: Double
+    /// When nil the bar is decorative (hidden from assistive tech).
+    var accessibilityLabel: String? = nil
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(SMA.fillTertiary)
+                Capsule()
+                    .fill(color)
+                    .frame(width: geo.size.width * max(0, min(1, progress)))
+            }
+        }
+        .frame(height: 12)
+        .padding(.vertical, 6)
+        .accessibilityLabel(accessibilityLabel ?? "")
+        .accessibilityHidden(accessibilityLabel == nil)
+    }
+
+    private var color: Color {
+        switch progress {
+        case 0.5...:  return Color(hex: 0x34C759)
+        case 0.25...: return Color(hex: 0xFFCC00)
+        default:      return SMA.destructive
+        }
+    }
+}
+
 /// Rounded white "card" container used throughout the grouped screens.
 struct CardBackground: ViewModifier {
     var cornerRadius: CGFloat = 16

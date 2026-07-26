@@ -75,14 +75,6 @@ struct RemindersView: View {
                 .groupedListChrome()
             }
         }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { editTarget = ReminderEditTarget(reminder: nil) } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityLabel("Add Reminder")
-            }
-        }
         .sheet(item: $editTarget) { target in
             ReminderEditor(
                 initial: target.reminder,
@@ -128,7 +120,8 @@ private struct ServiceReminderSection: View {
                     .accessibilityLabel("Edit \(reminder.name)")
             }
 
-            ReminderLifeBar(progress: reminder.lifeRemaining)
+            MetricBar(progress: reminder.lifeRemaining,
+                      accessibilityLabel: "Life remaining \(Int((reminder.lifeRemaining * 100).rounded())) percent")
                 .listRowSeparator(.hidden)
 
             LabeledContent("Next Service Date") {
@@ -160,33 +153,6 @@ private struct ServiceReminderSection: View {
             if let last = reminder.lastCompleted {
                 Text("Last Completed: \(last.formatted(.dateTime.month(.wide).day().year()))")
             }
-        }
-    }
-}
-
-/// The colored life bar: green while healthy, yellow as it wanes, red when depleted.
-private struct ReminderLifeBar: View {
-    let progress: Double
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(SMA.fillTertiary)
-                Capsule()
-                    .fill(color)
-                    .frame(width: geo.size.width * max(0, min(1, progress)))
-            }
-        }
-        .frame(height: 12)
-        .padding(.vertical, 6)
-        .accessibilityLabel("Life remaining \(Int((progress * 100).rounded())) percent")
-    }
-
-    private var color: Color {
-        switch progress {
-        case 0.5...:   return Color(hex: 0x34C759)
-        case 0.25...:  return Color(hex: 0xFFCC00)
-        default:       return SMA.destructive
         }
     }
 }

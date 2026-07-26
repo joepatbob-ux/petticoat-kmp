@@ -144,4 +144,50 @@ struct AppModelTests {
         model.deleteProfile(first)
         #expect(!model.activityProfiles.contains { $0.id == first.id })
     }
+
+    // MARK: Service reminders
+
+    private func newReminder(_ name: String = "Test") -> ServiceReminder {
+        ServiceReminder(name: name, type: "Air Filter", basedOn: .runtime, durationText: "300 Hours",
+                        nextService: .now, lastCompleted: nil, spec: "", lifeRemaining: 1)
+    }
+
+    @Test func savingUnknownReminderAppends() {
+        let model = AppModel()
+        let start = model.serviceReminders.count
+        let reminder = newReminder("Guest Filter")
+        model.saveReminder(reminder)
+        #expect(model.serviceReminders.count == start + 1)
+        #expect(model.serviceReminders.last?.id == reminder.id)
+    }
+
+    @Test func savingExistingReminderUpdatesInPlace() {
+        let model = AppModel()
+        let count = model.serviceReminders.count
+        var edited = model.serviceReminders[0]
+        edited.name = "Renamed"
+        model.saveReminder(edited)
+        #expect(model.serviceReminders.count == count)
+        #expect(model.serviceReminders[0].id == edited.id)
+        #expect(model.serviceReminders[0].name == "Renamed")
+    }
+
+    @Test func deletingRemovesReminder() {
+        let model = AppModel()
+        let first = model.serviceReminders[0]
+        model.deleteReminder(first.id)
+        #expect(!model.serviceReminders.contains { $0.id == first.id })
+    }
+
+    @Test func completingResetsLifeAndStampsDate() {
+        let model = AppModel()
+        var reminder = model.serviceReminders[0]
+        reminder.lifeRemaining = 0.2
+        reminder.lastCompleted = nil
+        model.saveReminder(reminder)
+        model.completeReminder(reminder.id)
+        let updated = model.serviceReminders.first { $0.id == reminder.id }
+        #expect(updated?.lifeRemaining == 1)
+        #expect(updated?.lastCompleted != nil)
+    }
 }

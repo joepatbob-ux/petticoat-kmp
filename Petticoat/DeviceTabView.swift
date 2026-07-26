@@ -6,6 +6,9 @@ struct DeviceTabView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var selection: DeviceTab = .control
+    /// Presents the New Reminder editor. Lives here (not in the tab content) because a
+    /// toolbar declared inside a TabView tab doesn't surface in the shared nav bar.
+    @State private var addingReminder = false
 
     var body: some View {
         TabView(selection: $selection) {
@@ -36,7 +39,18 @@ struct DeviceTabView: View {
                 }
                 .accessibilityLabel("Back to Dashboard")
             }
+            if selection == .reminders {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { addingReminder = true } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Add Reminder")
+                }
+            }
             helpButton
+        }
+        .sheet(isPresented: $addingReminder) {
+            ReminderEditor(initial: nil) { model.saveReminder($0) }
         }
     }
 
@@ -96,25 +110,6 @@ struct DeviceTabContent: View {
         case .settings:
             SettingsView()
         }
-    }
-}
-
-/// Placeholder content for the not-yet-built device tabs. Accepts either a system
-/// symbol or a custom asset symbol.
-struct DeviceTabPlaceholder: View {
-    let title: String
-    var systemImage: String? = nil
-    var image: String? = nil
-
-    var body: some View {
-        Group {
-            if let image {
-                ContentUnavailableView(title, image: image, description: Text("Prototype screen"))
-            } else {
-                ContentUnavailableView(title, systemImage: systemImage ?? "questionmark", description: Text("Prototype screen"))
-            }
-        }
-        .background(SMA.groupedBackground.ignoresSafeArea())
     }
 }
 
