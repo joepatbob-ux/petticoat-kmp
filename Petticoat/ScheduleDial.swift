@@ -60,6 +60,9 @@ struct RadialScheduleDial: View {
     @State private var grabOffset: CGFloat = 0
     /// The dragged arc's live start position (day fraction) following the finger.
     @State private var proposedStart: CGFloat = 0
+    /// The boundary the drag was snapped to on the previous move, so a haptic fires only
+    /// as the snap engages (not on every frame it stays snapped).
+    @State private var lastBoundarySnap: String?
 
     private var sortedEvents: [ScheduleEvent] { events.sorted { $0.time < $1.time } }
     private var selectedEvent: ScheduleEvent? {
@@ -95,6 +98,9 @@ struct RadialScheduleDial: View {
                         .shadow(color: .black.opacity(arc.floating ? 0.45 : 0),
                                 radius: arc.floating ? 9 : 0, y: arc.floating ? 3 : 0)
                         .allowsHitTesting(false)
+                        // Ease only the snap-to/off-boundary jump; ordinary finger tracking
+                        // (token unchanged) still updates unanimated so it stays glued.
+                        .animation(.snappy(duration: 0.18), value: boundarySnapToken)
                 }
 
                 // Hour ticks on top of the arcs: a dot at each hour, with M (midnight)
@@ -136,6 +142,7 @@ struct RadialScheduleDial: View {
                             .foregroundStyle(.white.opacity(dimmed ? dimmedOpacity : 1))
                             .position(point(f, radius: radius, center: center))
                             .allowsHitTesting(false)
+                            .animation(.snappy(duration: 0.18), value: boundarySnapToken)
                     }
                 }
 
@@ -267,6 +274,7 @@ struct RadialScheduleDial: View {
         let f = fraction(of: location, center: center)
         grabOffset = f - start
         proposedStart = normalize(f - grabOffset)
+        lastBoundarySnap = nil
         // Animate the lift + dim of the other arcs; the arc position itself tracks the
         // finger unanimated so it stays glued to the touch.
         withAnimation(.easeOut(duration: 0.14)) { draggingID = id }
@@ -277,6 +285,13 @@ struct RadialScheduleDial: View {
         guard draggingID != nil else { return }
         let f = fraction(of: location, center: center)
         proposedStart = normalize(f - grabOffset)
+        // A soft detent tick as the drag snaps onto a boundary (not while it sits there,
+        // and not on the release from one).
+        let snap = boundarySnapToken
+        if snap != lastBoundarySnap {
+            if snap != nil { snapHaptic() }
+            lastBoundarySnap = snap
+        }
     }
 
     private func endDrag() {
@@ -334,6 +349,13 @@ struct RadialScheduleDial: View {
     private func haptic() {
         #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        #endif
+    }
+
+    /// A light detent tick for snapping onto a boundary — softer than the pickup thud.
+    private func snapHaptic() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6)
         #endif
     }
 
@@ -464,6 +486,14 @@ struct RadialScheduleDial: View {
         /// a boundary), so the preview only draws the piece that survives.
         let hasHead: Bool
         let hasTail: Bool
+    }
+
+    /// Identifies the boundary the drag is currently snapped flush against (the enclosing
+    /// event id + which edge), or nil for an interior break / no drop. Drives the eased
+    /// snap animation and the snap haptic, both of which fire only when this changes.
+    private var boundarySnapToken: String? {
+        guard let p = proposedBreak, !(p.hasHead && p.hasTail) else { return nil }
+        return "\(p.brokenID)-\(p.hasHead ? "trailing" : "leading")"
     }
 
     /// The break that would result from dropping right now — nil when the finger isn't
