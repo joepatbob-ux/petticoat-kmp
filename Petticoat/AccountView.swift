@@ -432,7 +432,8 @@ struct HelpSupportView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isLoading = true
 
-    private let helpURL = URL(string: "https://sensihelp.com")!
+    // The Sensi help experience is a Mavenoid embedded troubleshooting assistant.
+    private let helpURL = URL(string: "https://app.mavenoid.com/embedded-assistant/ma_7pfrrmbjos_gde72ep60pk3hh77uoge921c24ihdj4lclpa")!
 
     var body: some View {
         NavigationStack {
