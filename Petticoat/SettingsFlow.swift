@@ -108,17 +108,13 @@ struct ContractorInformationView: View {
             }
 
             Section {
-                Button("Call Contractor") {
+                RowActionButton("Call Contractor", isEnabled: !phoneDigits.isEmpty) {
                     if let url = URL(string: "tel://\(phoneDigits)") { openURL(url) }
                 }
-                .frame(maxWidth: .infinity)
-                .disabled(phoneDigits.isEmpty)
             }
 
             Section {
-                Button("Remove Contractor", role: .destructive) { confirmRemove = true }
-                    .frame(maxWidth: .infinity)
-                    .foregroundStyle(SMA.destructive)
+                RowActionButton("Remove Contractor", role: .destructive) { confirmRemove = true }
             }
         }
         .groupedListChrome()
@@ -215,8 +211,7 @@ struct EnergyProgramDetailView: View {
                 }
             }
             Section {
-                Button("Enroll") { confirmEnroll = true }
-                    .frame(maxWidth: .infinity)
+                RowActionButton("Enroll") { confirmEnroll = true }
             }
         }
         .groupedListChrome()
@@ -357,9 +352,7 @@ struct AboutThermostatView: View {
             }
 
             Section {
-                Button("Remove Thermostat", role: .destructive) { confirmRemove = true }
-                    .frame(maxWidth: .infinity)
-                    .foregroundStyle(SMA.destructive)
+                RowActionButton("Remove Thermostat", role: .destructive) { confirmRemove = true }
             }
         }
         .groupedListChrome()

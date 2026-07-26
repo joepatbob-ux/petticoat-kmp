@@ -222,12 +222,10 @@ struct ReminderEditor: View {
 
                 if !isNew, let onDelete {
                     Section {
-                        Button("Delete Reminder", role: .destructive) {
+                        RowActionButton("Delete Reminder", role: .destructive) {
                             onDelete()
                             dismiss()
                         }
-                        .frame(maxWidth: .infinity)
-                        .foregroundStyle(SMA.destructive)
                     }
                 }
             }

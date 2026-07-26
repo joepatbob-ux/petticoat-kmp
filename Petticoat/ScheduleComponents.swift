@@ -91,6 +91,29 @@ struct EditorCancelButton: View {
     }
 }
 
+/// A full-width grouped-list action button (e.g. "Delete", "Enroll", "Call"). Uses the
+/// accent tint by default and the destructive token for `.destructive` roles.
+struct RowActionButton: View {
+    let title: LocalizedStringKey
+    var role: ButtonRole? = nil
+    var isEnabled: Bool = true
+    let action: () -> Void
+
+    init(_ title: LocalizedStringKey, role: ButtonRole? = nil, isEnabled: Bool = true, action: @escaping () -> Void) {
+        self.title = title
+        self.role = role
+        self.isEnabled = isEnabled
+        self.action = action
+    }
+
+    var body: some View {
+        Button(title, role: role, action: action)
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(role == .destructive ? SMA.destructive : SMA.accent)
+            .disabled(!isEnabled)
+    }
+}
+
 extension Set {
     /// Inserts `member` if absent, removes it if present.
     mutating func toggleMembership(_ member: Element) {
