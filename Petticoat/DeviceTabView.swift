@@ -9,6 +9,9 @@ struct DeviceTabView: View {
     /// Presents the New Reminder editor. Lives here (not in the tab content) because a
     /// toolbar declared inside a TabView tab doesn't surface in the shared nav bar.
     @State private var addingReminder = false
+    /// The Usage tab's Recent/Monthly range. Owned here so its segmented control can live
+    /// in the shared nav-bar header (tab-content toolbars don't surface there).
+    @State private var usageRange: UsageRange = .recent
 
     var body: some View {
         TabView(selection: $selection) {
@@ -19,7 +22,7 @@ struct DeviceTabView: View {
                 DeviceTabContent(tab: .schedule)
             }
             Tab("Usage", systemImage: "gauge.with.needle.fill", value: DeviceTab.usage) {
-                DeviceTabContent(tab: .usage)
+                DeviceTabContent(tab: .usage, usageRange: $usageRange)
             }
             Tab("Reminders", systemImage: "bell", value: DeviceTab.reminders) {
                 DeviceTabContent(tab: .reminders)
@@ -45,6 +48,15 @@ struct DeviceTabView: View {
                         Image(systemName: "plus")
                     }
                     .accessibilityLabel("Add Reminder")
+                }
+            }
+            if selection == .usage {
+                ToolbarItem(placement: .principal) {
+                    Picker("Range", selection: $usageRange) {
+                        ForEach(UsageRange.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 240)
                 }
             }
             helpButton
@@ -96,6 +108,8 @@ enum DeviceTab: Hashable, CaseIterable, Identifiable {
 
 struct DeviceTabContent: View {
     let tab: DeviceTab
+    /// Bound from the parent so the Usage range control can live in the shared header.
+    var usageRange: Binding<UsageRange> = .constant(.recent)
 
     var body: some View {
         switch tab {
@@ -104,7 +118,7 @@ struct DeviceTabContent: View {
         case .schedule:
             ScheduleView()
         case .usage:
-            UsageView()
+            UsageView(range: usageRange)
         case .reminders:
             RemindersView()
         case .settings:

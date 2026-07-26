@@ -63,20 +63,12 @@ enum UsageRange: String, CaseIterable, Identifiable {
 
 struct UsageView: View {
     @Environment(AppModel.self) private var model
-    @State private var range: UsageRange = .recent
+    /// Bound from the tab container so the Recent/Monthly toggle lives in the nav header.
+    @Binding var range: UsageRange
     @State private var expanded: Set<UUID> = []
 
     var body: some View {
         List {
-            Section {
-                Picker("Range", selection: $range) {
-                    ForEach(UsageRange.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-            }
-
             ForEach(range.periods) { period in
                 Section {
                     ForEach(period.entries) { entry in
@@ -342,8 +334,9 @@ private enum UsageSample {
 }
 
 #Preview {
+    @Previewable @State var range: UsageRange = .recent
     NavigationStack {
-        UsageView()
+        UsageView(range: $range)
             .navigationTitle("Usage")
             .inlineNavTitle()
     }
