@@ -119,7 +119,10 @@ struct RadialScheduleDial: View {
                 ForEach(sortedEvents) { e in
                     let showsGrip = (e.id == selectedEvent?.id && draggingID == nil)
                     if !showsGrip {
-                        let base = (e.id == draggingID) ? proposedStart : frac(e.time)
+                        // The dragged icon must sit at the arc's rendered start — the
+                        // previewed break gap (floatStart) when over a breakable arc, else
+                        // the finger — so the icon and its arc never drift apart.
+                        let base = (e.id == draggingID) ? (proposedBreak?.floatStart ?? proposedStart) : frac(e.time)
                         let f = base + knobInsetFraction(radius: radius)
                         let dimmed = draggingID != nil && e.id != draggingID
                         Image(systemName: e.symbol)
