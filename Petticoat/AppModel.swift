@@ -458,6 +458,9 @@ final class AppModel {
     var serviceReminders: [ServiceReminder] = ServiceReminder.samples()
     /// The contractor on file — shared by Settings and the reminder "Call Contractor".
     var contractor: Contractor = .sample
+    /// Persisted thermostat settings (Display Options, System Configuration, About,
+    /// Location) so the Settings screens survive navigating away and back.
+    var thermostatSettings = ThermostatSettings()
 
     /// The active schedule — the selected one, or the first available.
     var activeSchedule: SchedulePreset? {

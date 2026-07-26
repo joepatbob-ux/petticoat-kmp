@@ -35,31 +35,63 @@ enum TemperatureUnit: String, CaseIterable, Identifiable {
     var label: String { self == .fahrenheit ? "°F" : "°C" }
 }
 
+/// All persisted thermostat settings (Display Options, System Configuration, About, and
+/// Location). Stored on `AppModel` so edits survive navigating away and back.
+struct ThermostatSettings {
+    // Display Options
+    var continuousBacklight = true
+    var displayHumidity = true
+    var displayTime = true
+    var units: TemperatureUnit = .fahrenheit
+
+    // System Configuration
+    var lockThermostat = false
+    var coolingMin = 55
+    var heatingMax = 99
+    var humidification = true
+    var humidifyTo = 40
+    var dehumidification = true
+    var dehumidifyTo = 40
+    var coolingBoost = "Comfort"
+    var heatingBoost = "Comfort"
+    var auxBoost = "Comfort"
+    var temperatureOffset = 0
+    var humidityOffset = 0
+    var acProtection = true
+
+    // About / Location
+    var name = ""
+    var locationAddress = ""
+    var locationUnit = ""
+    var locationCity = ""
+    var locationState = ""
+    var locationZip = ""
+    var locationCountry = "United States"
+}
+
 struct DisplayOptionsView: View {
-    @State private var continuousBacklight = true
-    @State private var displayHumidity = true
-    @State private var displayTime = true
-    @State private var units: TemperatureUnit = .fahrenheit
+    @Environment(AppModel.self) private var model
 
     var body: some View {
+        @Bindable var model = model
         List {
             Section {
-                Toggle("Continuous Backlight", isOn: $continuousBacklight)
+                Toggle("Continuous Backlight", isOn: $model.thermostatSettings.continuousBacklight)
             } footer: {
                 Text("Backlight will remain on at all times.")
             }
             Section {
-                Toggle("Display Humidity", isOn: $displayHumidity)
+                Toggle("Display Humidity", isOn: $model.thermostatSettings.displayHumidity)
             } footer: {
                 Text("Show humidity level on the thermostat.")
             }
             Section {
-                Toggle("Display Time", isOn: $displayTime)
+                Toggle("Display Time", isOn: $model.thermostatSettings.displayTime)
             } footer: {
                 Text("Show time on the thermostat.")
             }
             Section {
-                Picker("Temperature Units", selection: $units) {
+                Picker("Temperature Units", selection: $model.thermostatSettings.units) {
                     ForEach(TemperatureUnit.allCases) { Text($0.label).tag($0) }
                 }
             }
@@ -239,49 +271,38 @@ struct EnergyProgramDetailView: View {
 // MARK: - System Configuration
 
 struct SystemConfigurationView: View {
-    @State private var lockThermostat = false
-    @State private var coolingMin = 55
-    @State private var heatingMax = 99
-    @State private var humidification = true
-    @State private var humidifyTo = 40
-    @State private var dehumidification = true
-    @State private var dehumidifyTo = 40
-    @State private var coolingBoost = "Comfort"
-    @State private var heatingBoost = "Comfort"
-    @State private var auxBoost = "Comfort"
-    @State private var temperatureOffset = 0
-    @State private var humidityOffset = 0
-    @State private var acProtection = true
+    @Environment(AppModel.self) private var model
 
     private let boostOptions = ["Off", "Eco", "Comfort", "Fast"]
 
     var body: some View {
+        @Bindable var model = model
         List {
             Section {
-                Toggle("Lock Thermostat", isOn: $lockThermostat)
+                Toggle("Lock Thermostat", isOn: $model.thermostatSettings.lockThermostat)
             } footer: {
                 Text("Disables functionality on the thermostat allowing control only through the app.")
             }
 
             Section("Temperature Limits") {
-                Picker("Cooling Min", selection: $coolingMin) {
+                Picker("Cooling Min", selection: $model.thermostatSettings.coolingMin) {
                     ForEach(45...80, id: \.self) { Text("\($0)").tag($0) }
                 }
-                Picker("Heating Max", selection: $heatingMax) {
+                Picker("Heating Max", selection: $model.thermostatSettings.heatingMax) {
                     ForEach(60...99, id: \.self) { Text("\($0)").tag($0) }
                 }
             }
 
             Section("Humidity Control") {
-                Toggle("Humidification", isOn: $humidification)
-                Picker("Humidify to", selection: $humidifyTo) {
+                Toggle("Humidification", isOn: $model.thermostatSettings.humidification)
+                Picker("Humidify to", selection: $model.thermostatSettings.humidifyTo) {
                     ForEach(Array(stride(from: 10, through: 60, by: 5)), id: \.self) { Text("\($0)%").tag($0) }
                 }
             }
 
             Section {
-                Toggle("Dehumidification", isOn: $dehumidification)
-                Picker("Dehumidify to", selection: $dehumidifyTo) {
+                Toggle("Dehumidification", isOn: $model.thermostatSettings.dehumidification)
+                Picker("Dehumidify to", selection: $model.thermostatSettings.dehumidifyTo) {
                     ForEach(Array(stride(from: 30, through: 70, by: 5)), id: \.self) { Text("\($0)%").tag($0) }
                 }
             } footer: {
@@ -289,9 +310,9 @@ struct SystemConfigurationView: View {
             }
 
             Section {
-                Picker("Cooling", selection: $coolingBoost) { ForEach(boostOptions, id: \.self) { Text($0).tag($0) } }
-                Picker("Heating", selection: $heatingBoost) { ForEach(boostOptions, id: \.self) { Text($0).tag($0) } }
-                Picker("AUX Heat", selection: $auxBoost) { ForEach(boostOptions, id: \.self) { Text($0).tag($0) } }
+                Picker("Cooling", selection: $model.thermostatSettings.coolingBoost) { ForEach(boostOptions, id: \.self) { Text($0).tag($0) } }
+                Picker("Heating", selection: $model.thermostatSettings.heatingBoost) { ForEach(boostOptions, id: \.self) { Text($0).tag($0) } }
+                Picker("AUX Heat", selection: $model.thermostatSettings.auxBoost) { ForEach(boostOptions, id: \.self) { Text($0).tag($0) } }
             } header: {
                 Text("Boost")
             } footer: {
@@ -299,16 +320,16 @@ struct SystemConfigurationView: View {
             }
 
             Section("Offsets") {
-                Stepper(value: $temperatureOffset, in: -5...5) {
-                    LabeledContent("Temperature", value: "\(temperatureOffset)")
+                Stepper(value: $model.thermostatSettings.temperatureOffset, in: -5...5) {
+                    LabeledContent("Temperature", value: "\(model.thermostatSettings.temperatureOffset)")
                 }
-                Stepper(value: $humidityOffset, in: -10...10) {
-                    LabeledContent("Humidity", value: "\(humidityOffset)%")
+                Stepper(value: $model.thermostatSettings.humidityOffset, in: -10...10) {
+                    LabeledContent("Humidity", value: "\(model.thermostatSettings.humidityOffset)%")
                 }
             }
 
             Section {
-                Toggle("AC Protection", isOn: $acProtection)
+                Toggle("AC Protection", isOn: $model.thermostatSettings.acProtection)
             } header: {
                 Text("Miscellaneous")
             } footer: {
@@ -324,13 +345,14 @@ struct SystemConfigurationView: View {
 // MARK: - About Thermostat
 
 struct AboutThermostatView: View {
-    @State private var name = ""
+    @Environment(AppModel.self) private var model
     @State private var confirmRemove = false
 
     var body: some View {
+        @Bindable var model = model
         List {
             Section {
-                TextField("Thermostat Name", text: $name)
+                TextField("Thermostat Name", text: $model.thermostatSettings.name)
             }
 
             Section {
@@ -380,23 +402,19 @@ struct AboutThermostatView: View {
 // MARK: - Thermostat Location
 
 struct ThermostatLocationView: View {
-    @State private var address = ""
-    @State private var unit = ""
-    @State private var city = ""
-    @State private var state = ""
-    @State private var zip = ""
-    @State private var country = "United States"
+    @Environment(AppModel.self) private var model
 
     var body: some View {
+        @Bindable var model = model
         List {
             Section("Location") {
-                TextField("Address", text: $address)
-                TextField("Apt / Suite", text: $unit)
-                TextField("City", text: $city)
-                TextField("State", text: $state)
-                TextField("ZIP Code", text: $zip)
+                TextField("Address", text: $model.thermostatSettings.locationAddress)
+                TextField("Apt / Suite", text: $model.thermostatSettings.locationUnit)
+                TextField("City", text: $model.thermostatSettings.locationCity)
+                TextField("State", text: $model.thermostatSettings.locationState)
+                TextField("ZIP Code", text: $model.thermostatSettings.locationZip)
                     .keyboardType(.numbersAndPunctuation)
-                TextField("Country", text: $country)
+                TextField("Country", text: $model.thermostatSettings.locationCountry)
             }
 
             Section {
