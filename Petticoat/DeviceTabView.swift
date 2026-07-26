@@ -92,7 +92,7 @@ struct DeviceTabContent: View {
         case .usage:
             DeviceTabPlaceholder(title: "Usage", systemImage: "gauge.with.needle.fill")
         case .reminders:
-            DeviceTabPlaceholder(title: "Reminders", systemImage: "bell")
+            RemindersView()
         case .settings:
             SettingsView()
         }
