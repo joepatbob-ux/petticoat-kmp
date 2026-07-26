@@ -430,44 +430,33 @@ struct ChangePasswordView: View {
 /// Lightweight in-app help hub. Shared by the dashboard and account screens.
 struct HelpSupportView: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var isLoading = true
+
+    private let helpURL = URL(string: "https://sensihelp.com")!
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    NavigationLink("Getting Started") { PlaceholderDetail(title: "Getting Started") }
-                    NavigationLink("Thermostat Setup") { PlaceholderDetail(title: "Thermostat Setup") }
-                    NavigationLink("Schedules & Presets") { PlaceholderDetail(title: "Schedules & Presets") }
-                    NavigationLink("Troubleshooting") { PlaceholderDetail(title: "Troubleshooting") }
-                } header: {
-                    Text("Help Topics")
-                }
-
-                Section {
-                    LinkRow(title: "Contact Support", systemImage: "envelope")
-                    LinkRow(title: "Call Us", systemImage: "phone")
-                } header: {
-                    Text("Get in Touch")
-                } footer: {
-                    Text("Support is available 7 days a week, 7am–9pm CT.")
-                }
-            }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(SMA.groupedBackground.ignoresSafeArea())
-            .listRowBackground(SMA.card)
-            .navigationTitle("Help & Support")
-            .inlineNavTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(SMA.labelPrimary)
+            WebView(url: helpURL, isLoading: $isLoading)
+                .overlay(alignment: .top) {
+                    if isLoading {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                            .tint(SMA.accent)
                     }
-                    .accessibilityLabel("Close")
                 }
-            }
+                .ignoresSafeArea(edges: .bottom)
+                .navigationTitle("Help & Support")
+                .inlineNavTitle()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(SMA.labelPrimary)
+                        }
+                        .accessibilityLabel("Close")
+                    }
+                }
         }
     }
 }
