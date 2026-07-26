@@ -266,7 +266,7 @@ struct AppModelTests {
     // MARK: Contractor
 
     @Test func contractorPhoneDigitsStripsFormatting() {
-        var c = Contractor.sample
+        let c = Contractor.sample
         c.phone = "(314) 555-0123"
         #expect(c.phoneDigits == "3145550123")
     }
