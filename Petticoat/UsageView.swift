@@ -228,29 +228,117 @@ private func durationText(_ minutes: Int) -> String {
 }
 
 // MARK: - Sample data
+//
+// Prototype runtime history, generated with a seasonal HVAC profile (cooling peaks in
+// summer, heating + aux heat in winter, fan year-round) so the bars read realistically.
+// Anchored to "today" and computed once: the daily list covers the current + previous
+// month, and the Monthly Archive covers the trailing 13 months (back to the install
+// month, which shows the insufficient-data state).
 
 private enum UsageSample {
-    static let recent: [UsagePeriod] = [
-        UsagePeriod(name: "June", entries: [
-            UsageEntry(title: "Sunday, 27th",   minutes: [.cool: 92,  .heat: 148, .aux: 34, .fan: 210]),
-            UsageEntry(title: "Saturday, 26th", minutes: [.cool: 140, .heat: 60,  .aux: 0,  .fan: 180]),
-            UsageEntry(title: "Friday, 25th",   minutes: [.cool: 60,  .heat: 220, .aux: 80, .fan: 120]),
-            UsageEntry(title: "Thursday, 24th", minutes: [:], insufficient: true),
-        ]),
-        UsagePeriod(name: "May", entries: [
-            UsageEntry(title: "Saturday, 31st", minutes: [.cool: 200, .heat: 40,  .aux: 0,  .fan: 150]),
-            UsageEntry(title: "Friday, 30th",   minutes: [.cool: 120, .heat: 120, .aux: 20, .fan: 90]),
-        ]),
-    ]
+    static let recent: [UsagePeriod] = buildRecent()
+    static let monthly: [UsagePeriod] = buildMonthly()
 
-    static let monthly: [UsagePeriod] = [
-        UsagePeriod(name: "2025", entries: [
-            UsageEntry(title: "June",  minutes: [.cool: 3200, .heat: 2100, .aux: 400, .fan: 5000], capacity: 43200),
-            UsageEntry(title: "May",   minutes: [.cool: 2600, .heat: 3100, .aux: 600, .fan: 4200], capacity: 43200),
-            UsageEntry(title: "April", minutes: [.cool: 1200, .heat: 5200, .aux: 1400, .fan: 3800], capacity: 43200),
-            UsageEntry(title: "March", minutes: [:], capacity: 43200, insufficient: true),
-        ]),
-    ]
+    private static let cal = Calendar.current
+    private static let now = Date()
+
+    private static let monthName: DateFormatter = {
+        let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("LLLL"); return f
+    }()
+    private static let weekdayName: DateFormatter = {
+        let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("EEEE"); return f
+    }()
+    private static let ordinal: NumberFormatter = {
+        let f = NumberFormatter(); f.numberStyle = .ordinal; return f
+    }()
+
+    /// Stable per-day pseudo-random value in 0..<1 (so the bars don't reshuffle each launch).
+    private static func rand(_ seed: Int, _ salt: Int) -> Double {
+        var x = UInt64(bitPattern: Int64((seed &* 73_856_093) ^ (salt &* 19_349_663)))
+        x = (x ^ (x >> 30)) &* 0xbf58476d1ce4e5b9
+        x = (x ^ (x >> 27)) &* 0x94d049bb133111eb
+        x ^= x >> 31
+        return Double(x % 10_000) / 10_000
+    }
+
+    /// Runtime minutes per mode for one day, shaped by the season.
+    private static func dailyMinutes(for date: Date) -> [UsageMode: Int] {
+        let month = cal.component(.month, from: date)
+        let year = cal.component(.year, from: date)
+        let dayOfYear = cal.ordinality(of: .day, in: .year, for: date) ?? 1
+        let seed = year * 1000 + dayOfYear
+        // 1 at mid-July, 0 at mid-January.
+        let summer = (cos(Double(month - 7) / 12 * 2 * .pi) + 1) / 2
+        let winter = 1 - summer
+        let cool = pow(summer, 1.6) * 340 * (0.7 + 0.6 * rand(seed, 1))
+        let heat = pow(winter, 1.6) * 320 * (0.7 + 0.6 * rand(seed, 2))
+        // Aux (emergency) heat only kicks in on the coldest stretch.
+        let aux  = max(0, winter - 0.62) / 0.38 * 150 * (0.4 + 0.9 * rand(seed, 3))
+        let fan  = 90 + summer * 120 + 60 * rand(seed, 4)
+        return [.cool: Int(cool.rounded()), .heat: Int(heat.rounded()),
+                .aux: Int(aux.rounded()), .fan: Int(fan.rounded())]
+    }
+
+    private static func dayTitle(_ date: Date) -> String {
+        let day = cal.component(.day, from: date)
+        let ord = ordinal.string(from: NSNumber(value: day)) ?? "\(day)"
+        return "\(weekdayName.string(from: date)), \(ord)"
+    }
+
+    /// Current month to date, then the previous month in full — newest day first.
+    private static func buildRecent() -> [UsagePeriod] {
+        var periods: [UsagePeriod] = []
+        for monthOffset in 0...1 {
+            guard let anchor = cal.date(byAdding: .month, value: -monthOffset, to: now) else { continue }
+            let year = cal.component(.year, from: anchor)
+            let month = cal.component(.month, from: anchor)
+            let daysInMonth = cal.range(of: .day, in: .month, for: anchor)?.count ?? 30
+            let lastDay = monthOffset == 0 ? cal.component(.day, from: now) : daysInMonth
+            var entries: [UsageEntry] = []
+            for day in stride(from: lastDay, through: 1, by: -1) {
+                guard let date = cal.date(from: DateComponents(year: year, month: month, day: day)) else { continue }
+                // A single data gap to exercise the insufficient state.
+                let gap = monthOffset == 1 && day == 12
+                entries.append(UsageEntry(title: dayTitle(date),
+                                          minutes: gap ? [:] : dailyMinutes(for: date),
+                                          insufficient: gap))
+            }
+            periods.append(UsagePeriod(name: monthName.string(from: anchor), entries: entries))
+        }
+        return periods
+    }
+
+    /// The trailing 13 months, grouped by year (newest first). The oldest is the install
+    /// month, shown as insufficient history.
+    private static func buildMonthly() -> [UsagePeriod] {
+        let curYear = cal.component(.year, from: now)
+        let curMonth = cal.component(.month, from: now)
+        let curDay = cal.component(.day, from: now)
+        var byYear: [(year: Int, entries: [UsageEntry])] = []
+        for monthOffset in 0..<13 {
+            guard let anchor = cal.date(byAdding: .month, value: -monthOffset, to: now) else { continue }
+            let year = cal.component(.year, from: anchor)
+            let month = cal.component(.month, from: anchor)
+            let daysInMonth = cal.range(of: .day, in: .month, for: anchor)?.count ?? 30
+            let lastDay = (year == curYear && month == curMonth) ? curDay : daysInMonth
+            var total: [UsageMode: Int] = [:]
+            for day in 1...lastDay {
+                guard let date = cal.date(from: DateComponents(year: year, month: month, day: day)) else { continue }
+                let m = dailyMinutes(for: date)
+                for mode in UsageMode.allCases { total[mode, default: 0] += m[mode] ?? 0 }
+            }
+            let install = monthOffset == 12
+            let entry = UsageEntry(title: monthName.string(from: anchor),
+                                   minutes: install ? [:] : total,
+                                   capacity: daysInMonth * 1440, insufficient: install)
+            if let idx = byYear.firstIndex(where: { $0.year == year }) {
+                byYear[idx].entries.append(entry)
+            } else {
+                byYear.append((year, [entry]))
+            }
+        }
+        return byYear.map { UsagePeriod(name: "\($0.year)", entries: $0.entries) }
+    }
 }
 
 #Preview {
