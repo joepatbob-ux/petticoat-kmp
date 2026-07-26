@@ -84,11 +84,26 @@ Add `Localizable.xcstrings` and migrate. (Skills exist for translation coordinat
 
 ## 8. Accessibility
 
-- Controls are broadly labeled, but only one stable `accessibilityIdentifier`
-  (`"sensorAveragePill"`) exists — add a consistent identifier scheme for the elements the
-  UI tests (and future ones) drive.
-- Run an audit for **VoiceOver**, **Dynamic Type**, and **contrast** (the custom
-  System-Mode colors in Usage and the dark thermostat surfaces are worth checking).
+Audited the screens built in this effort (Sensors, Reminders, Usage, Settings + the
+Control sensor pill):
+
+- **VoiceOver — PASS.** Icon-only buttons are labeled, decorative art is hidden, and the
+  custom tap targets (Usage rows, reminder cards) declare `.isButton` + hints and combine
+  their children.
+- **Dynamic Type — PASS.** All text uses semantic text styles; the only `.system(size:)`
+  uses are decorative icons, not text.
+- **Contrast — 1 finding (design decision).** The Usage per-mode breakdown labels
+  (`UsageView` → `UsageBreakdown`) use the Figma "System Mode" colors as 13pt text;
+  `fanPurple` (#C5B1C2), and marginally `coolingBlue`/`heatingOrange`, fall below WCAG on
+  white. Left as-is for design fidelity (see the code comment). **Design decision:** darken
+  the label-text variants (keep the bar colors) or accept as a documented exception.
+
+Also:
+- Only one stable `accessibilityIdentifier` (`"sensorAveragePill"`) exists — add a
+  consistent identifier scheme for elements the UI tests drive.
+- Consider exposing swipe actions (reminder delete) as VoiceOver custom actions
+  (`.accessibilityAction(named:)`).
+- Re-audit the older screens (thermostat control, install flow) with the same criteria.
 
 ## 9. Testing & CI
 

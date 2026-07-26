@@ -125,6 +125,7 @@ private struct SensorRow: View {
                         Image(systemName: "chevron.right")
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(SMA.labelSecondary)
+                            .accessibilityHidden(true)   // decorative; the row is already a labeled button
                     }
                 }
                 .contentShape(Rectangle())
