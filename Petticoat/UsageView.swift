@@ -57,7 +57,7 @@ struct UsagePeriod: Identifiable {
 enum UsageRange: String, CaseIterable, Identifiable {
     case recent, monthly
     var id: String { rawValue }
-    var label: String { self == .recent ? "Recent" : "Monthly Archive" }
+    var label: String { self == .recent ? "Recent" : "Monthly" }
     var periods: [UsagePeriod] { self == .recent ? UsageSample.recent : UsageSample.monthly }
 }
 
