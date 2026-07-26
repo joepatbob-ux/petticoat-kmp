@@ -177,9 +177,8 @@ struct ScheduleEditorView: View {
 
     private let minEvents = 1
     private let maxEvents = 8
-    /// The dial's visual floor (an hour minimum per period) and 15-minute grid, enforced
-    /// for manual time entry too — see `DialMath.clampStart`.
-    private let minDurationMinutes = 60
+    /// The 15-minute grid every start time snaps to. (The one-hour minimum is a drag-only
+    /// floor enforced in the dial; manual entry may set finer sub-hour periods.)
     private let snapMinutes = 15
 
     init(preset: SchedulePreset, onSave: @escaping (SchedulePreset) -> Void, onDelete: (() -> Void)? = nil) {
@@ -423,24 +422,13 @@ struct ScheduleEditorView: View {
     }
 
     /// Replace a selected event's start time (from the dial's grip or the manual sheet),
-    /// snapping to the 15-min grid and clamping so the event and its neighbors each keep the
-    /// one-hour minimum — the same rules the dial's drag enforces, now applied to manual
-    /// entry too. Keeps the list sorted.
+    /// snapping to the 15-min grid and keeping the list sorted. The one-hour floor is only a
+    /// *drag* minimum (enforced in the dial so arcs stay big enough to grab) — manual entry
+    /// may set finer sub-hour periods down to 15 minutes.
     private func setEventTime(_ eventID: ScheduleEvent.ID, to newTime: Date) {
         for g in preset.groups.indices {
             guard let e = preset.groups[g].events.firstIndex(where: { $0.id == eventID }) else { continue }
-            let sorted = preset.groups[g].events.sorted { $0.time < $1.time }
-            let n = sorted.count
-            guard n > 1, let s = sorted.firstIndex(where: { $0.id == eventID }) else {
-                preset.groups[g].events[e].time = dateAtMinutes(DialMath.snapToGrid(minutesOfDay(newTime), snap: snapMinutes))
-                preset.groups[g].events.sort { $0.time < $1.time }
-                return
-            }
-            let prev = minutesOfDay(sorted[(s - 1 + n) % n].time)
-            let next = minutesOfDay(sorted[(s + 1) % n].time)
-            let clamped = DialMath.clampStart(proposed: minutesOfDay(newTime), prev: prev, next: next,
-                                              wholeRing: n <= 2, minLen: minDurationMinutes, snap: snapMinutes)
-            preset.groups[g].events[e].time = dateAtMinutes(clamped)
+            preset.groups[g].events[e].time = dateAtMinutes(DialMath.snapToGrid(minutesOfDay(newTime), snap: snapMinutes))
             preset.groups[g].events.sort { $0.time < $1.time }
             return
         }
