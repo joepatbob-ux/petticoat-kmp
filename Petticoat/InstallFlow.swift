@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Models
 
@@ -12,6 +13,7 @@ enum InstallStepKind {
     case loading        // configuring… auto-advances
     case form           // enter location
     case wirePicker     // select terminals with wires
+    case labelWires     // sticker-label the terminals picked in the wire-picker step
     case connectWires   // diagram of the terminals picked in the wire-picker step
     case choice         // tap a row to continue (furnace type, wire configuration)
 }
@@ -38,6 +40,9 @@ struct InstallStep: Identifiable {
     var primary: String = "Continue"
     var secondary: String? = nil
     var link: String? = nil
+    /// When true, the secondary button captures a wiring reference photo (held for
+    /// the wire-picker step) rather than simply advancing.
+    var capturesPhoto: Bool = false
     /// Rows for `.choice` steps.
     var options: [ChoiceOption] = []
 }
@@ -124,8 +129,8 @@ struct InstallDevice: Identifiable {
                 link: "How to Remove the Old Thermostat"),
             InstallStep(
                 stage: "Install", hero: "install.hero.photoWiring", title: "Take Photo of Your Wiring",
-                body: "Take a photo of your existing thermostat wiring in case you need it for reference later. The photo will be saved to your camera roll.",
-                secondary: "Take Photo Now"),
+                body: "Take a photo of your existing thermostat wiring in case you need it for reference later. You'll be able to pull it back up while picking your wires.",
+                secondary: "Take Photo Now", capturesPhoto: true),
             InstallStep(
                 stage: "Install", hero: "install.hero.removeJumper", title: "Throw Away Any Jumper Wires",
                 body: "If you see a jumper wire, remove it — your new thermostat has the jumper built-in. Leave all other wires connected to the thermostat.",
@@ -134,7 +139,7 @@ struct InstallDevice: Identifiable {
                 stage: "Install", kind: .wirePicker, title: "Pick Terminals with Wires Attached",
                 link: "How to Pick Your Wires"),
             InstallStep(
-                stage: "Install", hero: "install.hero.labelWires", title: "Label Your Wires",
+                stage: "Install", kind: .labelWires, title: "Label Your Wires",
                 body: "Using the provided wire label stickers, carefully label your wires by removing one wire at a time from the terminal and applying a label sticker.",
                 link: "If My Labels Don't Match"),
             InstallStep(
@@ -276,6 +281,11 @@ struct InstallFlowView: View {
     @State private var showHelp = false
     /// Terminals chosen in the wire-picker step; read back by the Connect the Wires step.
     @State private var wireSelection: Set<String> = []
+    /// Reference photos captured on the "Take Photo of Your Wiring" step; viewable
+    /// again from the wire-picker step. Multiple shots are kept as a small stack.
+    @State private var wiringPhotos: [UIImage] = []
+    @State private var showCamera = false
+    @State private var showPhotoReview = false
 
     private var step: InstallStep { device.steps[index] }
     private var progress: Double { Double(index + 1) / Double(device.steps.count) }
@@ -321,6 +331,15 @@ struct InstallFlowView: View {
         .toolbarBackground(isFullBleed ? .hidden : .automatic, for: .navigationBar)
         .animation(.snappy, value: index)
         .sheet(isPresented: $showHelp) { HelpSupportView() }
+        .fullScreenCover(isPresented: $showCamera) {
+            WiringPhotoPicker { image in
+                wiringPhotos.append(image)
+            }
+            .ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $showPhotoReview) {
+            WiringPhotoViewer(photos: wiringPhotos)
+        }
     }
 
     /// Thin step-progress capsule shown just below the nav bar.
@@ -345,7 +364,8 @@ struct InstallFlowView: View {
         case .pin:        PinContent(step: step, onAdvance: advance)
         case .loading:    LoadingContent(step: step, onAdvance: advance)
         case .form:       FormContent(step: step, onAdvance: advance)
-        case .wirePicker: WirePickerContent(step: step, configResource: device.wireConfigResource, selection: $wireSelection, onHelp: { showHelp = true }, onAdvance: advance)
+        case .wirePicker: WirePickerContent(step: step, configResource: device.wireConfigResource, selection: $wireSelection, wiringPhotos: wiringPhotos, onHelp: { showHelp = true }, onAdvance: advance)
+        case .labelWires: LabelWiresContent(step: step, selection: wireSelection, onHelp: { showHelp = true }, onAdvance: advance)
         case .connectWires: ConnectWiresContent(step: step, selection: wireSelection, onHelp: { showHelp = true }, onAdvance: advance)
         case .choice:     ChoiceContent(step: step, onHelp: { showHelp = true }, onAdvance: advance)
         case .fullBleed:  EmptyView()
@@ -366,15 +386,33 @@ struct InstallFlowView: View {
                         .accessibilityHidden(true)
 
                     StepHeadline(title: step.title, detail: step.body, warning: step.warning)
+
+                    if step.capturesPhoto && !wiringPhotos.isEmpty {
+                        capturedPhotosSummary
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, 16)
             }
 
             InstallButtonBar(link: step.link, onLink: { showHelp = true },
-                             secondary: step.secondary, onSecondary: advance,
+                             secondary: step.capturesPhoto && !wiringPhotos.isEmpty ? "Take Another Photo" : step.secondary,
+                             onSecondary: { step.capturesPhoto ? (showCamera = true) : advance() },
                              primary: step.primary, onPrimary: advance)
         }
+    }
+
+    /// The stack of wiring photos captured so far, tappable to review full screen.
+    private var capturedPhotosSummary: some View {
+        Button { showPhotoReview = true } label: {
+            VStack(spacing: 8) {
+                PhotoStackThumbnail(photos: wiringPhotos, size: 72)
+                Text("^[\(wiringPhotos.count) photo](inflect: true) captured — tap to review")
+                    .font(.footnote)
+                    .foregroundStyle(SMA.labelSecondary)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: Full-bleed "Setup Complete" step
@@ -428,4 +466,40 @@ struct InstallFlowView: View {
 #Preview {
     AddDeviceView()
         .environment(AppModel())
+}
+
+// MARK: - Wiring photo capture
+
+/// Captures the existing-wiring reference photo. Uses the camera on device; where
+/// no camera exists (e.g. Simulator) it falls back to the photo library so the
+/// flow stays testable. The captured image is handed back via `onCapture`.
+struct WiringPhotoPicker: UIViewControllerRepresentable {
+    let onCapture: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ picker: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: WiringPhotoPicker
+        init(_ parent: WiringPhotoPicker) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage { parent.onCapture(image) }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
 }

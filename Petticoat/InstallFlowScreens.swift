@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Shared chrome
 
@@ -288,8 +289,12 @@ struct WirePickerContent: View {
     let step: InstallStep
     let configResource: String?
     @Binding var selection: Set<String>
+    /// Reference photos captured on the "Take Photo of Your Wiring" step, if any.
+    var wiringPhotos: [UIImage] = []
     let onHelp: () -> Void
     let onAdvance: () -> Void
+
+    @State private var showPhoto = false
 
     /// 4-column layout matching the design (the "Other" catch-all is omitted since
     /// it never appears in a valid configuration). Shared so the Connect the Wires
@@ -322,6 +327,8 @@ struct WirePickerContent: View {
                     .background(SMA.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     .padding(.horizontal, 16)
 
+                    if !wiringPhotos.isEmpty { referencePhotoChip }
+
                     Text(step.title)
                         .font(.title2.weight(.bold))
                         .foregroundStyle(SMA.labelPrimary)
@@ -337,6 +344,36 @@ struct WirePickerContent: View {
             InstallButtonBar(link: step.link, onLink: onHelp,
                              primary: "Continue", primaryEnabled: isValid, onPrimary: onAdvance)
         }
+        .fullScreenCover(isPresented: $showPhoto) {
+            WiringPhotoViewer(photos: wiringPhotos)
+        }
+    }
+
+    /// Tappable stack of the wiring photos captured earlier, so the user can
+    /// compare their terminal block against them while selecting.
+    private var referencePhotoChip: some View {
+        Button { showPhoto = true } label: {
+            HStack(spacing: 12) {
+                PhotoStackThumbnail(photos: wiringPhotos, size: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(wiringPhotos.count > 1 ? "Your Wiring Photos" : "Your Wiring Photo")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SMA.labelPrimary)
+                    Text("Tap to compare with your terminals")
+                        .font(.caption)
+                        .foregroundStyle(SMA.labelSecondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SMA.labelSecondary)
+            }
+            .padding(10)
+            .background(SMA.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .accessibilityLabel("View your wiring ^[\(wiringPhotos.count) photo](inflect: true)")
     }
 
     private func terminalChip(_ t: String) -> some View {
@@ -388,6 +425,99 @@ struct TerminalTile: View {
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(isOn ? SMA.accent : (isEnabled ? SMA.accent : SMA.separator), lineWidth: 1.5))
             )
+    }
+}
+
+// MARK: - Label Your Wires
+
+/// Illustrates the old thermostat's terminal block with a labeled sticker on every
+/// wire the user picked in the wire-picker step. Each picked terminal becomes a
+/// column — a blue wire-label sticker (top), the terminal screw, and the lettered
+/// terminal tile (bottom) — packed edge to edge so the screw housings read as one
+/// continuous strip, mirroring a real terminal block.
+struct LabelWiresContent: View {
+    let step: InstallStep
+    let selection: Set<String>
+    let onHelp: () -> Void
+    let onAdvance: () -> Void
+
+    /// Intrinsic aspect ratios of the two flattened art assets.
+    private let labelAspect = 256.0 / 128.0   // WireLabel.png
+    private let terminalAspect = 400.0 / 120.0 // TerminalScrew.png
+
+    /// Picked terminals in the canonical wire-picker order.
+    private var terminals: [String] {
+        WirePickerContent.terminalOrder.filter { selection.contains($0) }
+    }
+
+    /// Per-terminal column width: shrink to fit the full picked set across a
+    /// ~320pt block, capped so a large config stays on screen and a small one
+    /// doesn't balloon.
+    private var columnWidth: CGFloat {
+        guard !terminals.isEmpty else { return 48 }
+        return min(320 / CGFloat(terminals.count), 48)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    wireLabelsCard
+                    StepHeadline(title: step.title, detail: step.body)
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            }
+
+            InstallButtonBar(link: step.link, onLink: onHelp,
+                             primary: "Continue", onPrimary: onAdvance)
+        }
+    }
+
+    private var wireLabelsCard: some View {
+        VStack(spacing: 20) {
+            Text("Wire Labels")
+                .font(.headline)
+                .foregroundStyle(SMA.labelSecondary)
+
+            HStack(spacing: 0) {
+                ForEach(terminals, id: \.self) { wireColumn($0) }
+            }
+            .fixedSize()
+
+            Text("Old Thermostat")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(SMA.labelSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .background(SMA.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Old thermostat terminal block with labeled wires: \(terminals.joined(separator: ", "))")
+    }
+
+    /// One picked wire: sticker-labeled wire above its lettered terminal screw.
+    private func wireColumn(_ t: String) -> some View {
+        let w = columnWidth
+        return VStack(spacing: 0) {
+            Image("install.wireLabel")
+                .resizable()
+                .frame(width: w, height: w * labelAspect)
+                .overlay(letter(t, size: w).position(x: w / 2, y: w * labelAspect * 0.484))
+            Image("install.terminalScrew")
+                .resizable()
+                .frame(width: w, height: w * terminalAspect)
+                .overlay(letter(t, size: w).position(x: w / 2, y: w * terminalAspect * 0.81))
+        }
+    }
+
+    private func letter(_ t: String, size w: CGFloat) -> some View {
+        Text(t)
+            .font(.system(size: w * 0.34, weight: .semibold))
+            .minimumScaleFactor(0.5)
+            .lineLimit(1)
+            .foregroundStyle(.white)
     }
 }
 
@@ -600,5 +730,91 @@ private struct RoomSensorStepRow: View {
         .padding(.vertical, 14)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Step \(number). \(text)")
+    }
+}
+
+// MARK: - Wiring photo stack & viewer
+
+/// A compact stacked-photos thumbnail: shows up to three shots fanned behind each
+/// other so a small pile reads as "a few photos". Used in the capture summary and
+/// the wire-picker reference chip.
+struct PhotoStackThumbnail: View {
+    let photos: [UIImage]
+    var size: CGFloat = 30
+
+    var body: some View {
+        // Most-recent photo on top; up to two older ones peek out behind it.
+        let shown = Array(photos.suffix(3))
+        ZStack {
+            ForEach(Array(shown.enumerated()), id: \.offset) { index, image in
+                let depth = CGFloat(shown.count - 1 - index)   // 0 == front
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: size * 0.18, style: .continuous)
+                        .stroke(.white, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.18), radius: 1, y: 0.5)
+                    .rotationEffect(.degrees(depth * 6), anchor: .bottomLeading)
+                    .offset(x: depth * 3, y: depth * -2)
+            }
+        }
+        .frame(width: size + CGFloat(min(shown.count - 1, 2)) * 3 + 4,
+               height: size + 4, alignment: .leading)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Full-screen viewer for the captured wiring reference photos. Swipe between
+/// shots (paged) and pinch- or double-tap-to-zoom to inspect fine wiring detail.
+struct WiringPhotoViewer: View {
+    let photos: [UIImage]
+    @Environment(\.dismiss) private var dismiss
+    @State private var selection = 0
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                TabView(selection: $selection) {
+                    ForEach(photos.indices, id: \.self) { i in
+                        ZoomableImage(image: photos[i]).tag(i)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: photos.count > 1 ? .always : .never))
+            }
+            .navigationTitle(photos.count > 1 ? "Photo \(selection + 1) of \(photos.count)" : "Your Wiring Photo")
+            .inlineNavTitle()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+/// A single pinch- and double-tap-zoomable image on a black canvas.
+private struct ZoomableImage: View {
+    let image: UIImage
+    @GestureState private var pinch: CGFloat = 1
+    @State private var scale: CGFloat = 1
+
+    var body: some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+            .scaleEffect(scale * pinch)
+            .gesture(
+                MagnifyGesture()
+                    .updating($pinch) { value, state, _ in state = value.magnification }
+                    .onEnded { value in
+                        scale = min(max(scale * value.magnification, 1), 4)
+                    }
+            )
+            .onTapGesture(count: 2) {
+                withAnimation(.snappy) { scale = scale > 1 ? 1 : 2 }
+            }
     }
 }
