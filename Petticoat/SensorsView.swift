@@ -138,6 +138,7 @@ private struct SensorRow: View {
 // MARK: - Sensor Details
 
 struct SensorDetailView: View {
+    @Environment(AppModel.self) private var model
     let sensor: RoomSensor
     @State private var name: String
 
@@ -150,6 +151,7 @@ struct SensorDetailView: View {
         List {
             Section {
                 TextField("Name", text: $name)
+                    .onSubmit(commitName)
             }
 
             Section("Sensor Information") {
@@ -164,6 +166,12 @@ struct SensorDetailView: View {
         .groupedListChrome()
         .navigationTitle("Sensor Details")
         .inlineNavTitle()
+        .onDisappear(perform: commitName)
+    }
+
+    /// Persists the edited name back to the model (on submit and when leaving).
+    private func commitName() {
+        model.renameSensor(sensor.id, to: name, in: model.device.id)
     }
 
     private var batteryHealth: String {

@@ -73,12 +73,17 @@ struct DisplayOptionsView: View {
 // MARK: - Contractor Information
 
 struct ContractorInformationView: View {
+    @Environment(\.openURL) private var openURL
+
     @State private var company = "123 HVAC Contracting Company"
     @State private var address = "ABC Ave"
     @State private var phone = "555555"
     @State private var city = "Villagetownsburg"
     @State private var state = "Missouri"
     @State private var country = "United States"
+    @State private var confirmRemove = false
+
+    private var phoneDigits: String { phone.filter(\.isNumber) }
 
     var body: some View {
         List {
@@ -103,12 +108,15 @@ struct ContractorInformationView: View {
             }
 
             Section {
-                Button("Call Contractor") { }
-                    .frame(maxWidth: .infinity)
+                Button("Call Contractor") {
+                    if let url = URL(string: "tel://\(phoneDigits)") { openURL(url) }
+                }
+                .frame(maxWidth: .infinity)
+                .disabled(phoneDigits.isEmpty)
             }
 
             Section {
-                Button("Remove Contractor", role: .destructive) { }
+                Button("Remove Contractor", role: .destructive) { confirmRemove = true }
                     .frame(maxWidth: .infinity)
                     .foregroundStyle(SMA.destructive)
             }
@@ -116,6 +124,14 @@ struct ContractorInformationView: View {
         .groupedListChrome()
         .navigationTitle("Contractor Information")
         .inlineNavTitle()
+        .confirmationDialog("Remove this contractor?", isPresented: $confirmRemove, titleVisibility: .visible) {
+            Button("Remove Contractor", role: .destructive) {
+                company = ""; address = ""; phone = ""; city = ""; state = ""; country = ""
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Their contact information will be removed from this thermostat.")
+        }
     }
 }
 
@@ -125,11 +141,11 @@ struct EnergyProgram: Identifiable, Hashable {
     let id = UUID()
     let provider: String
     let expires: String?
-    let enrolled: Bool
+    var enrolled: Bool
 }
 
 struct EnergyProgramsView: View {
-    private let programs = [
+    @State private var programs = [
         EnergyProgram(provider: "Ameren", expires: "March 20, 2025", enrolled: false),
         EnergyProgram(provider: "Ameren", expires: "March 20, 2025", enrolled: false),
         EnergyProgram(provider: "Ameren", expires: nil, enrolled: true),
@@ -152,7 +168,7 @@ struct EnergyProgramsView: View {
                         }
                     } else {
                         NavigationLink {
-                            EnergyProgramDetailView(program: program)
+                            EnergyProgramDetailView(program: program) { enroll(program.id) }
                         } label: {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(program.provider)
@@ -174,10 +190,19 @@ struct EnergyProgramsView: View {
         .navigationTitle("Energy Programs")
         .inlineNavTitle()
     }
+
+    private func enroll(_ id: EnergyProgram.ID) {
+        guard let i = programs.firstIndex(where: { $0.id == id }) else { return }
+        withAnimation(.snappy) { programs[i].enrolled = true }
+    }
 }
 
 struct EnergyProgramDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     let program: EnergyProgram
+    let onEnroll: () -> Void
+
+    @State private var confirmEnroll = false
 
     var body: some View {
         List {
@@ -190,13 +215,19 @@ struct EnergyProgramDetailView: View {
                 }
             }
             Section {
-                Button("Enroll") { }
+                Button("Enroll") { confirmEnroll = true }
                     .frame(maxWidth: .infinity)
             }
         }
         .groupedListChrome()
         .navigationTitle(program.provider)
         .inlineNavTitle()
+        .confirmationDialog("Enroll in \(program.provider)?", isPresented: $confirmEnroll, titleVisibility: .visible) {
+            Button("Enroll") { onEnroll(); dismiss() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("You can unenroll anytime by contacting \(program.provider).")
+        }
     }
 }
 

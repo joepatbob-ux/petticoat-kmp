@@ -95,7 +95,7 @@ struct Device: Identifiable, Equatable {
 /// (0–100), or nil for hard-wired models that have no battery.
 struct RoomSensor: Identifiable, Hashable {
     let id = UUID()
-    let name: String
+    var name: String
     let temp: Int
     let humidity: Int
     var participating: Bool
@@ -588,6 +588,16 @@ final class AppModel {
         guard let di = devices.firstIndex(where: { $0.id == id }),
               let si = devices[di].sensors.firstIndex(where: { $0.id == sensor.id }) else { return }
         withAnimation(.snappy) { devices[di].sensors[si].participating.toggle() }
+    }
+
+    /// Rename a paired sensor. No-op if the name is blank/unchanged.
+    func renameSensor(_ sensorID: RoomSensor.ID, to name: String, in id: Device.ID) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              let di = devices.firstIndex(where: { $0.id == id }),
+              let si = devices[di].sensors.firstIndex(where: { $0.id == sensorID }),
+              devices[di].sensors[si].name != trimmed else { return }
+        devices[di].sensors[si].name = trimmed
     }
 
     /// Automation Schedule/Off toggle drives schedule vs. standard control.

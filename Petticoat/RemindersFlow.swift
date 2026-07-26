@@ -95,6 +95,7 @@ struct ReminderEditTarget: Identifiable {
 /// spec, and the mark-complete (and optional call-contractor) actions. The info button
 /// opens the editor.
 private struct ServiceReminderSection: View {
+    @Environment(\.openURL) private var openURL
     let reminder: ServiceReminder
     let onComplete: () -> Void
     let onEdit: () -> Void
@@ -136,7 +137,9 @@ private struct ServiceReminderSection: View {
 
             HStack(spacing: 12) {
                 if reminder.hasContractor {
-                    Button { } label: {
+                    Button {
+                        if let url = URL(string: "tel://5555550123") { openURL(url) }
+                    } label: {
                         Text("Call Contractor").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)

@@ -190,4 +190,76 @@ struct AppModelTests {
         #expect(updated?.lifeRemaining == 1)
         #expect(updated?.lastCompleted != nil)
     }
+
+    // MARK: Schedules
+
+    @Test func selectingScheduleUpdatesActive() {
+        let model = AppModel()
+        let second = model.schedules[1]
+        model.selectSchedule(second.id)
+        #expect(model.activeSchedule?.id == second.id)
+    }
+
+    @Test func savingUnknownScheduleAppendsAndSelects() {
+        let model = AppModel()
+        let start = model.schedules.count
+        let new = SchedulePreset(name: "Custom")
+        model.saveSchedule(new)
+        #expect(model.schedules.count == start + 1)
+        #expect(model.activeSchedule?.id == new.id)
+    }
+
+    @Test func duplicatingScheduleInsertsCopy() {
+        let model = AppModel()
+        let start = model.schedules.count
+        let first = model.schedules[0]
+        model.duplicateSchedule(first)
+        #expect(model.schedules.count == start + 1)
+        #expect(model.schedules[1].name == first.name + " Copy")
+    }
+
+    @Test func deletingScheduleRemovesAndReselects() {
+        let model = AppModel()
+        let first = model.schedules[0]
+        model.selectSchedule(first.id)
+        model.deleteSchedule(first.id)
+        #expect(!model.schedules.contains { $0.id == first.id })
+        #expect(model.selectedScheduleID != first.id)
+    }
+
+    // MARK: Programs (non-preset)
+
+    @Test func savingProgramForKindAppendsAndSelects() {
+        let model = AppModel()
+        let start = model.programs[.heat]?.count ?? 0
+        let new = ScheduleProgram(name: "Custom Heat",
+                                  groups: [ProgramDayGroup(days: Set(0..<7), events: ScheduleProgram.sampleEvents())])
+        model.saveProgram(new, kind: .heat)
+        #expect(model.programs[.heat]?.count == start + 1)
+        #expect(model.activeProgramID(for: .heat) == new.id)
+    }
+
+    @Test func deletingProgramRemoves() {
+        let model = AppModel()
+        guard let first = model.programs[.cool]?.first else { return }
+        model.deleteProgram(first.id, kind: .cool)
+        #expect(model.programs[.cool]?.contains { $0.id == first.id } == false)
+    }
+
+    // MARK: Sensors
+
+    @Test func renamingSensorUpdatesModel() {
+        let model = AppModel()
+        guard let sensor = model.device.sensors.first else { return }
+        model.renameSensor(sensor.id, to: "Living Room", in: model.device.id)
+        #expect(model.device.sensors.first?.name == "Living Room")
+    }
+
+    @Test func renamingSensorIgnoresBlank() {
+        let model = AppModel()
+        guard let sensor = model.device.sensors.first else { return }
+        let original = sensor.name
+        model.renameSensor(sensor.id, to: "   ", in: model.device.id)
+        #expect(model.device.sensors.first?.name == original)
+    }
 }
