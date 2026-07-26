@@ -92,11 +92,10 @@ Control sensor pill):
   their children.
 - **Dynamic Type — PASS.** All text uses semantic text styles; the only `.system(size:)`
   uses are decorative icons, not text.
-- **Contrast — 1 finding (design decision).** The Usage per-mode breakdown labels
-  (`UsageView` → `UsageBreakdown`) use the Figma "System Mode" colors as 13pt text;
-  `fanPurple` (#C5B1C2), and marginally `coolingBlue`/`heatingOrange`, fall below WCAG on
-  white. Left as-is for design fidelity (see the code comment). **Design decision:** darken
-  the label-text variants (keep the bar colors) or accept as a documented exception.
+- **Contrast — PASS.** The Usage per-mode breakdown labels originally used the Figma
+  "System Mode" colors as 13pt text (`fanPurple` etc. failed WCAG on white). Resolved by
+  making the labels high-contrast primary text; the color↔mode mapping is carried by the
+  section legend and the bars (which keep the exact System Mode colors).
 
 Also:
 - Only one stable `accessibilityIdentifier` (`"sensorAveragePill"`) exists — add a

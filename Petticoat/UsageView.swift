@@ -184,14 +184,11 @@ private struct UsageBreakdown: View {
         HStack(alignment: .top, spacing: 8) {
             ForEach(UsageMode.allCases) { mode in
                 VStack(alignment: .leading, spacing: 0) {
-                    // Accessibility (contrast): these are the Figma "System Mode" colors;
-                    // fan-purple (and, at 13pt, cooling-blue / heating-orange) fall below
-                    // WCAG on white. Left as-is for design fidelity — flagged in HANDOFF.md
-                    // for the design team to darken the label variants or accept as an
-                    // exception. VoiceOver is unaffected (the row is combined text).
+                    // Labels are high-contrast (not mode-colored); the section legend
+                    // carries the color↔mode mapping. Keeps WCAG contrast on white.
                     Text(mode.detailLabel)
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(mode.color)
+                        .foregroundStyle(SMA.labelPrimary)
                     Text(durationText(minutes[mode] ?? 0))
                         .font(.footnote)
                         .foregroundStyle(SMA.labelSecondary)
@@ -264,3 +261,4 @@ private enum UsageSample {
     }
     .environment(AppModel())
 }
+
