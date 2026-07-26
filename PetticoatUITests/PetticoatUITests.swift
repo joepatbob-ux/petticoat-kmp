@@ -85,7 +85,7 @@ final class PetticoatUITests: XCTestCase {
         let app = launchToDeviceDetail()
 
         app.buttons["Usage"].firstMatch.tap()
-        XCTAssertTrue(app.buttons["This Week"].waitForExistence(timeout: 5),
+        XCTAssertTrue(app.buttons["Recent"].waitForExistence(timeout: 5),
                       "The Usage tab should show the range selector")
     }
 }

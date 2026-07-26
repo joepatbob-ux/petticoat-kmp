@@ -29,6 +29,12 @@ enum SMA {
     static let thermostatScreen  = Color(hex: 0x3B4148)
     static let controlFill       = Color(hex: 0x2C3238)
 
+    // System-mode colors used by the Usage runtime breakdown.
+    static let coolingBlue       = Color(hex: 0x0093C8)
+    static let heatingOrange     = Color(hex: 0xF76707)
+    static let auxRed            = Color(hex: 0xE61234)
+    static let fanPurple         = Color(hex: 0xC5B1C2)
+
     // Brand — lightened in dark mode for contrast on dark surfaces.
     static let brandNavy         = Color(light: 0x14435F, dark: 0x8FB8CE)
     /// Filled brand surface used by the onboarding "Welcome" spotlight card.

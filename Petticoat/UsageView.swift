@@ -1,58 +1,70 @@
 import SwiftUI
-import Charts
 
 // MARK: - Usage
 //
-// The Usage device tab: HVAC runtime over a selected range, split into heating and
-// cooling, with a summary. Prototype-local sample data — no Figma was provided for
-// this screen, so it's a native proposal using Swift Charts.
+// The Usage device tab: HVAC runtime broken down by mode (cooling / heating / aux heat /
+// fan) per day (Recent) or per month (Monthly Archive). Each row shows a proportional
+// mode bar; tapping a row expands the per-mode durations. Prototype-local sample data.
 
-enum UsageRange: String, CaseIterable, Identifiable {
-    case week, month
+enum UsageMode: String, CaseIterable, Identifiable {
+    case cool, heat, aux, fan
     var id: String { rawValue }
-    var label: String { self == .week ? "This Week" : "This Month" }
 
-    var days: [UsageBucket] {
+    var color: Color {
         switch self {
-        case .week:  return UsageBucket.week
-        case .month: return UsageBucket.month
+        case .cool: SMA.coolingBlue
+        case .heat: SMA.heatingOrange
+        case .aux:  SMA.auxRed
+        case .fan:  SMA.fanPurple
+        }
+    }
+    /// Column heading in the expanded breakdown.
+    var detailLabel: String {
+        switch self {
+        case .cool: "Cooling"
+        case .heat: "Heating"
+        case .aux:  "AUX Heat"
+        case .fan:  "Fan Only"
+        }
+    }
+    /// Short legend label.
+    var legendLabel: String {
+        switch self {
+        case .cool: "Cool"
+        case .heat: "Heat"
+        case .aux:  "AUX Heat"
+        case .fan:  "Fan Only"
         }
     }
 }
 
-/// One bar in the runtime chart: a labeled period with heating + cooling hours.
-struct UsageBucket: Identifiable {
+struct UsageEntry: Identifiable {
     let id = UUID()
-    let label: String
-    let heating: Double
-    let cooling: Double
-    var total: Double { heating + cooling }
+    let title: String
+    /// Minutes of runtime per mode.
+    let minutes: [UsageMode: Int]
+    /// Total minutes in the period (day = 1440), for the bar's remainder.
+    var capacity: Int = 1440
+    var insufficient: Bool = false
+}
 
-    static let week: [UsageBucket] = [
-        .init(label: "Mon", heating: 2.5, cooling: 1.0),
-        .init(label: "Tue", heating: 3.0, cooling: 0.5),
-        .init(label: "Wed", heating: 1.5, cooling: 2.0),
-        .init(label: "Thu", heating: 0.5, cooling: 3.5),
-        .init(label: "Fri", heating: 1.0, cooling: 3.0),
-        .init(label: "Sat", heating: 2.0, cooling: 2.5),
-        .init(label: "Sun", heating: 2.5, cooling: 1.5),
-    ]
+struct UsagePeriod: Identifiable {
+    let id = UUID()
+    let name: String
+    let entries: [UsageEntry]
+}
 
-    static let month: [UsageBucket] = [
-        .init(label: "W1", heating: 14, cooling: 9),
-        .init(label: "W2", heating: 11, cooling: 12),
-        .init(label: "W3", heating: 8,  cooling: 16),
-        .init(label: "W4", heating: 10, cooling: 13),
-    ]
+enum UsageRange: String, CaseIterable, Identifiable {
+    case recent, monthly
+    var id: String { rawValue }
+    var label: String { self == .recent ? "Recent" : "Monthly Archive" }
+    var periods: [UsagePeriod] { self == .recent ? UsageSample.recent : UsageSample.monthly }
 }
 
 struct UsageView: View {
-    @State private var range: UsageRange = .week
-
-    private var buckets: [UsageBucket] { range.days }
-    private var totalHeating: Double { buckets.reduce(0) { $0 + $1.heating } }
-    private var totalCooling: Double { buckets.reduce(0) { $0 + $1.cooling } }
-    private var total: Double { totalHeating + totalCooling }
+    @Environment(AppModel.self) private var model
+    @State private var range: UsageRange = .recent
+    @State private var expanded: Set<UUID> = []
 
     var body: some View {
         List {
@@ -65,53 +77,178 @@ struct UsageView: View {
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             }
 
-            Section("Runtime") {
-                Chart(buckets) { bucket in
-                    BarMark(
-                        x: .value("Period", bucket.label),
-                        y: .value("Hours", bucket.heating)
-                    )
-                    .foregroundStyle(by: .value("Mode", "Heating"))
-
-                    BarMark(
-                        x: .value("Period", bucket.label),
-                        y: .value("Hours", bucket.cooling)
-                    )
-                    .foregroundStyle(by: .value("Mode", "Cooling"))
+            ForEach(range.periods) { period in
+                Section {
+                    ForEach(period.entries) { entry in
+                        UsageEntryRow(
+                            entry: entry,
+                            isExpanded: expanded.contains(entry.id),
+                            onToggle: { toggle(entry.id) },
+                            onLearnMore: { model.showHelp = true }
+                        )
+                    }
+                    UsageLegend()
+                        .listRowSeparator(.hidden)
+                } header: {
+                    Text(period.name)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(SMA.labelPrimary)
+                        .textCase(nil)
                 }
-                .chartForegroundStyleScale(["Heating": SMA.tempOrange, "Cooling": SMA.accent])
-                .chartYAxisLabel("Hours")
-                .frame(height: 220)
-                .padding(.vertical, 8)
-            }
-
-            Section("Summary") {
-                LabeledContent("Total Runtime", value: hoursText(total))
-                LabeledContent("Heating") {
-                    Label(hoursText(totalHeating), systemImage: "flame.fill")
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(SMA.tempOrange)
-                }
-                LabeledContent("Cooling") {
-                    Label(hoursText(totalCooling), systemImage: "snowflake")
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(SMA.accent)
-                }
-                LabeledContent("Daily Average", value: hoursText(total / Double(max(1, buckets.count))))
             }
         }
         .groupedListChrome()
+        .animation(.snappy, value: expanded)
         .animation(.snappy, value: range)
     }
 
-    /// Formats a fractional hours value as "3h 30m" (or "45m" under an hour).
-    private func hoursText(_ hours: Double) -> String {
-        let totalMinutes = Int((hours * 60).rounded())
-        let h = totalMinutes / 60
-        let m = totalMinutes % 60
-        if h == 0 { return "\(m)m" }
-        return m == 0 ? "\(h)h" : "\(h)h \(m)m"
+    private func toggle(_ id: UUID) {
+        if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
     }
+}
+
+/// One day/month row: title, proportional mode bar, and an expandable breakdown (or an
+/// "insufficient data" state).
+private struct UsageEntryRow: View {
+    let entry: UsageEntry
+    let isExpanded: Bool
+    let onToggle: () -> Void
+    let onLearnMore: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(entry.title)
+                .foregroundStyle(SMA.labelPrimary)
+                .frame(height: 44, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if entry.insufficient {
+                UsageBar(minutes: [:], capacity: entry.capacity)
+                HStack {
+                    Text("Insufficient data")
+                        .font(.callout)
+                        .foregroundStyle(SMA.labelSecondary)
+                    Spacer()
+                    Button("Learn More", action: onLearnMore)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+                .padding(.top, 8)
+            } else {
+                UsageBar(minutes: entry.minutes, capacity: entry.capacity)
+                if isExpanded {
+                    UsageBreakdown(minutes: entry.minutes)
+                        .padding(.top, 10)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onTapGesture { if !entry.insufficient { onToggle() } }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(entry.insufficient ? [] : .isButton)
+        .accessibilityHint(entry.insufficient ? "" : (isExpanded ? "Collapse breakdown" : "Expand breakdown"))
+    }
+}
+
+/// The stacked, proportional runtime bar (cool / heat / aux / fan + idle remainder).
+private struct UsageBar: View {
+    let minutes: [UsageMode: Int]
+    let capacity: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            HStack(spacing: 2) {
+                ForEach(UsageMode.allCases) { mode in
+                    let m = minutes[mode] ?? 0
+                    if m > 0 {
+                        Rectangle()
+                            .fill(mode.color)
+                            .frame(width: geo.size.width * CGFloat(m) / CGFloat(max(1, capacity)))
+                    }
+                }
+                Rectangle().fill(SMA.fillTertiary)   // idle remainder fills the rest
+            }
+        }
+        .frame(height: 16)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .accessibilityHidden(true)
+    }
+}
+
+/// The four-column per-mode duration breakdown shown when a row is expanded.
+private struct UsageBreakdown: View {
+    let minutes: [UsageMode: Int]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            ForEach(UsageMode.allCases) { mode in
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(mode.detailLabel)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(mode.color)
+                    Text(durationText(minutes[mode] ?? 0))
+                        .font(.footnote)
+                        .foregroundStyle(SMA.labelSecondary)
+                        .monospacedDigit()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+/// The mode legend shown at the bottom of each section.
+private struct UsageLegend: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            ForEach(UsageMode.allCases) { mode in
+                HStack(spacing: 3) {
+                    Circle().fill(mode.color).frame(width: 8, height: 8)
+                    Text(mode.legendLabel)
+                        .font(.caption)
+                        .foregroundStyle(SMA.labelPrimary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Formats minutes as "16h 52m" (or "52m" / "16h").
+private func durationText(_ minutes: Int) -> String {
+    let h = minutes / 60
+    let m = minutes % 60
+    if h == 0 { return "\(m)m" }
+    return m == 0 ? "\(h)h" : "\(h)h \(m)m"
+}
+
+// MARK: - Sample data
+
+private enum UsageSample {
+    static let recent: [UsagePeriod] = [
+        UsagePeriod(name: "June", entries: [
+            UsageEntry(title: "Sunday, 27th",   minutes: [.cool: 92,  .heat: 148, .aux: 34, .fan: 210]),
+            UsageEntry(title: "Saturday, 26th", minutes: [.cool: 140, .heat: 60,  .aux: 0,  .fan: 180]),
+            UsageEntry(title: "Friday, 25th",   minutes: [.cool: 60,  .heat: 220, .aux: 80, .fan: 120]),
+            UsageEntry(title: "Thursday, 24th", minutes: [:], insufficient: true),
+        ]),
+        UsagePeriod(name: "May", entries: [
+            UsageEntry(title: "Saturday, 31st", minutes: [.cool: 200, .heat: 40,  .aux: 0,  .fan: 150]),
+            UsageEntry(title: "Friday, 30th",   minutes: [.cool: 120, .heat: 120, .aux: 20, .fan: 90]),
+        ]),
+    ]
+
+    static let monthly: [UsagePeriod] = [
+        UsagePeriod(name: "2025", entries: [
+            UsageEntry(title: "June",  minutes: [.cool: 3200, .heat: 2100, .aux: 400, .fan: 5000], capacity: 43200),
+            UsageEntry(title: "May",   minutes: [.cool: 2600, .heat: 3100, .aux: 600, .fan: 4200], capacity: 43200),
+            UsageEntry(title: "April", minutes: [.cool: 1200, .heat: 5200, .aux: 1400, .fan: 3800], capacity: 43200),
+            UsageEntry(title: "March", minutes: [:], capacity: 43200, insufficient: true),
+        ]),
+    ]
 }
 
 #Preview {
