@@ -25,6 +25,7 @@ struct DashboardView: View {
         .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
         .navigationDestination(isPresented: $showControl) { DeviceTabView() }
+        .navigationDestination(for: DashboardNav.self) { _ in ThermostatOfflineDetail() }
         .toolbar { DashboardToolbar() }
     }
 
@@ -132,6 +133,10 @@ struct DashboardToolbar: ToolbarContent {
     }
 }
 
+/// Value-based dashboard navigation targets (kept off `isPresented` so the List
+/// carries only a single presented destination).
+enum DashboardNav: Hashable { case offline }
+
 // MARK: - Thermostat card
 
 struct DashboardThermostatCard: View {
@@ -145,8 +150,6 @@ struct DashboardThermostatCard: View {
     @State private var showMode = false
     /// Inline sensor disclosure — reveals the participating-sensor selection in place.
     @State private var sensorsExpanded = false
-    /// Presents the Thermostat Offline detail (troubleshooting / reconnect).
-    @State private var showOfflineDetail = false
 
     var body: some View {
         if device.isOffline { offlineCard } else { onlineCard }
@@ -165,7 +168,7 @@ struct DashboardThermostatCard: View {
                     .font(.headline)
                     .foregroundStyle(SMA.labelPrimary)
                 Spacer(minLength: 8)
-                Button { showOfflineDetail = true } label: {
+                NavigationLink(value: DashboardNav.offline) {
                     Text("Learn more")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(SMA.accent)
@@ -193,7 +196,6 @@ struct DashboardThermostatCard: View {
             }
         }
         .headerProminence(.increased)
-        .sheet(isPresented: $showOfflineDetail) { ThermostatOfflineDetail() }
     }
 
     // MARK: Online card
@@ -355,76 +357,109 @@ struct SensorSelectRow: View {
 
 /// The "Thermostat Offline" troubleshooting screen reached from the dashboard
 /// offline card's "Learn more": a Wi-Fi-off hero, a reconnect action, and a short
-/// troubleshooting list. Presented as a sheet.
+/// troubleshooting list. Pushed onto the dashboard's navigation stack (not a
+/// modal) so the surrounding tab bar / toolbar stays visible.
 struct ThermostatOfflineDetail: View {
-    @Environment(\.dismiss) private var dismiss
+    @State private var showReconnect = false
+    private enum Route: Hashable { case help, article(String) }
 
+    /// The in-app Sensi help assistant (same target as Account › Help & Support).
+    private let helpURL = URL(string: "https://app.mavenoid.com/embedded-assistant/ma_7pfrrmbjos_gde72ep60pk3hh77uoge921c24ihdj4lclpa")!
     private let troubleshooting = ["Replace batteries", "Low Wi-Fi strength", "Constant power needed"]
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    VStack(spacing: 16) {
-                        Image(systemName: "wifi.slash")
-                            .font(.system(size: 46, weight: .semibold))
-                            .foregroundStyle(SMA.offlineRed)
-                            .accessibilityHidden(true)
-                        Text("Thermostat Offline")
-                            .font(.title.weight(.bold))
-                            .foregroundStyle(SMA.labelPrimary)
-                            .multilineTextAlignment(.center)
-                        Text("If you replaced your router, changed to a new Wi-Fi network, or updated your current Wi-Fi network's password, you'll need to reconnect your Sensi thermostat to Wi-Fi.")
-                            .font(.subheadline)
-                            .foregroundStyle(SMA.labelSecondary)
-                            .multilineTextAlignment(.center)
-                        Button { dismiss() } label: {
-                            Text("Reconnect to Wi-Fi")
-                                .font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 9)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.capsule)
-                        .tint(SMA.accent)
-                        .padding(.top, 4)
+        List {
+            Section {
+                VStack(spacing: 16) {
+                    Image(systemName: "wifi.slash")
+                        .font(.system(size: 46, weight: .semibold))
+                        .foregroundStyle(SMA.offlineRed)
+                        .accessibilityHidden(true)
+                    Text("Thermostat Offline")
+                        .font(.title.weight(.bold))
+                        .foregroundStyle(SMA.labelPrimary)
+                        .multilineTextAlignment(.center)
+                    Text("If you replaced your router, changed to a new Wi-Fi network, or updated your current Wi-Fi network's password, you'll need to reconnect your Sensi thermostat to Wi-Fi.")
+                        .font(.subheadline)
+                        .foregroundStyle(SMA.labelSecondary)
+                        .multilineTextAlignment(.center)
+                    Button { showReconnect = true } label: {
+                        Text("Reconnect to Wi-Fi")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 9)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .tint(SMA.accent)
+                    .padding(.top, 4)
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
 
-                Section("Troubleshooting") {
-                    ForEach(troubleshooting, id: \.self) { item in
-                        Button { dismiss() } label: {
-                            Text(item).foregroundStyle(SMA.accent)
-                        }
-                    }
-                }
-
-                Section {
-                    Button { dismiss() } label: {
-                        Text("Get Help").foregroundStyle(SMA.accent)
+            Section("Troubleshooting") {
+                ForEach(troubleshooting, id: \.self) { item in
+                    NavigationLink(value: Route.article(item)) {
+                        Text(item).foregroundStyle(SMA.accent)
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(SMA.groupedBackground.ignoresSafeArea())
-            .navigationTitle("Home")
-            .inlineNavTitle()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(SMA.labelPrimary)
-                    }
-                    .accessibilityLabel("Close")
+
+            Section {
+                NavigationLink(value: Route.help) {
+                    Text("Get Help").foregroundStyle(SMA.accent)
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(SMA.groupedBackground.ignoresSafeArea())
+        .navigationTitle("")
+        .inlineNavTitle()
+        .toolbar { DashboardToolbar(showWordmark: false) }
+        .navigationDestination(isPresented: $showReconnect) { ReconnectWiFiView() }
+        .navigationDestination(for: Route.self) { route in
+            switch route {
+            case .help:                 OfflineHelpWebView(title: "Help & Support", url: helpURL)
+            case .article(let topic):   OfflineHelpWebView(title: topic, url: helpURL)
+            }
+        }
+    }
+}
+
+/// The Wi-Fi reconnect step reached from the offline detail — reuses the install
+/// flow's network picker. Finishing pops back to the offline detail.
+private struct ReconnectWiFiView: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        WifiListContent(
+            step: InstallStep(stage: "Connect", kind: .wifiList, title: "Select Wi-Fi"),
+            onAdvance: { dismiss() })
+        .navigationTitle("Reconnect to Wi-Fi")
+        .inlineNavTitle()
+    }
+}
+
+/// In-app help web content pushed from the offline detail (Get Help / a
+/// troubleshooting topic).
+private struct OfflineHelpWebView: View {
+    let title: String
+    let url: URL
+    @State private var isLoading = true
+
+    var body: some View {
+        WebView(url: url, isLoading: $isLoading)
+            .overlay(alignment: .top) {
+                if isLoading {
+                    ProgressView().progressViewStyle(.linear).tint(SMA.accent)
+                }
+            }
+            .ignoresSafeArea(edges: .bottom)
+            .navigationTitle(title)
+            .inlineNavTitle()
     }
 }
 
