@@ -383,12 +383,18 @@ struct InstallFlowView: View {
 
     // MARK: Standard step
 
-    /// Resolves a hero asset to its per-model variant (e.g. `…gettingStarted.lite`)
-    /// when one exists, falling back to the shared (Touch 2) asset otherwise.
+    /// Hero bases that ship per-model variants (named `base.<model>`). Everything
+    /// else uses the shared asset. This is an explicit set rather than a runtime
+    /// probe because `UIImage(named:)` reports a hit for `base.<model>` even when
+    /// no such image exists (asset-catalog soft name matching), which SwiftUI then
+    /// renders blank — so we must only append `.model` when a variant truly exists.
+    private static let perModelHeroes: Set<String> = []
+
+    /// Resolves a hero asset to its per-model variant when one is provided,
+    /// falling back to the shared (Touch 2) asset otherwise.
     private func heroName(_ base: String) -> String {
-        guard device.model != .touch2 else { return base }
-        let candidate = "\(base).\(device.model.rawValue)"
-        return UIImage(named: candidate) != nil ? candidate : base
+        guard device.model != .touch2, Self.perModelHeroes.contains(base) else { return base }
+        return "\(base).\(device.model.rawValue)"
     }
 
     private var standardContent: some View {
