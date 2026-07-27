@@ -34,6 +34,11 @@ struct Device: Identifiable, Equatable {
     var usePresets: Bool = true
     /// Pre-heat/cool ahead of a scheduled period so the setpoint is reached on time.
     var earlyStart: Bool = true
+    /// When true the thermostat has lost its Wi-Fi/cloud connection: the dashboard
+    /// shows the Thermostat Offline card instead of the controls. `offlineSince` is
+    /// a pre-formatted display string.
+    var isOffline: Bool = false
+    var offlineSince: String? = nil
 
     /// Whether the HVAC is actively calling, derived from mode + temp vs. range.
     var activity: HVACActivity {
@@ -86,7 +91,9 @@ struct Device: Identifiable, Equatable {
         sensors: [
             RoomSensor(name: "Thermostat", temp: 74, humidity: 44, participating: true),
             RoomSensor(name: "Nursery",    temp: 72, humidity: 46, participating: false, battery: 63),
-        ]
+        ],
+        isOffline: true,
+        offlineSince: "4:00PM November 24, 2023"
     )
 }
 

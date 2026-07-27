@@ -145,8 +145,60 @@ struct DashboardThermostatCard: View {
     @State private var showMode = false
     /// Inline sensor disclosure — reveals the participating-sensor selection in place.
     @State private var sensorsExpanded = false
+    /// Presents the Thermostat Offline detail (troubleshooting / reconnect).
+    @State private var showOfflineDetail = false
 
     var body: some View {
+        if device.isOffline { offlineCard } else { onlineCard }
+    }
+
+    // MARK: Offline card
+
+    private var offlineCard: some View {
+        Section {
+            HStack(spacing: 14) {
+                Image(systemName: "wifi.slash")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(SMA.offlineRed)
+                    .accessibilityHidden(true)
+                Text("Thermostat Offline")
+                    .font(.headline)
+                    .foregroundStyle(SMA.labelPrimary)
+                Spacer(minLength: 8)
+                Button { showOfflineDetail = true } label: {
+                    Text("Learn more")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SMA.accent)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(SMA.accent.opacity(0.15), in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .listRowBackground(SMA.card)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+        } header: {
+            Text(device.name)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+                .textCase(nil)
+        } footer: {
+            if let since = device.offlineSince {
+                Text("Offline since \(since)")
+                    .font(.footnote)
+                    .foregroundStyle(SMA.labelSecondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .textCase(nil)
+            }
+        }
+        .headerProminence(.increased)
+        .sheet(isPresented: $showOfflineDetail) { ThermostatOfflineDetail() }
+    }
+
+    // MARK: Online card
+
+    private var onlineCard: some View {
         Section {
             HStack(spacing: 14) {
                 ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
@@ -296,6 +348,83 @@ struct SensorSelectRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(sensor.participating ? [.isSelected] : [])
         .accessibilityHint("Toggles whether this sensor participates in the average")
+    }
+}
+
+// MARK: - Thermostat Offline detail
+
+/// The "Thermostat Offline" troubleshooting screen reached from the dashboard
+/// offline card's "Learn more": a Wi-Fi-off hero, a reconnect action, and a short
+/// troubleshooting list. Presented as a sheet.
+struct ThermostatOfflineDetail: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private let troubleshooting = ["Replace batteries", "Low Wi-Fi strength", "Constant power needed"]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(spacing: 16) {
+                        Image(systemName: "wifi.slash")
+                            .font(.system(size: 46, weight: .semibold))
+                            .foregroundStyle(SMA.offlineRed)
+                            .accessibilityHidden(true)
+                        Text("Thermostat Offline")
+                            .font(.title.weight(.bold))
+                            .foregroundStyle(SMA.labelPrimary)
+                            .multilineTextAlignment(.center)
+                        Text("If you replaced your router, changed to a new Wi-Fi network, or updated your current Wi-Fi network's password, you'll need to reconnect your Sensi thermostat to Wi-Fi.")
+                            .font(.subheadline)
+                            .foregroundStyle(SMA.labelSecondary)
+                            .multilineTextAlignment(.center)
+                        Button { dismiss() } label: {
+                            Text("Reconnect to Wi-Fi")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 9)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .tint(SMA.accent)
+                        .padding(.top, 4)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+
+                Section("Troubleshooting") {
+                    ForEach(troubleshooting, id: \.self) { item in
+                        Button { dismiss() } label: {
+                            Text(item).foregroundStyle(SMA.accent)
+                        }
+                    }
+                }
+
+                Section {
+                    Button { dismiss() } label: {
+                        Text("Get Help").foregroundStyle(SMA.accent)
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(SMA.groupedBackground.ignoresSafeArea())
+            .navigationTitle("Home")
+            .inlineNavTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(SMA.labelPrimary)
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
+        }
     }
 }
 

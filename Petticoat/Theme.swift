@@ -17,6 +17,8 @@ enum SMA {
     static let tempOrange        = Color(hex: 0xF16A1B)
     static let tempIdle          = Color(hex: 0x8E8E93)
     static let destructive       = Color(light: 0xFF3B30, dark: 0xFF453A)
+    /// Offline / disconnected indicator (the Wi-Fi-off glyph on the dashboard).
+    static let offlineRed        = Color(light: 0xE0392B, dark: 0xFF453A)
     static let fillTertiary      = Color(lightHex: 0x767680, lightAlpha: 0.12,
                                          darkHex: 0x767680, darkAlpha: 0.24)
     /// Selected-segment fill for the pill segmented selectors: an elevated chip that
