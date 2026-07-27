@@ -50,11 +50,17 @@ struct InstallStep: Identifiable {
 /// A device offered in the Add Device list. An empty `steps` array marks a device
 /// whose guided flow isn't built yet (routes to a "coming soon" screen), unless
 /// `isRoomSensor` routes it to the standalone Remote Sensor pairing sheet.
+/// Which thermostat model a flow is for — drives the per-model Connect the Wires
+/// backplate and the device-front hero illustrations.
+enum ThermostatModel: String { case touch2, touch, lite, classic }
+
 struct InstallDevice: Identifiable {
     let id = UUID()
     let name: String
     let subtitle: String
     let thumbnail: String
+    /// The thermostat model, used to pick per-model illustrations.
+    var model: ThermostatModel = .touch2
     /// Bundled resource (…\.txt) of valid wire configurations for this device's
     /// wire-picker step, or nil if none.
     var wireConfigResource: String? = nil
@@ -79,16 +85,19 @@ struct InstallDevice: Identifiable {
 
     static let touch = InstallDevice(
         name: "Touch", subtitle: "Smart Thermostat", thumbnail: "install.device.touch",
+        model: .touch,
         wireConfigResource: "WireConfigsTouchTwo",
         steps: thermostatFlow(intro: "Sensi Touch", includeJumperChoice: true))
 
     static let lite = InstallDevice(
         name: "Lite", subtitle: "Smart Thermostat", thumbnail: "install.device.lite",
+        model: .lite,
         wireConfigResource: "WireConfigsTouchTwo",
         steps: thermostatFlow(intro: "Sensi Lite", includeJumperChoice: false))
 
     static let classic = InstallDevice(
         name: "Classic", subtitle: "Smart Thermostat", thumbnail: "install.device.classic",
+        model: .classic,
         wireConfigResource: "WireConfigsTouchTwo",
         steps: thermostatFlow(intro: "Sensi Classic", includeJumperChoice: true))
 
@@ -366,7 +375,7 @@ struct InstallFlowView: View {
         case .form:       FormContent(step: step, onAdvance: advance)
         case .wirePicker: WirePickerContent(step: step, configResource: device.wireConfigResource, selection: $wireSelection, wiringPhotos: wiringPhotos, onHelp: { showHelp = true }, onAdvance: advance)
         case .labelWires: LabelWiresContent(step: step, selection: wireSelection, onHelp: { showHelp = true }, onAdvance: advance)
-        case .connectWires: ConnectWiresContent(step: step, selection: wireSelection, onHelp: { showHelp = true }, onAdvance: advance)
+        case .connectWires: ConnectWiresContent(model: device.model, step: step, selection: wireSelection, onHelp: { showHelp = true }, onAdvance: advance)
         case .choice:     ChoiceContent(step: step, onHelp: { showHelp = true }, onAdvance: advance)
         case .fullBleed:  EmptyView()
         }
@@ -374,11 +383,19 @@ struct InstallFlowView: View {
 
     // MARK: Standard step
 
+    /// Resolves a hero asset to its per-model variant (e.g. `…gettingStarted.lite`)
+    /// when one exists, falling back to the shared (Touch 2) asset otherwise.
+    private func heroName(_ base: String) -> String {
+        guard device.model != .touch2 else { return base }
+        let candidate = "\(base).\(device.model.rawValue)"
+        return UIImage(named: candidate) != nil ? candidate : base
+    }
+
     private var standardContent: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 20) {
-                    Image(step.hero)
+                    Image(heroName(step.hero))
                         .resizable()
                         .scaledToFit()
                         .frame(maxHeight: 300)

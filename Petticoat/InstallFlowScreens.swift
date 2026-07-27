@@ -441,14 +441,298 @@ struct LabelWiresContent: View {
     let onHelp: () -> Void
     let onAdvance: () -> Void
 
-    /// Intrinsic aspect ratios of the two flattened art assets.
-    private let labelAspect = 256.0 / 128.0   // WireLabel.png
-    private let terminalAspect = 400.0 / 120.0 // TerminalScrew.png
-
     /// Picked terminals in the canonical wire-picker order.
     private var terminals: [String] {
         WirePickerContent.terminalOrder.filter { selection.contains($0) }
     }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    WireBlockCard(header: "Wire Labels", footer: "Old Thermostat", terminals: terminals)
+                    StepHeadline(title: step.title, detail: step.body)
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            }
+
+            InstallButtonBar(link: step.link, onLink: onHelp,
+                             primary: "Continue", onPrimary: onAdvance)
+        }
+    }
+}
+
+// MARK: - Connect the Wires
+
+/// The thermostat's terminal backplate, laid out per model to match the physical
+/// device: Touch 2 / Classic / Lite use vertical terminal blocks flanking the
+/// body; Touch uses a single horizontal row beneath the body. Wires picked
+/// earlier are shown plugged into their terminals and labeled.
+struct ConnectWiresContent: View {
+    let model: ThermostatModel
+    let step: InstallStep
+    let selection: Set<String>
+    let onHelp: () -> Void
+    let onAdvance: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 36) {
+                    TerminalBackplate(model: model, selection: selection)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 24)
+                    StepHeadline(title: step.title, detail: step.body)
+                }
+                .padding(.bottom, 16)
+            }
+
+            InstallButtonBar(link: step.link, onLink: onHelp,
+                             primary: "Continue", onPrimary: onAdvance)
+        }
+    }
+}
+
+/// Per-model terminal backplate. Terminal sets, arrangement and style follow the
+/// Figma "Connect the Wires" references for each model.
+private struct TerminalBackplate: View {
+    let model: ThermostatModel
+    let selection: Set<String>
+    enum Side { case left, right }
+
+    private struct Layout {
+        enum Arrangement { case blocks, row }
+        enum Style { case push, screw }
+        var arrangement: Arrangement
+        var style: Style
+        var left: [String]
+        var right: [String]    // empty → single block (Lite)
+    }
+
+    private var layout: Layout {
+        switch model {
+        case .touch2:  return Layout(arrangement: .blocks, style: .push,
+                                     left: ["RC", "RH", "C", "O/B", "Y", "G"],
+                                     right: ["W2", "Y2", "W/E", "ACC-", "ACC+"])
+        case .classic: return Layout(arrangement: .blocks, style: .screw,
+                                     left: ["RC", "RH", "O/B", "G", "W/E", "C"],
+                                     right: ["L", "Y2", "W2"])
+        case .lite:    return Layout(arrangement: .blocks, style: .screw,
+                                     left: ["R", "O/B", "Y", "G", "W/E", "C"],
+                                     right: [])
+        case .touch:   return Layout(arrangement: .row, style: .push,
+                                     left: ["G", "O/B", "W2", "L", "W/E", "Y", "Y2", "C", "RC", "RH"],
+                                     right: [])
+        }
+    }
+
+    private var terminalAsset: String {
+        layout.style == .push ? "install.terminal" : "install.terminalScrew.push"
+    }
+
+    // install.terminal / install.terminalScrew.push are 100×30; install.wirePlug is 38×30.
+    private let termW: CGFloat = 128    // vertical-block terminal length
+    private let termH: CGFloat = 38     // vertical-block terminal thickness
+    private let gap: CGFloat = 3
+    private let plugW: CGFloat = 40
+    private let bodyW: CGFloat = 48
+
+    private func isConnected(_ t: String) -> Bool {
+        selection.contains(t) || (t == "O/B" && selection.contains("O"))
+    }
+
+    /// Whether the terminal art must be mirrored so its opening faces inward.
+    /// Push art opens to the right natively; screw art opens to the left.
+    private func flipped(_ side: Side) -> Bool {
+        switch (layout.style, side) {
+        case (.push, .right), (.screw, .left): return true
+        default: return false
+        }
+    }
+
+    var body: some View {
+        Group {
+            switch layout.arrangement {
+            case .blocks: blocksBody
+            case .row:    rowBody
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    private var accessibilitySummary: String {
+        let on = (layout.left + layout.right).filter(isConnected)
+        return "Thermostat terminal block. Wires connected: \(on.isEmpty ? "none" : on.joined(separator: ", "))"
+    }
+
+    // MARK: Vertical blocks (Touch 2 / Classic / Lite)
+
+    private var blocksBody: some View {
+        HStack(alignment: .center, spacing: 14) {
+            block(layout.left, side: .left)
+            centerBody.zIndex(-1)   // body sits behind the blocks so wires read on top
+            if !layout.right.isEmpty { block(layout.right, side: .right) }
+        }
+        .fixedSize()
+    }
+
+    private var centerBody: some View {
+        let count = CGFloat(layout.left.count)
+        let h = count * termH + (count - 1) * gap
+        return RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(Color(hex: 0x1E1E20))
+            .frame(width: bodyW, height: h)
+    }
+
+    private func block(_ terminals: [String], side: Side) -> some View {
+        VStack(spacing: gap) {
+            ForEach(terminals, id: \.self) { horizontalTerminal($0, side: side) }
+        }
+        // Wires overlay a parallel column so each plug aligns to its terminal row
+        // and pokes out of the inner (opening) edge toward the body.
+        .overlay(alignment: side == .left ? .trailing : .leading) {
+            VStack(spacing: gap) {
+                ForEach(terminals, id: \.self) { t in
+                    plug(t, flip: side == .right)
+                        .frame(width: plugW, height: termH)
+                        .opacity(isConnected(t) ? 1 : 0)
+                }
+            }
+            .offset(x: side == .left ? plugW - 8 : -(plugW - 8))
+        }
+    }
+
+    /// One terminal lying horizontally, opening facing inward. Screw-style art
+    /// carries its letter on the outer label tab; push-style over the housing.
+    private func horizontalTerminal(_ t: String, side: Side) -> some View {
+        Image(terminalAsset)
+            .resizable()
+            .scaledToFit()
+            .frame(width: termW, height: termH)
+            .scaleEffect(x: flipped(side) ? -1 : 1, y: 1)
+            .overlay {
+                Text(t)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .offset(x: side == .left ? -termW * 0.24 : termW * 0.24)
+            }
+    }
+
+    /// The blue wire-plug label art plugged into a terminal, carrying its letter.
+    private func plug(_ t: String, flip: Bool) -> some View {
+        Image("install.wirePlug")
+            .resizable()
+            .scaledToFit()
+            .frame(width: plugW, height: termH)
+            .scaleEffect(x: flip ? -1 : 1, y: 1)
+            .overlay {
+                Text(t)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .padding(.horizontal, 2)
+            }
+    }
+
+    // MARK: Horizontal row (Touch)
+
+    private let rowLen: CGFloat = 92      // terminal length (vertical when rotated)
+    private let rowThick: CGFloat = 30    // terminal thickness (cell width)
+    private let rowGap: CGFloat = 2
+
+    private var rowBody: some View {
+        let n = CGFloat(layout.left.count)
+        let stripW = n * rowThick + (n - 1) * rowGap
+        return ZStack(alignment: .top) {
+            VStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(hex: 0x1E1E20))
+                    .frame(width: stripW + 28, height: 42)
+                    .zIndex(-1)
+                HStack(spacing: rowGap) {
+                    ForEach(layout.left, id: \.self) { verticalTerminal($0) }
+                }
+            }
+            // Wires drop from the body into the top (opening) of connected terminals.
+            HStack(spacing: rowGap) {
+                ForEach(layout.left, id: \.self) { t in
+                    plug(t, flip: false)
+                        .rotationEffect(.degrees(90))
+                        .frame(width: rowThick, height: plugW)
+                        .opacity(isConnected(t) ? 1 : 0)
+                }
+            }
+            .offset(y: 30)
+        }
+        .fixedSize()
+    }
+
+    /// A terminal standing vertically (opening at top) for the Touch row.
+    private func verticalTerminal(_ t: String) -> some View {
+        Image(terminalAsset)
+            .resizable()
+            .scaledToFit()
+            .frame(width: rowLen, height: rowThick)
+            .rotationEffect(.degrees(-90))   // opening (right) rotates to the top
+            .frame(width: rowThick, height: rowLen)
+            .overlay(alignment: .bottom) {
+                Text(t)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .padding(.bottom, rowLen * 0.16)
+            }
+    }
+}
+
+// MARK: - Wire block illustration
+
+/// One picked wire rendered as a column: a sticker-labeled wire chip above its
+/// lettered terminal screw. Shared by the Label Your Wires and Connect the Wires
+/// steps so both read as the same physical terminal block.
+private struct WireColumn: View {
+    let terminal: String
+    let width: CGFloat
+
+    /// Intrinsic aspect ratios of the two flattened art assets.
+    private let labelAspect = 256.0 / 128.0    // install.wireLabel
+    private let terminalAspect = 400.0 / 120.0 // install.terminalScrew
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Image("install.wireLabel")
+                .resizable()
+                .frame(width: width, height: width * labelAspect)
+                .overlay(letter.position(x: width / 2, y: width * labelAspect * 0.484))
+            Image("install.terminalScrew")
+                .resizable()
+                .frame(width: width, height: width * terminalAspect)
+                .overlay(letter.position(x: width / 2, y: width * terminalAspect * 0.81))
+        }
+    }
+
+    private var letter: some View {
+        Text(terminal)
+            .font(.system(size: width * 0.34, weight: .semibold))
+            .minimumScaleFactor(0.5)
+            .lineLimit(1)
+            .foregroundStyle(.white)
+    }
+}
+
+/// A terminal-block illustration: one labeled wire column per picked terminal,
+/// packed edge to edge so the screw housings read as one continuous strip,
+/// mirroring a real terminal block.
+private struct WireBlockCard: View {
+    let header: String
+    let footer: String
+    let terminals: [String]
 
     /// Per-terminal column width: shrink to fit the full picked set across a
     /// ~320pt block, capped so a large config stays on screen and a small one
@@ -459,33 +743,17 @@ struct LabelWiresContent: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 24) {
-                    wireLabelsCard
-                    StepHeadline(title: step.title, detail: step.body)
-                }
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-            }
-
-            InstallButtonBar(link: step.link, onLink: onHelp,
-                             primary: "Continue", onPrimary: onAdvance)
-        }
-    }
-
-    private var wireLabelsCard: some View {
         VStack(spacing: 20) {
-            Text("Wire Labels")
+            Text(header)
                 .font(.headline)
                 .foregroundStyle(SMA.labelSecondary)
 
             HStack(spacing: 0) {
-                ForEach(terminals, id: \.self) { wireColumn($0) }
+                ForEach(terminals, id: \.self) { WireColumn(terminal: $0, width: columnWidth) }
             }
             .fixedSize()
 
-            Text("Old Thermostat")
+            Text(footer)
                 .font(.title2.weight(.bold))
                 .foregroundStyle(SMA.labelSecondary)
         }
@@ -494,98 +762,7 @@ struct LabelWiresContent: View {
         .background(SMA.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .padding(.horizontal, 16)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Old thermostat terminal block with labeled wires: \(terminals.joined(separator: ", "))")
-    }
-
-    /// One picked wire: sticker-labeled wire above its lettered terminal screw.
-    private func wireColumn(_ t: String) -> some View {
-        let w = columnWidth
-        return VStack(spacing: 0) {
-            Image("install.wireLabel")
-                .resizable()
-                .frame(width: w, height: w * labelAspect)
-                .overlay(letter(t, size: w).position(x: w / 2, y: w * labelAspect * 0.484))
-            Image("install.terminalScrew")
-                .resizable()
-                .frame(width: w, height: w * terminalAspect)
-                .overlay(letter(t, size: w).position(x: w / 2, y: w * terminalAspect * 0.81))
-        }
-    }
-
-    private func letter(_ t: String, size w: CGFloat) -> some View {
-        Text(t)
-            .font(.system(size: w * 0.34, weight: .semibold))
-            .minimumScaleFactor(0.5)
-            .lineLimit(1)
-            .foregroundStyle(.white)
-    }
-}
-
-// MARK: - Connect the Wires
-
-/// A dynamic illustration of the thermostat's terminal block: every available
-/// terminal is shown as a slot, and the terminals picked in the wire-picker step
-/// get a wire (in its conventional HVAC color) plugged in and labeled.
-struct ConnectWiresContent: View {
-    let step: InstallStep
-    let selection: Set<String>
-    let onHelp: () -> Void
-    let onAdvance: () -> Void
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
-    private var terminals: [String] { WirePickerContent.terminalOrder }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 20) {
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(terminals, id: \.self) { t in
-                            terminalCell(t)
-                        }
-                    }
-                    .padding(16)
-                    .background(SMA.fillTertiary, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .padding(.horizontal, 16)
-
-                    StepHeadline(title: step.title, detail: step.body)
-                }
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-            }
-
-            InstallButtonBar(link: step.link, onLink: onHelp,
-                             primary: "Continue", onPrimary: onAdvance)
-        }
-    }
-
-    /// One terminal slot; connected terminals show a colored wire stub above the tile.
-    private func terminalCell(_ t: String) -> some View {
-        let connected = selection.contains(t)
-        return VStack(spacing: 3) {
-            Capsule()
-                .fill(Self.wireColor(t))
-                .frame(width: 7, height: 16)
-                .overlay(Capsule().stroke(SMA.separator, lineWidth: 0.5))
-                .opacity(connected ? 1 : 0)          // reserve space so tiles stay aligned
-                .accessibilityHidden(true)
-            TerminalTile(label: t, isOn: connected, isEnabled: connected)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(connected ? "Terminal \(t), wire connected" : "Terminal \(t), empty")
-    }
-
-    /// Conventional HVAC wire colors so the illustration reads like real wiring.
-    static func wireColor(_ t: String) -> Color {
-        switch t {
-        case "R", "RC", "RH":             return Color(hex: 0xE0392B)   // red
-        case "W", "W1", "W2", "W/E", "E": return Color(hex: 0xD8DCE0)   // white (tinted for contrast)
-        case "Y", "Y1", "Y2":             return Color(hex: 0xF2C300)   // yellow
-        case "G":                         return Color(hex: 0x34A853)   // green
-        case "C", "B":                    return Color(hex: 0x2F6FE0)   // blue
-        case "O", "O/B":                  return Color(hex: 0xF08A24)   // orange
-        default:                          return SMA.labelSecondary     // aux/misc
-        }
+        .accessibilityLabel("\(footer) terminal block with labeled wires: \(terminals.joined(separator: ", "))")
     }
 }
 
