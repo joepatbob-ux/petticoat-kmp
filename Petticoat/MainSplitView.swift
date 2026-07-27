@@ -7,8 +7,7 @@ import SwiftUI
 struct MainSplitView: View {
     @Environment(AppModel.self) private var model
     @State private var selection: DeviceTab = .control
-    @State private var spotlightExpanded = true
-    /// Individually collapsed spotlight cards (matches the dashboard behavior).
+    /// IDs of spotlight cards shown in their abbreviated form. Empty = all expanded.
     @State private var collapsedSpotlights: Set<UUID> = []
 
     var body: some View {
@@ -58,10 +57,17 @@ struct MainSplitView: View {
 
     @ViewBuilder private var spotlightSidebarFooter: some View {
         let items = model.visibleSpotlights
+        let allCollapsed = items.allSatisfy { collapsedSpotlights.contains($0.id) }
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Button {
-                    withAnimation(.snappy) { spotlightExpanded.toggle() }
+                    withAnimation(.snappy) {
+                        if allCollapsed {
+                            collapsedSpotlights = []
+                        } else {
+                            collapsedSpotlights = Set(items.map(\.id))
+                        }
+                    }
                 } label: {
                     HStack(spacing: 8) {
                         Text("Spotlight")
@@ -78,25 +84,23 @@ struct MainSplitView: View {
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(SMA.accent)
-                            .rotationEffect(.degrees(spotlightExpanded ? 90 : 0))
+                            .rotationEffect(.degrees(allCollapsed ? 0 : 90))
                             .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(.isHeader)
-                .accessibilityHint(spotlightExpanded ? "Collapse Spotlight" : "Expand Spotlight")
+                .accessibilityHint(allCollapsed ? "Expand Spotlight" : "Collapse Spotlight")
 
-                if spotlightExpanded {
-                    ForEach(items) { item in
-                        SpotlightCard(
-                            item: item,
-                            expanded: !collapsedSpotlights.contains(item.id),
-                            onToggle: { toggleSpotlight(item) },
-                            onDismiss: { model.dismissSpotlight(item) }
-                        )
-                        .spotlightSidebarCardStyle(kind: item.kind)
-                    }
+                ForEach(items) { item in
+                    SpotlightCard(
+                        item: item,
+                        expanded: !collapsedSpotlights.contains(item.id),
+                        onToggle: { toggleSpotlight(item) },
+                        onDismiss: { model.dismissSpotlight(item) }
+                    )
+                    .spotlightSidebarCardStyle(kind: item.kind)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

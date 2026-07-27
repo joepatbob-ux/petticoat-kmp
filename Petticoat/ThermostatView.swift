@@ -10,6 +10,14 @@ struct ControlView: View {
     private var device: Device { model.device }
 
     var body: some View {
+        if device.isOffline {
+            ThermostatOfflineDetail()
+        } else {
+            onlineBody
+        }
+    }
+
+    @ViewBuilder private var onlineBody: some View {
         VStack(spacing: 0) {
             WeatherSummary(
                 location: model.showWeatherLocation ? device.location : "",

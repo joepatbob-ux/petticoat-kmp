@@ -207,10 +207,6 @@ struct ScheduleEditorView: View {
                             if let event = group.events.first(where: { $0.id == id }) {
                                 timeTarget = EventTarget(groupID: group.id, event: event)
                             }
-                        },
-                        onBreak: { draggedID, newStart, brokenID, tailStart, kind in
-                            breakEvent(draggedID, newStart: newStart, breaking: brokenID,
-                                       tailStart: tailStart, kind: kind, in: group.id)
                         }
                     )
                     .frame(height: 340)
@@ -430,40 +426,31 @@ struct ScheduleEditorView: View {
             guard let e = preset.groups[g].events.firstIndex(where: { $0.id == eventID }) else { continue }
             preset.groups[g].events[e].time = dateAtMinutes(DialMath.snapToGrid(minutesOfDay(newTime), snap: snapMinutes))
             preset.groups[g].events.sort { $0.time < $1.time }
+            mergeAdjacentSameEvents(in: g)
             return
         }
     }
 
-    /// Apply a dial drop. `.breakInto` splits the enclosing event into a kept head + a
-    /// copied tail around the dropped event (so the broken activity resumes after it);
-    /// `.insertLeading`/`.insertTrailing` reorder the dragged event flush against a boundary
-    /// without copying (the neighbor just donates the time). Break no-ops at `maxEvents`.
-    private func breakEvent(_ draggedID: ScheduleEvent.ID, newStart: Date,
-                            breaking brokenID: ScheduleEvent.ID, tailStart: Date,
-                            kind: DialMath.BreakKind, in id: ScheduleDayGroup.ID) {
-        guard let g = groupIndex(id),
-              let d = preset.groups[g].events.firstIndex(where: { $0.id == draggedID }),
-              let b = preset.groups[g].events.firstIndex(where: { $0.id == brokenID }) else { return }
-        if kind == .breakInto, preset.groups[g].events.count >= maxEvents { return }
-        withAnimation(.snappy) {
-            switch kind {
-            case .breakInto:
-                let broken = preset.groups[g].events[b]
-                let tail = ScheduleEvent(name: broken.name, symbol: broken.symbol, colorHex: broken.colorHex,
-                                         heatTo: broken.heatTo, coolTo: broken.coolTo, time: tailStart)
-                preset.groups[g].events[d].time = newStart
-                preset.groups[g].events.append(tail)
-            case .insertLeading:
-                // Dragged event takes the boundary; the enclosing event slides to its tail slot.
-                preset.groups[g].events[d].time = newStart
-                preset.groups[g].events[b].time = tailStart
-            case .insertTrailing:
-                // Dragged event slots flush at the end; the enclosing event is unchanged.
-                preset.groups[g].events[d].time = newStart
+    /// After a drag move, collapse any two adjacent events that share the same activity
+    /// (name, symbol, colorHex, heatTo, coolTo) into one — keeping the earlier start time.
+    private func mergeAdjacentSameEvents(in g: Int) {
+        var evs = preset.groups[g].events
+        guard evs.count > 1 else { return }
+        var i = 0
+        while i < evs.count {
+            let next = (i + 1) % evs.count
+            let a = evs[i], b = evs[next]
+            if a.name == b.name && a.symbol == b.symbol && a.colorHex == b.colorHex
+                && a.heatTo == b.heatTo && a.coolTo == b.coolTo {
+                evs.remove(at: next > i ? next : i)
+                if evs.count <= 1 { break }
+            } else {
+                i += 1
             }
-            preset.groups[g].events.sort { $0.time < $1.time }
         }
-        selectedEventID = draggedID
+        if evs.count != preset.groups[g].events.count {
+            preset.groups[g].events = evs
+        }
     }
 
     /// Replace an event's profile snapshot + time (from the event editor).

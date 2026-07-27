@@ -3,12 +3,9 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppModel.self) private var model
     @State private var showControl = false
-    /// Spotlight cards shown in their abbreviated form. Empty by default, so every
-    /// card starts expanded; the header chevron collapses/expands them all at once,
-    /// and tapping a card toggles just that one.
+    /// IDs of spotlight cards shown in their abbreviated form. Empty = all expanded.
+    /// The header chevron collapses/expands all at once; tapping a card toggles just that one.
     @State private var collapsedSpotlights: Set<UUID> = []
-    /// Whether the Spotlight section is expanded (native collapsible section).
-    @State private var spotlightExpanded = true
 
     var body: some View {
         List {
@@ -25,7 +22,6 @@ struct DashboardView: View {
         .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
         .navigationDestination(isPresented: $showControl) { DeviceTabView() }
-        .navigationDestination(for: DashboardNav.self) { _ in ThermostatOfflineDetail() }
         .toolbar { DashboardToolbar() }
     }
 
@@ -41,17 +37,19 @@ struct DashboardView: View {
         }
     }
 
-    /// Spotlight cards (respecting hidden state). The header shows a blue chevron
-    /// (matching the thermostat headers) that collapses/expands the whole section;
-    /// tapping an individual card still toggles just that one.
     @ViewBuilder private var spotlightSection: some View {
         let items = model.visibleSpotlights
+        let allCollapsed = items.allSatisfy { collapsedSpotlights.contains($0.id) }
         if !items.isEmpty {
             Section {
-                // Header as an always-visible row so collapsing simply drops the
-                // cards below it (no leftover empty section cell).
                 Button {
-                    withAnimation(.snappy) { spotlightExpanded.toggle() }
+                    withAnimation(.snappy) {
+                        if allCollapsed {
+                            collapsedSpotlights = []
+                        } else {
+                            collapsedSpotlights = Set(items.map(\.id))
+                        }
+                    }
                 } label: {
                     HStack(spacing: 8) {
                         Text("Spotlight")
@@ -67,7 +65,7 @@ struct DashboardView: View {
                         Image(systemName: "chevron.right")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(SMA.accent)
-                            .rotationEffect(.degrees(spotlightExpanded ? 90 : 0))
+                            .rotationEffect(.degrees(allCollapsed ? 0 : 90))
                             .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
@@ -77,18 +75,16 @@ struct DashboardView: View {
                 .listRowSeparator(.hidden)
                 .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 2, trailing: 20))
                 .accessibilityAddTraits(.isHeader)
-                .accessibilityHint(spotlightExpanded ? "Collapse Spotlight" : "Expand Spotlight")
+                .accessibilityHint(allCollapsed ? "Expand Spotlight" : "Collapse Spotlight")
 
-                if spotlightExpanded {
-                    ForEach(items) { item in
-                        SpotlightCard(
-                            item: item,
-                            expanded: !collapsedSpotlights.contains(item.id),
-                            onToggle: { toggleSpotlight(item) },
-                            onDismiss: { model.dismissSpotlight(item) }
-                        )
-                        .spotlightCardStyle(kind: item.kind)
-                    }
+                ForEach(items) { item in
+                    SpotlightCard(
+                        item: item,
+                        expanded: !collapsedSpotlights.contains(item.id),
+                        onToggle: { toggleSpotlight(item) },
+                        onDismiss: { model.dismissSpotlight(item) }
+                    )
+                    .spotlightCardStyle(kind: item.kind)
                 }
             }
         }
@@ -133,10 +129,6 @@ struct DashboardToolbar: ToolbarContent {
     }
 }
 
-/// Value-based dashboard navigation targets (kept off `isPresented` so the List
-/// carries only a single presented destination).
-enum DashboardNav: Hashable { case offline }
-
 // MARK: - Thermostat card
 
 struct DashboardThermostatCard: View {
@@ -168,7 +160,10 @@ struct DashboardThermostatCard: View {
                     .font(.headline)
                     .foregroundStyle(SMA.labelPrimary)
                 Spacer(minLength: 8)
-                NavigationLink(value: DashboardNav.offline) {
+                Button {
+                    model.selectDevice(device.id)
+                    showControl = true
+                } label: {
                     Text("Learn more")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(SMA.accent)

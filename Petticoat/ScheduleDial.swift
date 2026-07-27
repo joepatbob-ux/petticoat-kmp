@@ -22,12 +22,6 @@ struct RadialScheduleDial: View {
     let onSelect: (ScheduleEvent.ID) -> Void
     /// Tapping the start time in the center asks the host to present manual entry.
     let onRequestManualTime: (ScheduleEvent.ID) -> Void
-    /// Drop resolution: (draggedID, its new start, the enclosing/neighbor event, the
-    /// tail-or-next-boundary start, the kind). For `.breakInto` the host moves the dragged
-    /// event and inserts a copy of the broken event so its activity resumes after; for the
-    /// boundary inserts it reorders flush against a boundary without copying.
-    let onBreak: (ScheduleEvent.ID, Date, ScheduleEvent.ID, Date, DialMath.BreakKind) -> Void
-
     /// Neutral background band; drawn thicker than the arcs so they sit inset within it.
     private let trackWidth: CGFloat = 48
     private let arcWidth: CGFloat = 26
@@ -41,13 +35,9 @@ struct RadialScheduleDial: View {
     private let hourMarkerFadeFraction: CGFloat = 0.018
     private let gripMarkerFadeFraction: CGFloat = 0.024
     private let gripTickSpreadFraction: CGFloat = 0.005
-    /// Visual floor for a period: the scrubber can't drag a period shorter than an hour,
-    /// so arcs stay large enough to read. Manual time entry bypasses this and still
-    /// allows 15-minute granularity for finer sub-hour periods.
-    private let minDurationMinutes = 60
-    /// Within this many minutes of an existing boundary, a drop snaps flush against it and
-    /// reorders between arcs (no split) instead of breaking the enclosing arc in two.
-    private let boundarySnapMinutes = 24
+    /// Minimum piece size when splitting an arc on drop. 15 minutes matches the grid
+    /// snap so any grid-aligned drop that fits geometrically will succeed.
+    private let minDurationMinutes = 15
     private let spaceName = "scheduleDial"
 
     // MARK: - Drag-to-reorder state
@@ -60,11 +50,18 @@ struct RadialScheduleDial: View {
     @State private var grabOffset: CGFloat = 0
     /// The dragged arc's live start position (day fraction) following the finger.
     @State private var proposedStart: CGFloat = 0
-    /// The boundary the drag was snapped to on the previous move, so a haptic fires only
-    /// as the snap engages (not on every frame it stays snapped).
-    @State private var lastBoundarySnap: String?
+
 
     private var sortedEvents: [ScheduleEvent] { events.sorted { $0.time < $1.time } }
+
+    /// `proposedStart` snapped to the 15-minute grid (matching `commitBreak`), but without
+    /// boundary-snap, so the floating arc tracks the finger accurately during drag.
+    private var gridSnappedStart: CGFloat {
+        let raw = Int((normalize(proposedStart) * 1440).rounded())
+        let snapped = (((raw / snapMinutes) * snapMinutes) % 1440 + 1440) % 1440
+        return CGFloat(snapped) / 1440
+    }
+
     private var selectedEvent: ScheduleEvent? {
         sortedEvents.first(where: { $0.id == selectedID }) ?? sortedEvents.first
     }
@@ -98,9 +95,6 @@ struct RadialScheduleDial: View {
                         .shadow(color: .black.opacity(arc.floating ? 0.45 : 0),
                                 radius: arc.floating ? 9 : 0, y: arc.floating ? 3 : 0)
                         .allowsHitTesting(false)
-                        // Ease only the snap-to/off-boundary jump; ordinary finger tracking
-                        // (token unchanged) still updates unanimated so it stays glued.
-                        .animation(.snappy(duration: 0.18), value: boundarySnapToken)
                 }
 
                 // Hour ticks on top of the arcs: a dot at each hour, with M (midnight)
@@ -131,10 +125,8 @@ struct RadialScheduleDial: View {
                 ForEach(sortedEvents) { e in
                     let showsGrip = (e.id == selectedEvent?.id && draggingID == nil)
                     if !showsGrip {
-                        // The dragged icon must sit at the arc's rendered start — the
-                        // previewed break gap (floatStart) when over a breakable arc, else
-                        // the finger — so the icon and its arc never drift apart.
-                        let base = (e.id == draggingID) ? (proposedBreak?.floatStart ?? proposedStart) : frac(e.time)
+                        // The dragged icon must sit at the arc's rendered start.
+                        let base = (e.id == draggingID) ? gridSnappedStart : frac(e.time)
                         let f = base + knobInsetFraction(radius: radius)
                         let dimmed = draggingID != nil && e.id != draggingID
                         Image(systemName: e.symbol)
@@ -142,7 +134,6 @@ struct RadialScheduleDial: View {
                             .foregroundStyle(.white.opacity(dimmed ? dimmedOpacity : 1))
                             .position(point(f, radius: radius, center: center))
                             .allowsHitTesting(false)
-                            .animation(.snappy(duration: 0.18), value: boundarySnapToken)
                     }
                 }
 
@@ -256,7 +247,7 @@ struct RadialScheduleDial: View {
                     if draggingID == nil {
                         beginDrag(at: drag.startLocation, center: center, radius: radius)
                     }
-                    updateDrag(at: drag.location, center: center)
+                    updateDrag(at: drag.location, center: center, radius: radius)
                 }
             }
             .onEnded { _ in endDrag() }
@@ -274,63 +265,34 @@ struct RadialScheduleDial: View {
         let f = fraction(of: location, center: center)
         grabOffset = f - start
         proposedStart = normalize(f - grabOffset)
-        lastBoundarySnap = nil
         // Animate the lift + dim of the other arcs; the arc position itself tracks the
         // finger unanimated so it stays glued to the touch.
         withAnimation(.easeOut(duration: 0.14)) { draggingID = id }
         haptic()
     }
 
-    private func updateDrag(at location: CGPoint, center: CGPoint) {
+    private func updateDrag(at location: CGPoint, center: CGPoint, radius: CGFloat) {
         guard draggingID != nil else { return }
+        let dx = location.x - center.x
+        let dy = location.y - center.y
+        let dist = (dx * dx + dy * dy).squareRoot()
+        // Ignore positions deep inside the ring — a near-center touch maps to a
+        // rapidly-changing angle and would produce wild snaps on release.
+        // Anything past 55% of the ring radius is treated as "off ring, hold last position."
+        guard dist >= radius * 0.55 else { return }
         let f = fraction(of: location, center: center)
         proposedStart = normalize(f - grabOffset)
-        // A soft detent tick as the drag snaps onto a boundary (not while it sits there,
-        // and not on the release from one).
-        let snap = boundarySnapToken
-        if snap != lastBoundarySnap {
-            if snap != nil { snapHaptic() }
-            lastBoundarySnap = snap
-        }
     }
 
     private func endDrag() {
-        commitBreak()
-        // Drop animation; if nothing was committed the arc glides back to its origin.
-        withAnimation(.snappy(duration: 0.25)) { draggingID = nil }
-    }
-
-    /// On drop, insert the dragged event at the finger position by breaking whichever
-    /// event now encloses it into a kept head + a copied tail, preserving the dragged
-    /// event's own length and keeping every resulting piece ≥ `minDurationMinutes`.
-    /// Does nothing (the arc glides home) when there isn't room or it barely moved.
-    private func commitBreak() {
+        // No withAnimation — ArcBand.animatableData interpolates startFraction/endFraction
+        // linearly, so a large drag (e.g. Sleep dragged across midnight) would sweep the
+        // arc visibly around the ring if animated.
         guard let id = draggingID else { return }
-        let evs = sortedEvents
-        guard evs.count >= 2, let s = evs.first(where: { $0.id == id }),
-              let iS = evs.firstIndex(where: { $0.id == id }) else { return }
-
-        // Ignore near-stationary drops so a plain press-and-release doesn't reshuffle.
-        guard circularDistance(normalize(proposedStart), frac(s.time)) >= 0.01 else { return }
-
-        // The dragged event's own length (minutes), preserved through the move.
-        let durS = cwDistance(dayMinutes(s.time), dayMinutes(evs[(iS + 1) % evs.count].time))
-
-        // Snap the finger position to the minute grid.
-        var startMin = Int((normalize(proposedStart) * 1440).rounded())
-        startMin = (((startMin / snapMinutes) * snapMinutes) % 1440 + 1440) % 1440
-
-        // The partition as it looks with the dragged event lifted out (its previous
-        // neighbor fills the vacated slot), so we break the event that truly encloses it.
-        let others = evs.filter { $0.id != id }.sorted { $0.time < $1.time }
-        guard let placement = DialMath.breakPlacement(fingerMin: startMin, durS: durS,
-                                                       others: others.map { dayMinutes($0.time) },
-                                                       minLen: minDurationMinutes,
-                                                       boundarySnap: boundarySnapMinutes),
-              placement.newStart != dayMinutes(s.time),
-              let broken = others.first(where: { dayMinutes($0.time) == placement.brokenStart }) else { return }
-
-        onBreak(id, minutesToDate(placement.newStart), broken.id, minutesToDate(placement.tailStart), placement.kind)
+        draggingID = nil
+        let snapped = gridSnappedStart
+        guard circularDistance(snapped, eventStartFraction(id)) >= 0.01 else { return }
+        onChangeStart(id, minutesToDate(Int((snapped * 1440).rounded())))
     }
 
     private func eventStartFraction(_ id: ScheduleEvent.ID) -> CGFloat {
@@ -349,13 +311,6 @@ struct RadialScheduleDial: View {
     private func haptic() {
         #if canImport(UIKit)
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-        #endif
-    }
-
-    /// A light detent tick for snapping onto a boundary — softer than the pickup thud.
-    private func snapHaptic() {
-        #if canImport(UIKit)
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6)
         #endif
     }
 
@@ -470,102 +425,48 @@ struct RadialScheduleDial: View {
         let z: Int
     }
 
-    /// Opacity applied to the arcs that aren't being dragged, so the picked-up arc stands
-    /// out while moving.
-    private let dimmedOpacity: Double = 0.3
+    /// Opacity applied to arcs that aren't being dragged (and to head/tail split previews),
+    /// so the floating arc stands out. High enough that the split preview is readable.
+    private let dimmedOpacity: Double = 0.45
 
-    /// Geometry (day fractions) of the live break preview while dragging: the enclosing
-    /// event split into a kept head + a copied tail, with the dragged arc between them.
-    private struct BreakPreview {
-        let brokenID: ScheduleEvent.ID
-        let headStart: CGFloat
-        let floatStart: CGFloat
-        let tailStart: CGFloat
-        let tailEnd: CGFloat
-        /// A boundary insert drops one of the two pieces (the dragged arc sits flush against
-        /// a boundary), so the preview only draws the piece that survives.
-        let hasHead: Bool
-        let hasTail: Bool
-    }
-
-    /// Identifies the boundary the drag is currently snapped flush against (the enclosing
-    /// event id + which edge), or nil for an interior break / no drop. Drives the eased
-    /// snap animation and the snap haptic, both of which fire only when this changes.
-    private var boundarySnapToken: String? {
-        guard let p = proposedBreak, !(p.hasHead && p.hasTail) else { return nil }
-        return "\(p.brokenID)-\(p.hasHead ? "trailing" : "leading")"
-    }
-
-    /// The break that would result from dropping right now — nil when the finger isn't
-    /// over a breakable arc or there's no room for head + dragged + tail (each ≥ min).
-    /// Continuous (not 15-min snapped) so the preview tracks the finger smoothly; the
-    /// actual commit in `commitBreak` snaps to the grid.
-    private var proposedBreak: BreakPreview? {
-        guard let id = draggingID else { return nil }
-        let evs = sortedEvents
-        guard evs.count >= 2, let iS = evs.firstIndex(where: { $0.id == id }) else { return nil }
-        let durS = cwDistance(dayMinutes(evs[iS].time), dayMinutes(evs[(iS + 1) % evs.count].time))
-        let fingerMin = Int((Double(normalize(proposedStart)) * 1440).rounded())
-        let others = evs.filter { $0.id != id }.sorted { $0.time < $1.time }
-        guard let placement = DialMath.breakPlacement(fingerMin: fingerMin, durS: durS,
-                                                       others: others.map { dayMinutes($0.time) },
-                                                       minLen: minDurationMinutes,
-                                                       boundarySnap: boundarySnapMinutes),
-              let broken = others.first(where: { dayMinutes($0.time) == placement.brokenStart }) else { return nil }
-        let tX = CGFloat(placement.brokenStart)
-        return BreakPreview(
-            brokenID: broken.id,
-            headStart: tX / 1440,
-            floatStart: (tX + CGFloat(placement.head)) / 1440,
-            tailStart: (tX + CGFloat(placement.head + durS)) / 1440,
-            tailEnd: (tX + CGFloat(placement.length)) / 1440,
-            hasHead: placement.kind != .insertLeading,
-            hasTail: placement.kind != .insertTrailing
-        )
-    }
-
-    /// One arc per event, from its start to the next event's start; the end is inset
-    /// by `gap` to leave a visible gap. `end` may exceed 1 when the arc wraps past
-    /// midnight — `ArcBand` renders it as one continuous band.
-    ///
-    /// While dragging, the others dim in place, the enclosing event splits into a dimmed
-    /// head + copied tail (see `proposedBreak`), and the solid dragged arc floats in the
-    /// gap between them — a live preview of the drop. Higher-`z` arcs render on top.
+    /// One arc per event, from its start to the next event's start. While dragging, the
+    /// picked-up arc floats and the enclosing arc shows a split preview (head + tail);
+    /// no data changes until release.
     private func arcSegments() -> [Arc] {
         let evs = sortedEvents
         guard !evs.isEmpty else { return [] }
         let dragging = draggingID != nil
-        let preview = proposedBreak
+
+        // Float position always follows the finger (15-min grid).
+        let floatStart: CGFloat
+        let floatDuration: CGFloat
+        if let id = draggingID, let iD = evs.firstIndex(where: { $0.id == id }) {
+            floatStart = gridSnappedStart
+            let ds = frac(evs[iD].time)
+            var den = frac(evs[(iD + 1) % evs.count].time)
+            if evs.count == 1 { den = ds + 1 } else if den <= ds { den += 1 }
+            floatDuration = den - ds
+        } else {
+            floatStart = gridSnappedStart
+            floatDuration = 0
+        }
+
         var result: [Arc] = []
         for (i, e) in evs.enumerated() {
             let selected = e.id == selectedEvent?.id
             let s = frac(e.time)
             var en = frac(evs[(i + 1) % evs.count].time)
-            if evs.count == 1 { en = frac(e.time) + 1 }   // single event fills the ring
-            else if en <= s { en += 1 }               // wraps past midnight
+            if evs.count == 1 { en = frac(e.time) + 1 }
+            else if en <= s { en += 1 }
             let ge = en - gap
 
             if e.id == draggingID {
-                // Solid dragged arc: snapped into the previewed break gap, or glued to the
-                // finger when no break is possible.
-                let fs = preview?.floatStart ?? proposedStart
-                let fe = preview.map { $0.tailStart - gap } ?? (fs + (en - s) - gap)
-                result.append(Arc(id: "\(e.id)-float", start: fs, end: fe,
-                                  colorHex: e.colorHex, thickness: selectedArcWidth, opacity: 1,
+                // "-float" suffix keeps the float arc as a distinct view from the committed
+                // arc. Without it, ArcBand.animatableData would interpolate between float
+                // and committed positions, causing the arc to sweep visibly around the ring.
+                result.append(Arc(id: "\(e.id)-float", start: floatStart, end: floatStart + floatDuration - gap,
+                                  colorHex: e.colorHex, thickness: selectedArcWidth, opacity: 1.0,
                                   floating: true, z: 3))
-            } else if let preview, e.id == preview.brokenID {
-                // The enclosing event previews its split: kept head + copied tail. A boundary
-                // insert keeps only one piece (the dragged arc sits flush against a boundary).
-                if preview.hasHead {
-                    result.append(Arc(id: "\(e.id)-head", start: preview.headStart, end: preview.floatStart - gap,
-                                      colorHex: e.colorHex, thickness: arcWidth, opacity: dimmedOpacity,
-                                      floating: false, z: 0))
-                }
-                if preview.hasTail {
-                    result.append(Arc(id: "\(e.id)-tail", start: preview.tailStart, end: preview.tailEnd - gap,
-                                      colorHex: e.colorHex, thickness: arcWidth, opacity: dimmedOpacity,
-                                      floating: false, z: 0))
-                }
             } else {
                 guard ge > s else { continue }
                 let thickness = (selected && !dragging) ? selectedArcWidth : arcWidth
