@@ -450,6 +450,15 @@ final class AppModel {
     private func recomputeDevice() {
         let resolved = devices.first { $0.id == selectedDeviceID } ?? devices.first ?? .sample
         if resolved != device { device = resolved }
+        // The timeline depends on the device (usePresets / systemMode), so keep the
+        // cache in step whenever the selected device changes.
+        recomputeTimeline()
+    }
+
+    init() {
+        // Seed the cached device + timeline (property `didSet`s don't fire for
+        // initial values).
+        recomputeDevice()
     }
 
     /// Write-through projection into the selected device for two-way bindings
@@ -523,17 +532,25 @@ final class AppModel {
     /// All activity profiles (the Presets list). Single source of truth.
     var activityProfiles: [ActivityProfile] = ActivityProfile.samples
     /// Saved profile-based schedules (the "Schedules" list, used when Use Presets is on).
-    var schedules: [SchedulePreset] = SchedulePreset.samples()
+    var schedules: [SchedulePreset] = SchedulePreset.samples() {
+        didSet { recomputeTimeline() }
+    }
     /// The schedule currently driving the controller timeline (falls back to the first).
-    var selectedScheduleID: SchedulePreset.ID?
+    var selectedScheduleID: SchedulePreset.ID? {
+        didSet { recomputeTimeline() }
+    }
     /// Non-preset setpoint programs, one selectable list per mode (Use Presets off).
     var programs: [ScheduleKind: [ScheduleProgram]] = [
         .heat: ScheduleProgram.samples(for: .heat),
         .cool: ScheduleProgram.samples(for: .cool),
         .auto: ScheduleProgram.samples(for: .auto),
-    ]
+    ] {
+        didSet { recomputeTimeline() }
+    }
     /// The selected program per mode.
-    var selectedProgramID: [ScheduleKind: ScheduleProgram.ID] = [:]
+    var selectedProgramID: [ScheduleKind: ScheduleProgram.ID] = [:] {
+        didSet { recomputeTimeline() }
+    }
     /// HVAC service reminders shown in the Reminders tab. Single source of truth so
     /// edits persist across the session.
     var serviceReminders: [ServiceReminder] = ServiceReminder.samples()
@@ -573,17 +590,24 @@ final class AppModel {
 
     /// Today's timeline — (start minutes, period) pairs sorted by time — drawn from the
     /// active preset schedule or, when Use Presets is off, the active setpoint program.
-    private var todaysTimeline: [(minutes: Int, period: TimelinePeriod)] {
+    /// Cached: the sort/build only runs when the underlying data changes (via
+    /// `recomputeTimeline()` from the input `didSet`s), not on every read. `currentPeriod`
+    /// / `upcomingPeriods` derive from this cache using the live clock, which is cheap.
+    private(set) var todaysTimeline: [(minutes: Int, period: TimelinePeriod)] = []
+
+    /// Rebuild `todaysTimeline` from the active schedule/program. Called from `init`,
+    /// `recomputeDevice()`, and the schedule/program input `didSet`s.
+    private func recomputeTimeline() {
         let today = todayWeekdayIndex()
         if device.usePresets {
-            guard let schedule = activeSchedule, !schedule.groups.isEmpty else { return [] }
+            guard let schedule = activeSchedule, !schedule.groups.isEmpty else { todaysTimeline = []; return }
             let group = schedule.groups.first { $0.days.contains(today) } ?? schedule.groups[0]
-            return group.events.sorted { $0.time < $1.time }
+            todaysTimeline = group.events.sorted { $0.time < $1.time }
                 .map { (minutesSinceMidnight($0.time), TimelinePeriod(from: $0)) }
         } else {
-            guard let program = activeProgram, !program.groups.isEmpty else { return [] }
+            guard let program = activeProgram, !program.groups.isEmpty else { todaysTimeline = []; return }
             let group = program.groups.first { $0.days.contains(today) } ?? program.groups[0]
-            return group.events.sorted { $0.time < $1.time }
+            todaysTimeline = group.events.sorted { $0.time < $1.time }
                 .map { (minutesSinceMidnight($0.time), programPeriod($0)) }
         }
     }

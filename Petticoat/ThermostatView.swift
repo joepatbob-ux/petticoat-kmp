@@ -344,6 +344,189 @@ struct SetpointStepper: View {
 
 // MARK: - Mode-aware controller
 
+/// Shared metrics for the controller's leading boxes so the preset switcher and the
+/// hold button always match, whichever mode is showing.
+private enum ControllerMetrics {
+    static let boxWidth: CGFloat = 92
+}
+
+/// The active profile's icon + title, shown as a tappable chip on the schedule
+/// current-period card and the activity single card. Opens the status sheet.
+private struct ProfileChip: View {
+    let symbol: String
+    let colorHex: UInt
+    let name: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                ProfileIcon(symbol: symbol, colorHex: colorHex, size: 30)
+                Text(name)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(SMA.labelPrimary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The schedule pager: the current-period card (editable) followed by read-only
+/// upcoming-period previews, with a footer + page dots. Owns its own `page` scroll
+/// state so scrolling churn stays inside this view instead of re-running the whole
+/// `ControllerSection`. Shown for both `.schedule` and `.hold`.
+private struct ScheduleControllerView: View {
+    @Environment(AppModel.self) private var model
+    @Binding var showStatus: Bool
+    @State private var page: Int? = 0
+
+    private var device: Device { model.device }
+    private var pageCount: Int { model.upcomingPeriods.count + 1 }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text("Schedule: \(model.scheduleName)")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(SMA.labelSecondary)
+
+            GeometryReader { geo in
+                // Full-bleed (cancels the screen's 20pt content inset) so the current
+                // card matches the non-schedule card's width and neighbours peek in the
+                // screen margins.
+                let cardWidth = max(0, geo.size.width - 40)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        currentPeriodCard.frame(width: cardWidth).id(0)
+                        ForEach(Array(model.upcomingPeriods.enumerated()), id: \.element.id) { index, period in
+                            PeriodCard(period: period, usePresets: device.usePresets).frame(width: cardWidth).id(index + 1)
+                        }
+                    }
+                    .scrollTargetLayout()
+                }
+                .contentMargins(.horizontal, 20, for: .scrollContent)
+                .scrollTargetBehavior(.viewAligned)
+                .scrollPosition(id: $page, anchor: .center)
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
+            }
+            .padding(.horizontal, -20)
+            .frame(height: 92)
+
+            HStack(spacing: 12) {
+                if model.controlMode == .hold {
+                    HStack(spacing: 4) {
+                        if device.geofenceEnabled {
+                            Image(systemName: "location.fill")
+                                .font(.caption2)
+                                .accessibilityHidden(true)
+                        }
+                        Text("Until \(model.holdUntilText)")
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(SMA.labelSecondary)
+                } else {
+                    scheduleFooter
+                }
+                Spacer()
+                PageDots(count: pageCount, current: page ?? 0)
+            }
+            .padding(.horizontal, 16)
+        }
+        .animation(.snappy, value: page)
+    }
+
+    /// Current period — editable setpoint. In hold mode the hold button overlays the
+    /// leading edge; otherwise the leading shows the active preset's icon + title (when
+    /// Use Presets is on) or the setpoint label.
+    private var currentPeriodCard: some View {
+        HStack(spacing: 14) {
+            currentPeriodLeading
+            Spacer(minLength: 8)
+            SetpointStepper(low: device.keepMin, high: device.keepMax,
+                            mode: device.systemMode,
+                            showsLabel: device.usePresets || model.controlMode == .hold,
+                            buttonSpacing: 10) { bound, delta in
+                model.adjustKeep(bound, by: delta)
+            }
+        }
+        .frame(minHeight: 64)
+        .controllerCard()
+        .overlay {
+            if model.controlMode == .hold {
+                HStack(spacing: 0) {
+                    holdButton
+                    Spacer()
+                }
+                .padding(4)
+            }
+        }
+    }
+
+    /// Leading element of the current-period card: the profile chip on a profile
+    /// schedule, the setpoint label otherwise. Hold overlays its own box, so the inline
+    /// leading is empty there.
+    @ViewBuilder private var currentPeriodLeading: some View {
+        if model.controlMode == .hold {
+            EmptyView()
+        } else if device.usePresets {
+            let period = model.currentPeriod
+            ProfileChip(symbol: period?.symbol ?? model.activeProfile.symbol,
+                        colorHex: period?.colorHex ?? model.activeProfile.colorHex,
+                        name: period?.name ?? model.activeProfile.name) { showStatus = true }
+        } else {
+            Text(device.systemMode.setpointLabel)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(SMA.labelSecondary)
+        }
+    }
+
+    /// The temporary-hold button box that overlays the current period card's leading
+    /// edge while in hold mode.
+    private var holdButton: some View {
+        Button { showStatus = true } label: {
+            VStack(spacing: 3) {
+                Image(systemName: "hand.raised.fill")
+                    .font(.body.weight(.semibold))
+                Text("Hold\n(\(model.holdDuration.label))")
+                    .font(.caption2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(SMA.destructive)
+        }
+        .buttonStyle(.plain)
+        .frame(width: ControllerMetrics.boxWidth)
+        .frame(maxHeight: .infinity)
+        .background(SMA.destructive.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var scheduleFooter: some View {
+        let index = page ?? 0
+        let periods = model.upcomingPeriods
+        // `index` tracks scroll position (0 = current period); guard the upcoming
+        // subscript so a stale/settling page can never read out of range.
+        let isCurrent = !(index >= 1 && index - 1 < periods.count)
+        let text: String
+        if isCurrent {
+            text = "Until \(periods.first?.startText ?? device.holdUntil)"
+        } else {
+            text = periods[index - 1].startText
+        }
+        return HStack(spacing: 4) {
+            // On the current-period line, the pin signals that auto home/away can end
+            // the period early — matching the dashboard card and the hold footer.
+            if isCurrent && device.geofenceEnabled {
+                Image(systemName: "location.fill")
+                    .font(.caption2)
+                    .accessibilityHidden(true)
+            }
+            Text(text)
+        }
+        .font(.footnote)
+        .foregroundStyle(SMA.labelSecondary)
+    }
+}
+
 /// The bottom controller section. Renders per `ControlMode`. In schedule mode it is a
 /// horizontally swipeable pager of period controllers — only the current period is
 /// editable; upcoming periods are read-only previews. The status control opens a
@@ -351,15 +534,9 @@ struct SetpointStepper: View {
 struct ControllerSection: View {
     @Environment(AppModel.self) private var model
     @State private var showStatus = false
-    @State private var page: Int? = 0
     @State private var creatingProfile = false
 
     private var device: Device { model.device }
-    private var pageCount: Int { model.upcomingPeriods.count + 1 }
-
-    /// Shared width for the leading control boxes so the preset switcher and the hold
-    /// button always match, whichever mode is showing.
-    private let controlBoxWidth: CGFloat = 92
 
     /// Whether the non-schedule card shows the preset switcher: Use Presets is on
     /// and we're not running a schedule.
@@ -373,11 +550,16 @@ struct ControllerSection: View {
                 // Nothing to control while the system is off — no setpoint card.
                 EmptyView()
             } else if model.controlMode == .schedule || model.controlMode == .hold {
-                scheduleController
+                ScheduleControllerView(showStatus: $showStatus)
             } else {
                 VStack(spacing: 10) {
                     singleCard
-                    footer
+                    // Reserve one footnote line for the footer so the card stays put
+                    // whether or not the current mode has a footer (a blank space
+                    // holds the line and scales with Dynamic Type).
+                    Text(" ")
+                        .font(.footnote)
+                        .overlay { footer }
                 }
             }
         }
@@ -453,148 +635,12 @@ struct ControllerSection: View {
         }
         // Sizing + background live on the Menu itself, mirroring the hold Button, so
         // the box fills the card height rather than hugging its content.
-        .frame(width: controlBoxWidth)
+        .frame(width: ControllerMetrics.boxWidth)
         .frame(maxHeight: .infinity)
         .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .accessibilityLabel("Preset: \(model.activeProfile.name)")
         .accessibilityHint("Switches the active preset")
     }
-
-    /// The temporary-hold button box that overlays the current period card's leading
-    /// edge while in hold mode.
-    private var holdButton: some View {
-        Button { showStatus = true } label: {
-            VStack(spacing: 3) {
-                Image(systemName: "hand.raised.fill")
-                    .font(.body.weight(.semibold))
-                Text("Hold\n(\(model.holdDuration.label))")
-                    .font(.caption2.weight(.semibold))
-                    .multilineTextAlignment(.center)
-            }
-            .foregroundStyle(SMA.destructive)
-        }
-        .buttonStyle(.plain)
-        .frame(width: controlBoxWidth)
-        .frame(maxHeight: .infinity)
-        .background(SMA.destructive.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-
-    // MARK: Schedule pager
-
-    private var scheduleController: some View {
-        VStack(spacing: 10) {
-            Text("Schedule: \(model.scheduleName)")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(SMA.labelSecondary)
-
-            GeometryReader { geo in
-                // Full-bleed (cancels the screen's 20pt content inset) so the current
-                // card matches the non-schedule card's width and neighbours peek in the
-                // screen margins.
-                let cardWidth = max(0, geo.size.width - 40)
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        currentPeriodCard.frame(width: cardWidth).id(0)
-                        ForEach(Array(model.upcomingPeriods.enumerated()), id: \.element.id) { index, period in
-                            PeriodCard(period: period, usePresets: device.usePresets).frame(width: cardWidth).id(index + 1)
-                        }
-                    }
-                    .scrollTargetLayout()
-                }
-                .contentMargins(.horizontal, 20, for: .scrollContent)
-                .scrollTargetBehavior(.viewAligned)
-                .scrollPosition(id: $page, anchor: .center)
-                .scrollIndicators(.hidden)
-                .scrollClipDisabled()
-            }
-            .padding(.horizontal, -20)
-            .frame(height: 92)
-
-            HStack(spacing: 12) {
-                if model.controlMode == .hold {
-                    HStack(spacing: 4) {
-                        if device.geofenceEnabled {
-                            Image(systemName: "location.fill")
-                                .font(.caption2)
-                                .accessibilityHidden(true)
-                        }
-                        Text("Until \(model.holdUntilText)")
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(SMA.labelSecondary)
-                } else {
-                    scheduleFooter
-                }
-                Spacer()
-                PageDots(count: pageCount, current: page ?? 0)
-            }
-            .padding(.horizontal, 16)
-        }
-        .animation(.snappy, value: page)
-    }
-
-    /// Current period — editable setpoint. In hold mode the hold button overlays the
-    /// leading edge; otherwise the leading shows the active preset's icon + title (when
-    /// Use Presets is on) or the setpoint label.
-    private var currentPeriodCard: some View {
-        HStack(spacing: 14) {
-            currentPeriodLeading
-            Spacer(minLength: 8)
-            // One setpoint title only: the large leading label when presets are off; the
-            // stepper's small floating label otherwise (the profile chip / hold box then
-            // occupies the leading slot).
-            SetpointStepper(low: device.keepMin, high: device.keepMax,
-                            mode: device.systemMode,
-                            showsLabel: device.usePresets || model.controlMode == .hold,
-                            buttonSpacing: 10) { bound, delta in
-                model.adjustKeep(bound, by: delta)
-            }
-        }
-        .frame(minHeight: 64)
-        .controllerCard()
-        .overlay {
-            if model.controlMode == .hold {
-                HStack(spacing: 0) {
-                    holdButton
-                    Spacer()
-                }
-                .padding(4)
-            }
-        }
-    }
-
-    /// Leading element of the schedule current-period card. On a profile schedule it
-    /// shows the active profile's icon + title, matching the upcoming period cards so
-    /// the whole timeline reads consistently; otherwise the setpoint label. Hold
-    /// overlays its own box, so the inline leading is empty there.
-    @ViewBuilder private var currentPeriodLeading: some View {
-        if model.controlMode == .hold {
-            EmptyView()
-        } else if device.usePresets {
-            let period = model.currentPeriod
-            profileChip(symbol: period?.symbol ?? model.activeProfile.symbol,
-                        colorHex: period?.colorHex ?? model.activeProfile.colorHex,
-                        name: period?.name ?? model.activeProfile.name)
-        } else {
-            Text(device.systemMode.setpointLabel)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(SMA.labelSecondary)
-        }
-    }
-
-    private func profileChip(symbol: String, colorHex: UInt, name: String) -> some View {
-        Button { showStatus = true } label: {
-            HStack(spacing: 8) {
-                ProfileIcon(symbol: symbol, colorHex: colorHex, size: 30)
-                Text(name)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(SMA.labelPrimary)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-    }
-
 
     // MARK: Leading element (single-card modes)
 
@@ -616,7 +662,9 @@ struct ControllerSection: View {
             if showsPresetBox {
                 presetMenu
             } else {
-                profileChip(symbol: model.activeProfile.symbol, colorHex: model.activeProfile.colorHex, name: model.activeProfile.name)
+                ProfileChip(symbol: model.activeProfile.symbol,
+                            colorHex: model.activeProfile.colorHex,
+                            name: model.activeProfile.name) { showStatus = true }
             }
 
         case .vacation:
@@ -664,32 +712,6 @@ struct ControllerSection: View {
         Text("Until \(text)")
             .font(.footnote)
             .foregroundStyle(SMA.labelSecondary)
-    }
-
-    private var scheduleFooter: some View {
-        let index = page ?? 0
-        let periods = model.upcomingPeriods
-        // `index` tracks scroll position (0 = current period); guard the upcoming
-        // subscript so a stale/settling page can never read out of range.
-        let isCurrent = !(index >= 1 && index - 1 < periods.count)
-        let text: String
-        if isCurrent {
-            text = "Until \(periods.first?.startText ?? device.holdUntil)"
-        } else {
-            text = periods[index - 1].startText
-        }
-        return HStack(spacing: 4) {
-            // On the current-period line, the pin signals that auto home/away can end
-            // the period early — matching the dashboard card and the hold footer.
-            if isCurrent && device.geofenceEnabled {
-                Image(systemName: "location.fill")
-                    .font(.caption2)
-                    .accessibilityHidden(true)
-            }
-            Text(text)
-        }
-        .font(.footnote)
-        .foregroundStyle(SMA.labelSecondary)
     }
 }
 

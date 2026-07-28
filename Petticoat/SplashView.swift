@@ -14,7 +14,7 @@ struct SplashView: View {
                 .accessibilityLabel("Sensi by Copeland")
         }
         .task {
-            try? await Task.sleep(for: .seconds(1.8))
+            try? await Task.sleep(for: .seconds(0.6))
             model.route = .login
         }
     }

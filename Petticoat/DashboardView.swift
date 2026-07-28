@@ -132,25 +132,33 @@ struct DashboardToolbar: ToolbarContent {
 
 // MARK: - Thermostat card
 
+/// Thin dispatcher: an offline device shows the troubleshooting card, an online one
+/// the live controls. Each is its own `View` so their state and bodies invalidate
+/// independently.
 struct DashboardThermostatCard: View {
-    @Environment(AppModel.self) private var model
-
     /// The device this card represents.
     let device: Device
     /// Drives the push to the device Control screen. Owned by DashboardView so the
     /// navigationDestination lives on the List, not inside a List row.
     @Binding var showControl: Bool
-    @State private var showMode = false
-    /// Inline sensor disclosure — reveals the participating-sensor selection in place.
-    @State private var sensorsExpanded = false
 
     var body: some View {
-        if device.isOffline { offlineCard } else { onlineCard }
+        if device.isOffline {
+            OfflineThermostatCard(device: device, showControl: $showControl)
+        } else {
+            OnlineThermostatCard(device: device, showControl: $showControl)
+        }
     }
+}
 
-    // MARK: Offline card
+// MARK: Offline card
 
-    private var offlineCard: some View {
+private struct OfflineThermostatCard: View {
+    @Environment(AppModel.self) private var model
+    let device: Device
+    @Binding var showControl: Bool
+
+    var body: some View {
         Section {
             HStack(spacing: 14) {
                 Image(systemName: "wifi.slash")
@@ -193,10 +201,19 @@ struct DashboardThermostatCard: View {
         }
         .headerProminence(.increased)
     }
+}
 
-    // MARK: Online card
+// MARK: Online card
 
-    private var onlineCard: some View {
+private struct OnlineThermostatCard: View {
+    @Environment(AppModel.self) private var model
+    let device: Device
+    @Binding var showControl: Bool
+    @State private var showMode = false
+    /// Inline sensor disclosure — reveals the participating-sensor selection in place.
+    @State private var sensorsExpanded = false
+
+    var body: some View {
         Section {
             HStack(spacing: 14) {
                 ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
