@@ -211,7 +211,7 @@ struct SetpointStepper: View {
     private var defaultBound: SetpointBound { mode == .cool ? .high : .low }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 18) {
             // The digits are the only laid-out element, so they stay vertically
             // centered; the label and limit float above/below without moving them.
             numbers
@@ -232,7 +232,7 @@ struct SetpointStepper: View {
                         .offset(y: 14)
                         .accessibilityHidden(!atLimit)
                 }
-            VStack(spacing: 8) {
+            VStack(spacing: 24) {
                 stepper(model.stepperStyle.upSymbol(), delta: 1)
                 stepper(model.stepperStyle.downSymbol(), delta: -1)
             }

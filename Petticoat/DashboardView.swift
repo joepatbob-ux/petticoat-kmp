@@ -226,7 +226,7 @@ struct DashboardThermostatCard: View {
             // Trailing inset matches controllerCard()'s .padding(.horizontal, 18) so the
             // shared SetpointStepper sits the same distance from the card's trailing edge
             // here as it does on the Control screen's single and schedule cards.
-            .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 18))
+            .listRowInsets(EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 18))
 
             if sensorsExpanded && model.showSensorsOnDashboard {
                 ForEach(device.sensors) { sensor in
@@ -289,11 +289,19 @@ struct DashboardThermostatCard: View {
         let isAway = model.activeProfile.name.lowercased() == "away"
         let presence = isAway ? "Home" : "Away"
 
+        let nextTime = model.upcomingPeriods.first?.startText
+
         switch model.controlMode {
         case .schedule:
-            return geofenced
-                ? ("location.fill", "Until next setpoint or \(presence)")
-                : ("clock", "Until next setpoint")
+            if let nextTime {
+                return geofenced
+                    ? ("location.fill", "Until \(nextTime) or \(presence)")
+                    : ("clock", "Until \(nextTime)")
+            } else {
+                return geofenced
+                    ? ("location.fill", "Until next setpoint or \(presence)")
+                    : ("clock", "Until next setpoint")
+            }
         case .hold, .activity:
             return geofenced
                 ? ("location.fill", "Until \(device.holdUntil)")
