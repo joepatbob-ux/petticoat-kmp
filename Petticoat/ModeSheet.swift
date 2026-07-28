@@ -42,34 +42,35 @@ struct ModeSheet: View {
                         Toggle("Circulate Fan", isOn: $model[device: \.circulateFan])
                             .tint(Color(hex: 0x34C759))
 
-                        Button {
-                            withAnimation(.snappy) { showWheel.toggle() }
-                        } label: {
-                            HStack {
-                                Text("Amount Per Hour")
-                                    .foregroundStyle(SMA.labelPrimary)
-                                Spacer()
-                                Text(model.device.circulateAmount)
-                                    .font(.subheadline)
-                                    .foregroundStyle(SMA.labelPrimary)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(SMA.fillTertiary, in: Capsule())
+                        // The amount and duration only apply while circulation is on.
+                        if model.device.circulateFan {
+                            Button {
+                                withAnimation(.snappy) { showWheel.toggle() }
+                            } label: {
+                                HStack {
+                                    Text("Amount Per Hour")
+                                        .foregroundStyle(SMA.labelPrimary)
+                                    Spacer()
+                                    Text(model.device.circulateAmount)
+                                        .font(.subheadline)
+                                        .foregroundStyle(SMA.labelPrimary)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(SMA.fillTertiary, in: Capsule())
+                                }
                             }
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!model.device.circulateFan)
+                            .buttonStyle(.plain)
 
-                        if showWheel {
-                            Picker("Amount Per Hour", selection: $model[device: \.circulateAmount]) {
-                                ForEach(circulateOptions, id: \.self) { Text($0).tag($0) }
+                            if showWheel {
+                                Picker("Amount Per Hour", selection: $model[device: \.circulateAmount]) {
+                                    ForEach(circulateOptions, id: \.self) { Text($0).tag($0) }
+                                }
+                                .pickerStyle(.wheel)
+                                .frame(height: 160)
                             }
-                            .pickerStyle(.wheel)
-                            .frame(height: 160)
-                        }
 
-                        DurationPicker(title: "Run For", selection: $model[device: \.circulateHoldDuration])
-                            .disabled(!model.device.circulateFan)
+                            DurationPicker(title: "Run For", selection: $model[device: \.circulateHoldDuration])
+                        }
                     } footer: {
                         if model.device.circulateFan {
                             Text(circulateRunFooter)

@@ -27,6 +27,11 @@ struct ServiceReminder: Identifiable, Hashable {
     /// Whether a contractor is on file (shows the "Call Contractor" action).
     var hasContractor: Bool = false
 
+    /// Below this fraction the life bar turns red (matches `MetricBar`'s red band).
+    static let criticalThreshold = 0.25
+    /// In the red — needs attention. Surfaced as the Reminders tab badge.
+    var isCritical: Bool { lifeRemaining < Self.criticalThreshold }
+
     static func samples() -> [ServiceReminder] {
         let cal = Calendar.current
         let now = Date()
@@ -36,8 +41,8 @@ struct ServiceReminder: Identifiable, Hashable {
                             durationText: "300 Hours", nextService: day(60), lastCompleted: day(-305),
                             spec: "16” x 25” x 2” - MERV8", lifeRemaining: 0.8),
             ServiceReminder(name: "Downstairs Air Filter", type: "Air Filter", basedOn: .runtime,
-                            durationText: "300 Hours", nextService: day(24), lastCompleted: day(-305),
-                            spec: "16” x 25” x 2” - MERV8", lifeRemaining: 0.4, hasContractor: true),
+                            durationText: "300 Hours", nextService: day(6), lastCompleted: day(-305),
+                            spec: "16” x 25” x 2” - MERV8", lifeRemaining: 0.15, hasContractor: true),
         ]
     }
 }

@@ -110,18 +110,20 @@ struct DashboardToolbar: ToolbarContent {
             }
             .sharedBackgroundVisibility(.hidden)
         }
+        // Help is tertiary — leading edge of the trailing cluster, with the primary
+        // actions (Add a Device, Account) grouped to its right.
         ToolbarItem(placement: .topBarTrailing) {
-            Button { model.showAddDevice = true } label: {
-                Image(systemName: "plus")
-            }
-            .accessibilityLabel("Add a Device")
-        }
-        ToolbarSpacer(.fixed, placement: .topBarTrailing)
-        ToolbarItemGroup(placement: .topBarTrailing) {
             Button { model.showHelp = true } label: {
                 Image(systemName: "questionmark.bubble")
             }
             .accessibilityLabel("Help and Support")
+        }
+        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button { model.showAddDevice = true } label: {
+                Image(systemName: "plus")
+            }
+            .accessibilityLabel("Add a Device")
             Button { model.showAccount = true } label: {
                 Image(systemName: "person.crop.circle")
             }

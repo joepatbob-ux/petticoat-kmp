@@ -27,6 +27,7 @@ struct DeviceTabView: View {
             Tab("Reminders", systemImage: "bell", value: DeviceTab.reminders) {
                 DeviceTabContent(tab: .reminders)
             }
+            .badge(model.criticalReminderCount)
             Tab("Settings", systemImage: "gearshape", value: DeviceTab.settings) {
                 DeviceTabContent(tab: .settings)
             }
@@ -42,14 +43,6 @@ struct DeviceTabView: View {
                 }
                 .accessibilityLabel("Back to Dashboard")
             }
-            if selection == .reminders {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { addingReminder = true } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Add Reminder")
-                }
-            }
             if selection == .usage {
                 ToolbarItem(placement: .principal) {
                     Picker("Range", selection: $usageRange) {
@@ -59,7 +52,18 @@ struct DeviceTabView: View {
                     .frame(width: 240)
                 }
             }
+            // Help is tertiary — declared first so it sits at the leading edge of the
+            // trailing cluster, with primary actions (Add Reminder) to its right.
             helpButton
+            if selection == .reminders {
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { addingReminder = true } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Add Reminder")
+                }
+            }
         }
         .sheet(isPresented: $addingReminder) {
             ReminderEditor(initial: nil) { model.saveReminder($0) }

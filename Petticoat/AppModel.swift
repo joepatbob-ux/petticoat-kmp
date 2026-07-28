@@ -554,6 +554,9 @@ final class AppModel {
     /// HVAC service reminders shown in the Reminders tab. Single source of truth so
     /// edits persist across the session.
     var serviceReminders: [ServiceReminder] = ServiceReminder.samples()
+    /// How many reminders are in the red (life below the critical threshold) — drives
+    /// the notification bubble on the Reminders tab.
+    var criticalReminderCount: Int { serviceReminders.filter(\.isCritical).count }
     /// The contractor on file — shared by Settings and the reminder "Call Contractor".
     var contractor: Contractor = .sample
     /// Persisted thermostat settings (Display Options, System Configuration, About,
