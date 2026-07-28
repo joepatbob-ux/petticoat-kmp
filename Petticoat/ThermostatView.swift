@@ -796,6 +796,7 @@ struct ControllerStatusSheet: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
+            .scrollDisabled(true)
             .background(SMA.groupedBackground.ignoresSafeArea())
             .navigationTitle(title)
             .inlineNavTitle()
