@@ -48,7 +48,8 @@ struct ControlView: View {
             ModeSelectPill(systemMode: device.systemMode, fanMode: device.fanMode) {
                 showMode = true
             }
-            .padding(.vertical, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 36)
 
             ControllerSection()
                 .padding(.bottom, 36)
@@ -195,6 +196,9 @@ struct SetpointStepper: View {
     /// Whether to float the mode label above the numbers at rest. On the control
     /// screen this is reserved for profile-driven cards.
     var showsLabel: Bool = false
+    /// Vertical gap between the +/− (or ▲/▼) buttons. Defaults to the dashboard
+    /// card's spacing; the roomier Control-screen cards pass a tighter value.
+    var buttonSpacing: CGFloat = 24
     let onAdjust: (SetpointBound, Int) -> Void
 
     @Environment(AppModel.self) private var model
@@ -232,7 +236,7 @@ struct SetpointStepper: View {
                         .offset(y: 14)
                         .accessibilityHidden(!atLimit)
                 }
-            VStack(spacing: 24) {
+            VStack(spacing: buttonSpacing) {
                 stepper(model.stepperStyle.upSymbol(), delta: 1)
                 stepper(model.stepperStyle.downSymbol(), delta: -1)
             }
@@ -394,7 +398,8 @@ struct ControllerSection: View {
             Spacer(minLength: 8)
             SetpointStepper(low: device.keepMin, high: device.keepMax,
                             mode: device.systemMode,
-                            showsLabel: model.controlMode == .activity || showsPresetBox) { bound, delta in
+                            showsLabel: model.controlMode == .activity || showsPresetBox,
+                            buttonSpacing: 10) { bound, delta in
                 model.adjustKeep(bound, by: delta)
             }
         }
@@ -447,7 +452,7 @@ struct ControllerSection: View {
             VStack(spacing: 3) {
                 Image(systemName: "hand.raised.fill")
                     .font(.body.weight(.semibold))
-                Text("Hold\n(1 Hour)")
+                Text("Hold\n(\(model.holdDuration.label))")
                     .font(.caption2.weight(.semibold))
                     .multilineTextAlignment(.center)
             }
@@ -498,7 +503,7 @@ struct ControllerSection: View {
                                 .font(.caption2)
                                 .accessibilityHidden(true)
                         }
-                        Text("Until \(device.holdUntil)")
+                        Text("Until \(model.holdUntilText)")
                     }
                     .font(.footnote)
                     .foregroundStyle(SMA.labelSecondary)
@@ -525,7 +530,8 @@ struct ControllerSection: View {
             // occupies the leading slot).
             SetpointStepper(low: device.keepMin, high: device.keepMax,
                             mode: device.systemMode,
-                            showsLabel: device.usePresets || model.controlMode == .hold) { bound, delta in
+                            showsLabel: device.usePresets || model.controlMode == .hold,
+                            buttonSpacing: 10) { bound, delta in
                 model.adjustKeep(bound, by: delta)
             }
         }
@@ -650,15 +656,25 @@ struct ControllerSection: View {
         let periods = model.upcomingPeriods
         // `index` tracks scroll position (0 = current period); guard the upcoming
         // subscript so a stale/settling page can never read out of range.
+        let isCurrent = !(index >= 1 && index - 1 < periods.count)
         let text: String
-        if index >= 1, index - 1 < periods.count {
-            text = periods[index - 1].startText
-        } else {
+        if isCurrent {
             text = "Until \(periods.first?.startText ?? device.holdUntil)"
+        } else {
+            text = periods[index - 1].startText
         }
-        return Text(text)
-            .font(.footnote)
-            .foregroundStyle(SMA.labelSecondary)
+        return HStack(spacing: 4) {
+            // On the current-period line, the pin signals that auto home/away can end
+            // the period early — matching the dashboard card and the hold footer.
+            if isCurrent && device.geofenceEnabled {
+                Image(systemName: "location.fill")
+                    .font(.caption2)
+                    .accessibilityHidden(true)
+            }
+            Text(text)
+        }
+        .font(.footnote)
+        .foregroundStyle(SMA.labelSecondary)
     }
 }
 
@@ -709,7 +725,7 @@ private struct PageDots: View {
         HStack(spacing: 5) {
             ForEach(0..<count, id: \.self) { i in
                 Capsule()
-                    .fill(i == current ? SMA.labelPrimary : SMA.fillTertiary)
+                    .fill(i == current ? SMA.labelSecondary : SMA.fillTertiary)
                     .frame(width: i == current ? 16 : 6, height: 6)
             }
         }
@@ -739,50 +755,47 @@ struct ControllerStatusSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        @Bindable var model = model
         NavigationStack {
-            VStack(spacing: 20) {
-                VStack(spacing: 10) {
-                    Image(systemName: symbol)
-                        .font(.system(size: 40))
-                        .foregroundStyle(SMA.accent)
-                        .accessibilityHidden(true)
-                    Text(headline)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(SMA.labelPrimary)
-                        .multilineTextAlignment(.center)
-                    Text(summary)
-                        .font(.subheadline)
-                        .foregroundStyle(SMA.labelSecondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 12)
-
-                VStack(spacing: 0) {
-                    ForEach(Array(details.enumerated()), id: \.offset) { index, row in
-                        if index > 0 { Divider().overlay(SMA.separator) }
-                        LabeledContent(row.0, value: row.1)
+            List {
+                Section {
+                    VStack(spacing: 10) {
+                        Image(systemName: symbol)
+                            .font(.system(size: 40))
+                            .foregroundStyle(SMA.accent)
+                            .accessibilityHidden(true)
+                        Text(headline)
+                            .font(.title3.weight(.semibold))
                             .foregroundStyle(SMA.labelPrimary)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 16)
+                            .multilineTextAlignment(.center)
+                        Text(summary)
+                            .font(.subheadline)
+                            .foregroundStyle(SMA.labelSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+
+                Section {
+                    if mode == .hold {
+                        // The hold sheet only needs the duration control — the range and
+                        // end time are already shown on the controller card.
+                        Picker("Hold For", selection: $model.holdDuration) {
+                            ForEach(HoldDuration.allCases) { Text($0.label).tag($0) }
+                        }
+                    } else {
+                        ForEach(Array(details.enumerated()), id: \.offset) { _, row in
+                            LabeledContent(row.0, value: row.1)
+                        }
                     }
                 }
-                .background(SMA.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                Spacer()
-
-                if mode == .hold || mode == .vacation {
-                    Button("Resume Schedule") {
-                        model.resumeSchedule()
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
-                    .tint(SMA.accent)
-                }
+                .listRowBackground(SMA.card)
             }
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
             .background(SMA.groupedBackground.ignoresSafeArea())
             .navigationTitle(title)
             .inlineNavTitle()
@@ -790,6 +803,25 @@ struct ControllerStatusSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
                         .accessibilityLabel("Close")
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if mode == .hold || mode == .vacation {
+                    Button(role: mode == .hold ? .destructive : nil) {
+                        model.resumeSchedule()
+                        dismiss()
+                    } label: {
+                        Text(mode == .hold ? "End Hold" : "Resume Schedule")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .tint(mode == .hold ? SMA.destructive : SMA.accent)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
                 }
             }
         }
@@ -808,7 +840,7 @@ struct ControllerStatusSheet: View {
 
     private var summary: String {
         switch mode {
-        case .hold:     "You've adjusted the temperature, overriding the schedule until the next change."
+        case .hold:     "You've adjusted the temperature, overriding the schedule until \(model.holdUntilText)."
         case .activity: "This activity profile is setting your comfort range."
         case .vacation: "Holding an energy-saving range while you're away."
         case .schedule: "Your thermostat is following the \(model.scheduleName) schedule."
@@ -820,7 +852,7 @@ struct ControllerStatusSheet: View {
         let keep = "\(model.device.keepMin)° – \(model.device.keepMax)°"
         switch mode {
         case .hold:
-            return [("Holding Range", keep), ("Until", model.device.holdUntil)]
+            return [("Holding Range", keep), ("Until", model.holdUntilText)]
         case .activity:
             let p = model.activeProfile
             return [("Profile", p.name), ("Heat To", "\(p.heatTo)°"), ("Cool To", "\(p.coolTo)°")]

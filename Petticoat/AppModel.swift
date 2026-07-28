@@ -24,8 +24,12 @@ struct Device: Identifiable, Equatable {
     var sensors: [RoomSensor] = RoomSensor.samples
     var systemMode: SystemMode = .auto
     var fanMode: FanMode = .auto
+    /// How long the fan runs when Fan is set to On before returning to Auto.
+    var fanHoldDuration: HoldDuration = .indefinite
     var circulateFan: Bool = true
     var circulateAmount: String = "33% (15min)"
+    /// How long circulation stays active before returning to the schedule.
+    var circulateHoldDuration: HoldDuration = .indefinite
     /// Location-based auto home/away. When on, the current schedule period can end
     /// early if the geofence is crossed — surfaced by the location pin in the footer.
     var geofenceEnabled: Bool = true
@@ -288,6 +292,47 @@ enum FanMode: String, CaseIterable, Identifiable {
     var iconName: String { self == .auto ? "fan.auto" : "fan.on" }
 }
 
+/// How long a fan run, circulation, or temporary hold stays in effect before the
+/// thermostat returns to its schedule. `.indefinite` runs until manually changed;
+/// the rest expire after a fixed number of hours. Shared by the Mode sheet (Fan On
+/// / Circulate) and the hold status sheet.
+enum HoldDuration: String, CaseIterable, Identifiable {
+    case indefinite, oneHour, twoHours, threeHours, sixHours, twelveHours
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .indefinite:  "Indefinite"
+        case .oneHour:     "1 Hour"
+        case .twoHours:    "2 Hours"
+        case .threeHours:  "3 Hours"
+        case .sixHours:    "6 Hours"
+        case .twelveHours: "12 Hours"
+        }
+    }
+    /// The number of hours this duration lasts, or nil when it runs indefinitely.
+    var hours: Int? {
+        switch self {
+        case .indefinite:  nil
+        case .oneHour:     1
+        case .twoHours:    2
+        case .threeHours:  3
+        case .sixHours:    6
+        case .twelveHours: 12
+        }
+    }
+
+    /// The clock time this duration elapses, measured from `now` (nil = indefinite).
+    func endDate(from now: Date = Date()) -> Date? {
+        hours.flatMap { Calendar.current.date(byAdding: .hour, value: $0, to: now) }
+    }
+
+    /// A short "3:15 PM" end-time string, or nil when indefinite. Matches the
+    /// time style used throughout the schedule screens.
+    func endTimeText(from now: Date = Date()) -> String? {
+        endDate(from: now).map { $0.formatted(date: .omitted, time: .shortened) }
+    }
+}
+
 /// One period in the day's schedule timeline, shown as a swipeable controller page.
 struct TimelinePeriod: Identifiable, Hashable {
     let id: UUID
@@ -421,6 +466,14 @@ final class AppModel {
     /// Make a device the target of the single-device screens.
     func selectDevice(_ id: Device.ID) { selectedDeviceID = id }
 
+    /// Bring the selected thermostat back online after a successful Wi-Fi reconnect,
+    /// clearing the offline card and its "offline since" timestamp.
+    func markSelectedDeviceOnline() {
+        guard let i = devices.firstIndex(where: { $0.id == device.id }) else { return }
+        devices[i].isOffline = false
+        devices[i].offlineSince = nil
+    }
+
     /// Reorder the dashboard thermostat cards (from the Organize Dashboard screen).
     func moveDevices(from source: IndexSet, to destination: Int) {
         devices.move(fromOffsets: source, toOffset: destination)
@@ -443,6 +496,27 @@ final class AppModel {
 
     /// Drives the controller UI. Defaults to following the schedule (timeline).
     var controlMode: ControlMode = .schedule
+    /// How long a temporary hold stays in effect before the schedule resumes.
+    /// Chosen from the hold status sheet; shown on the hold button. Changing it
+    /// re-anchors the expiry from now, matching how a thermostat re-times a hold.
+    var holdDuration: HoldDuration = .oneHour {
+        didSet { if controlMode == .hold { holdEndsAt = holdDuration.endDate() } }
+    }
+    /// Absolute time the current temporary hold expires, or nil while indefinite /
+    /// not holding. Anchored when the hold begins so the "Until …" time stays put
+    /// across the controller, dashboard, and status sheet instead of drifting.
+    private(set) var holdEndsAt: Date? = nil
+
+    /// Human-readable tail for "Until …" while holding: the anchored expiry time
+    /// (plus the geofence auto-away option when enabled), or a resume phrase for an
+    /// indefinite hold. Read by the controller footer, dashboard card, and sheet.
+    var holdUntilText: String {
+        guard let end = holdEndsAt else {
+            return "you resume it"
+        }
+        let time = end.formatted(date: .omitted, time: .shortened)
+        return device.geofenceEnabled ? "\(time) or Away" : time
+    }
     /// The activity profile shown when `controlMode == .activity` (and as the
     /// current-period label while on a schedule).
     var activeProfile = ActivityProfile.samples[1]   // Home
@@ -583,6 +657,7 @@ final class AppModel {
         devices[i] = d
 
         if controlMode == .schedule || controlMode == .activity {
+            holdEndsAt = holdDuration.endDate()
             withAnimation(.snappy) { controlMode = .hold }
         }
     }
@@ -657,6 +732,7 @@ final class AppModel {
     /// Resume the schedule, clearing any hold/vacation and restoring the
     /// current scheduled period's setpoints.
     func resumeSchedule() {
+        holdEndsAt = nil
         withAnimation(.snappy) { controlMode = .schedule }
         // Restore the setpoints of the schedule's current period.
         syncScheduleSetpoints()

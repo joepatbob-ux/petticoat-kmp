@@ -303,7 +303,12 @@ struct DashboardThermostatCard: View {
                     ? ("location.fill", "Until next setpoint or \(presence)")
                     : ("clock", "Until next setpoint")
             }
-        case .hold, .activity:
+        case .hold:
+            // A timed hold with geofencing can also end early on Away (the pin); an
+            // indefinite hold has no clock time, so it reads with the neutral icon.
+            let awayApplies = geofenced && model.holdEndsAt != nil
+            return (awayApplies ? "location.fill" : "clock", "Until \(model.holdUntilText)")
+        case .activity:
             return geofenced
                 ? ("location.fill", "Until \(device.holdUntil)")
                 : ("clock", "Until \(device.holdUntil.replacingOccurrences(of: " or Away", with: ""))")
@@ -434,16 +439,92 @@ struct ThermostatOfflineDetail: View {
     }
 }
 
-/// The Wi-Fi reconnect step reached from the offline detail — reuses the install
-/// flow's network picker. Finishing pops back to the offline detail.
+/// The Wi-Fi reconnect flow reached from the offline detail. Because the entry
+/// point is provisioning, it walks the same Connect-stage steps as a fresh install
+/// — first guiding the thermostat to its Wi-Fi setup screen, then picking the
+/// network, then entering the security code — rather than dropping straight onto
+/// the network list. Finishing pops back to the offline detail.
 private struct ReconnectWiFiView: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @State private var index = 0
+    @State private var showHelp = false
+
+    /// The shared install Connect steps (Wi-Fi Setup → Select Wi-Fi → Security Code),
+    /// then a "Reconnecting…" step that brings the thermostat back online — the same
+    /// provisioning path a fresh install uses.
+    private let steps = InstallDevice.connectSteps + [
+        InstallStep(stage: "Connect", kind: .loading, title: "Reconnecting…",
+                    body: "This will finish automatically once your thermostat is back online."),
+    ]
+    private var step: InstallStep { steps[index] }
+
     var body: some View {
-        WifiListContent(
-            step: InstallStep(stage: "Connect", kind: .wifiList, title: "Select Wi-Fi"),
-            onAdvance: { dismiss() })
+        Group {
+            switch step.kind {
+            case .wifiList: WifiListContent(step: step, onAdvance: advance)
+            case .pin:      PinContent(step: step, onAdvance: advance)
+            case .loading:  LoadingContent(step: step, onAdvance: advance)
+            default:        standardStep
+            }
+        }
+        .id(index)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(SMA.groupedBackground.ignoresSafeArea())
         .navigationTitle("Reconnect to Wi-Fi")
         .inlineNavTitle()
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { back() } label: { Image(systemName: "chevron.left") }
+                    .accessibilityLabel("Back")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showHelp = true } label: { Image(systemName: "questionmark.bubble") }
+                    .accessibilityLabel("Help and Support")
+            }
+        }
+        .animation(.snappy, value: index)
+        .sheet(isPresented: $showHelp) { HelpSupportView() }
+    }
+
+    /// The provisioning instruction step that gets the thermostat to its connect
+    /// screen (the Connect stage's standard hero + headline template).
+    private var standardStep: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Image(step.hero)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 300)
+                        .padding(.top, 8)
+                        .accessibilityHidden(true)
+
+                    StepHeadline(title: step.title, detail: step.body, warning: step.warning)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 16)
+            }
+
+            InstallButtonBar(link: step.link, onLink: { showHelp = true },
+                             primary: step.primary, onPrimary: advance)
+        }
+    }
+
+    private func advance() {
+        if index < steps.count - 1 { index += 1 } else { finish() }
+    }
+
+    private func back() {
+        if index > 0 { index -= 1 } else { dismiss() }
+    }
+
+    /// The reconnect succeeded: bring the thermostat online and pop back — the
+    /// Control screen then shows the live thermostat instead of the offline card.
+    private func finish() {
+        model.markSelectedDeviceOnline()
+        dismiss()
     }
 }
 

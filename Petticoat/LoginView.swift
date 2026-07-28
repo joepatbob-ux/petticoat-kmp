@@ -33,7 +33,10 @@ struct LoginView: View {
                 Image("SensiByCopeland")
                     .resizable()
                     .scaledToFit()
-                    .frame(height: 60)
+                    .frame(maxWidth: .infinity)
+                    // Inset 16pt beyond the form's 20pt card margins on each side,
+                    // trimming the logo 32pt narrower than the fields below it.
+                    .padding(.horizontal, 36)
                     .accessibilityLabel("Sensi by Copeland")
                     .padding(.top, 24)
                     .padding(.bottom, 8)

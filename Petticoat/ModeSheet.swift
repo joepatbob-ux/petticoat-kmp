@@ -43,37 +43,58 @@ struct ModeSheet: View {
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
 
-                Section {
-                    Toggle("Circulate Fan", isOn: $model[device: \.circulateFan])
-                        .tint(Color(hex: 0x34C759))
-
-                    Button {
-                        withAnimation(.snappy) { showWheel.toggle() }
-                    } label: {
-                        HStack {
-                            Text("Amount Per Hour")
-                                .foregroundStyle(SMA.labelPrimary)
-                            Spacer()
-                            Text(model.device.circulateAmount)
-                                .font(.subheadline)
-                                .foregroundStyle(SMA.labelPrimary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(SMA.fillTertiary, in: Capsule())
-                        }
+                // Fan On runs for a chosen duration — no per-hour amount, unlike Circulate.
+                if model.device.fanMode == .on {
+                    Section {
+                        DurationPicker(title: "Run For", selection: $model[device: \.fanHoldDuration])
+                    } footer: {
+                        Text(fanRunFooter)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!model.device.circulateFan)
-
-                    if showWheel {
-                        Picker("Amount Per Hour", selection: $model[device: \.circulateAmount]) {
-                            ForEach(circulateOptions, id: \.self) { Text($0).tag($0) }
-                        }
-                        .pickerStyle(.wheel)
-                        .frame(height: 160)
-                    }
+                    .listRowBackground(SMA.card)
                 }
-                .listRowBackground(SMA.card)
+
+                // Circulation only applies when the fan is on Auto — running the fan
+                // On continuously supersedes it, so the settings are hidden then.
+                if model.device.fanMode != .on {
+                    Section {
+                        Toggle("Circulate Fan", isOn: $model[device: \.circulateFan])
+                            .tint(Color(hex: 0x34C759))
+
+                        Button {
+                            withAnimation(.snappy) { showWheel.toggle() }
+                        } label: {
+                            HStack {
+                                Text("Amount Per Hour")
+                                    .foregroundStyle(SMA.labelPrimary)
+                                Spacer()
+                                Text(model.device.circulateAmount)
+                                    .font(.subheadline)
+                                    .foregroundStyle(SMA.labelPrimary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(SMA.fillTertiary, in: Capsule())
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!model.device.circulateFan)
+
+                        if showWheel {
+                            Picker("Amount Per Hour", selection: $model[device: \.circulateAmount]) {
+                                ForEach(circulateOptions, id: \.self) { Text($0).tag($0) }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(height: 160)
+                        }
+
+                        DurationPicker(title: "Run For", selection: $model[device: \.circulateHoldDuration])
+                            .disabled(!model.device.circulateFan)
+                    } footer: {
+                        if model.device.circulateFan {
+                            Text(circulateRunFooter)
+                        }
+                    }
+                    .listRowBackground(SMA.card)
+                }
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
@@ -81,6 +102,42 @@ struct ModeSheet: View {
         .background(SMA.groupedBackground.ignoresSafeArea())
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+    }
+
+    /// Describes when a timed Fan On run ends (and that it reverts to Auto), or that
+    /// it stays on until Auto is reselected for an indefinite run.
+    private var fanRunFooter: String {
+        if let end = model.device.fanHoldDuration.endTimeText() {
+            return "Fan runs until \(end), then returns to Auto."
+        }
+        return "Fan stays on until you set it back to Auto."
+    }
+
+    /// Describes when circulation stops for a timed run, or that it runs until the
+    /// toggle is turned off for an indefinite run.
+    private var circulateRunFooter: String {
+        if let end = model.device.circulateHoldDuration.endTimeText() {
+            return "Circulates until \(end)."
+        }
+        return "Circulates until turned off."
+    }
+}
+
+// MARK: - Duration picker
+
+/// A labeled menu picker for a `HoldDuration` (Indefinite / 1–12 Hours). Shared by
+/// the Fan On and Circulate rows in the Mode sheet.
+struct DurationPicker: View {
+    let title: String
+    @Binding var selection: HoldDuration
+
+    var body: some View {
+        Picker(title, selection: $selection) {
+            ForEach(HoldDuration.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.menu)
+        .tint(SMA.labelSecondary)
+        .foregroundStyle(SMA.labelPrimary)
     }
 }
 
