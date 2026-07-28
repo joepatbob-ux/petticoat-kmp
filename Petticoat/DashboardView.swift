@@ -59,8 +59,9 @@ struct DashboardView: View {
                         Text("\(items.count)")
                             .font(.footnote.weight(.bold))
                             .foregroundStyle(.white)
-                            .frame(width: 22, height: 22)
-                            .background(SMA.accent, in: Circle())
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
+                            .background(SMA.accent, in: Capsule())
                             .accessibilityLabel("\(items.count) spotlights")
                         Image(systemName: "chevron.right")
                             .font(.subheadline.weight(.semibold))
@@ -550,8 +551,6 @@ struct SpotlightCard: View {
                 Text(item.body)
                     .font(.subheadline)
                     .foregroundStyle(bodyColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 overflow
             }

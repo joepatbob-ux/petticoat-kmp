@@ -331,7 +331,7 @@ struct RangeCalendar: View {
                                  : isToday ? SMA.accent : SMA.labelPrimary)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 40)
+        .frame(minHeight: 40)
         .contentShape(Rectangle())
         .onTapGesture { withAnimation(.snappy) { tap(date) } }
         .accessibilityLabel(Text(date, format: .dateTime.weekday(.wide).month().day()))

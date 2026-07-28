@@ -398,7 +398,7 @@ struct ControllerSection: View {
                 model.adjustKeep(bound, by: delta)
             }
         }
-        .frame(height: 64)
+        .frame(minHeight: 64)
         .controllerCard()
     }
 
@@ -430,10 +430,10 @@ struct ControllerSection: View {
                     .font(.body.weight(.semibold))
                 Text(model.activeProfile.name)
                     .font(.caption2.weight(.semibold))
-                    .lineLimit(1)
             }
             .foregroundStyle(color)
-            .frame(width: controlBoxWidth, height: 56)
+            .frame(width: controlBoxWidth)
+            .frame(minHeight: 56)
             .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .accessibilityLabel("Preset: \(model.activeProfile.name)")
@@ -529,7 +529,7 @@ struct ControllerSection: View {
                 model.adjustKeep(bound, by: delta)
             }
         }
-        .frame(height: 64)
+        .frame(minHeight: 64)
         .controllerCard()
         .overlay {
             if model.controlMode == .hold {
@@ -694,7 +694,7 @@ private struct PeriodCard: View {
             .foregroundStyle(SMA.labelSecondary)
             .monospacedDigit()
         }
-        .frame(height: 64)
+        .frame(minHeight: 64)
         .controllerCard()
     }
 }
