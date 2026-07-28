@@ -394,7 +394,9 @@ struct ControllerSection: View {
 
     private var singleCard: some View {
         HStack(spacing: 14) {
-            leading
+            // The preset box overlays the leading edge (like the hold box), so the
+            // inline slot is empty while it's shown.
+            if !showsPresetBox { leading }
             Spacer(minLength: 8)
             SetpointStepper(low: device.keepMin, high: device.keepMax,
                             mode: device.systemMode,
@@ -405,14 +407,21 @@ struct ControllerSection: View {
         }
         .frame(minHeight: 64)
         .controllerCard()
+        .overlay {
+            if showsPresetBox {
+                HStack { presetMenu; Spacer() }
+                    .padding(4)
+            }
+        }
     }
 
     // MARK: Preset switcher
 
-    /// The preset switcher: a fixed 56pt button box tinted with a muted version of the
-    /// active preset's color, shown on the single controller card when Use Presets is on
-    /// and no schedule is running. The menu switches presets (entering activity mode) and
-    /// offers "Create New Profile".
+    /// The preset switcher: a button box tinted with a muted version of the active
+    /// preset's color, shown on the single controller card when Use Presets is on and
+    /// no schedule is running. Sized to match the hold action box — same width, and it
+    /// fills the card height so it hugs the top/bottom/leading edges. The menu switches
+    /// presets (entering activity mode) and offers "Create New Profile".
     private var presetMenu: some View {
         let color = Color(hex: model.activeProfile.colorHex)
         return Menu {
@@ -437,10 +446,16 @@ struct ControllerSection: View {
                     .font(.caption2.weight(.semibold))
             }
             .foregroundStyle(color)
-            .frame(width: controlBoxWidth)
-            .frame(minHeight: 56)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            // Fill the box so its tap target and background stretch edge to edge,
+            // like the hold button (a Menu label won't stretch on its own).
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
+        // Sizing + background live on the Menu itself, mirroring the hold Button, so
+        // the box fills the card height rather than hugging its content.
+        .frame(width: controlBoxWidth)
+        .frame(maxHeight: .infinity)
+        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .accessibilityLabel("Preset: \(model.activeProfile.name)")
         .accessibilityHint("Switches the active preset")
     }
@@ -793,6 +808,21 @@ struct ControllerStatusSheet: View {
                     }
                 }
                 .listRowBackground(SMA.card)
+
+                // The resume/end action lives in the form as a native row.
+                if mode == .hold || mode == .vacation {
+                    Section {
+                        Button(role: mode == .hold ? .destructive : nil) {
+                            model.resumeSchedule()
+                            dismiss()
+                        } label: {
+                            Text(mode == .hold ? "End Hold" : "Resume Schedule")
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        .foregroundStyle(mode == .hold ? SMA.destructive : SMA.accent)
+                    }
+                    .listRowBackground(SMA.card)
+                }
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
@@ -804,25 +834,6 @@ struct ControllerStatusSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
                         .accessibilityLabel("Close")
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                if mode == .hold || mode == .vacation {
-                    Button(role: mode == .hold ? .destructive : nil) {
-                        model.resumeSchedule()
-                        dismiss()
-                    } label: {
-                        Text(mode == .hold ? "End Hold" : "Resume Schedule")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
-                    .tint(mode == .hold ? SMA.destructive : SMA.accent)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
                 }
             }
         }

@@ -11,25 +11,7 @@ struct ModeSheet: View {
 
     var body: some View {
         @Bindable var model = model
-        VStack(spacing: 0) {
-            HStack {
-                Text("Mode")
-                    .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(SMA.labelPrimary)
-                Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(SMA.labelSecondary)
-                        .padding(8)
-                        .background(SMA.fillTertiary, in: Circle())
-                }
-                .accessibilityLabel("Close")
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 8)
-
+        NavigationStack {
             List {
                 Section("System") {
                     SystemModeSelector(selected: $model[device: \.systemMode])
@@ -98,8 +80,15 @@ struct ModeSheet: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
+            .background(SMA.groupedBackground.ignoresSafeArea())
+            .navigationTitle("Mode")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
+                }
+            }
         }
-        .background(SMA.groupedBackground.ignoresSafeArea())
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }

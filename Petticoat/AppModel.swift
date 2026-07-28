@@ -628,7 +628,8 @@ final class AppModel {
     /// Adjusts the comfort setpoint. In Auto this moves one bound of the range and,
     /// honoring the two-degree deadband, pushes the opposite bound when they'd
     /// collide. In heat/cool it moves the single active target. Adjusting while
-    /// following a schedule or profile creates a temporary hold.
+    /// following a schedule creates a temporary hold that overrides it; adjusting a
+    /// running profile (no schedule) just nudges that profile in place.
     func adjustKeep(_ bound: SetpointBound, by delta: Int, in id: Device.ID) {
         guard let i = devices.firstIndex(where: { $0.id == id }) else { return }
         let lo = SetpointConfig.minTemp
@@ -656,7 +657,7 @@ final class AppModel {
         }
         devices[i] = d
 
-        if controlMode == .schedule || controlMode == .activity {
+        if controlMode == .schedule {
             holdEndsAt = holdDuration.endDate()
             withAnimation(.snappy) { controlMode = .hold }
         }
