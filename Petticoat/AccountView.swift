@@ -18,6 +18,10 @@ struct AccountView: View {
                 }
 
                 Section {
+                    NavigationLink("Homes") { HomesSettingsView() }
+                }
+
+                Section {
                     NavigationLink("Application Settings") { ApplicationSettingsView() }
                 }
 
@@ -520,8 +524,132 @@ struct AboutApplicationView: View {
     }
 }
 
+// MARK: - Homes
+
+struct HomesSettingsView: View {
+    @Environment(AppModel.self) private var model
+    @State private var showAddHome = false
+    @State private var newHomeName = ""
+
+    var body: some View {
+        @Bindable var model = model
+        List {
+            ForEach($model.homes) { $home in
+                NavigationLink(home.name) {
+                    HomeDetailView(home: $home)
+                }
+            }
+            .onDelete { model.deleteHomes(at: $0) }
+        }
+        .groupedListChrome()
+        .navigationTitle("Homes")
+        .inlineNavTitle()
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    newHomeName = ""
+                    showAddHome = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+            ToolbarItem(placement: .navigationBarLeading) {
+                EditButton()
+            }
+        }
+        .alert("New Home", isPresented: $showAddHome) {
+            TextField("Home Name", text: $newHomeName)
+            Button("Add") {
+                let trimmed = newHomeName.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { return }
+                model.homes.append(Home(name: trimmed))
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+}
+
+struct HomeDetailView: View {
+    @Binding var home: Home
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Form {
+            Section {
+                HStack {
+                    Text("Name")
+                        .foregroundStyle(SMA.labelSecondary)
+                    Spacer()
+                    TextField("Home Name", text: $home.name)
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(SMA.labelPrimary)
+                }
+            }
+
+            Section {
+                Picker("Home Size", selection: $home.homeSize) {
+                    ForEach(HomeSize.allCases) { size in
+                        Text(size.label).tag(size)
+                    }
+                }
+                .foregroundStyle(SMA.labelPrimary)
+
+                Picker("HVAC System", selection: $home.hvacSystemType) {
+                    ForEach(HVACSystemType.allCases) { type in
+                        Text(type.label).tag(type)
+                    }
+                }
+                .foregroundStyle(SMA.labelPrimary)
+            } header: {
+                Text("Properties")
+            } footer: {
+                Text("Used to estimate how long it takes to reach your comfort setpoint when heating or cooling.")
+            }
+
+            Section {
+                ForEach(model.devices) { device in
+                    Button {
+                        let isAssigned = device.homeID == home.id
+                        model.assignDevice(device.id, toHome: isAssigned ? nil : home.id)
+                    } label: {
+                        HStack {
+                            Label(device.name, image: "thermostat.fill")
+                                .foregroundStyle(SMA.labelPrimary)
+                            Spacer()
+                            if device.homeID == home.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(SMA.accent)
+                                    .fontWeight(.semibold)
+                            } else if let otherHome = model.homes.first(where: { $0.id == device.homeID }) {
+                                Text(otherHome.name)
+                                    .font(.footnote)
+                                    .foregroundStyle(SMA.labelSecondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            } header: {
+                Text("Thermostats")
+            } footer: {
+                Text("Tap to assign or unassign. A thermostat can only belong to one home.")
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(SMA.groupedBackground.ignoresSafeArea())
+        .listRowBackground(SMA.card)
+        .navigationTitle(home.name)
+        .inlineNavTitle()
+    }
+}
+
 #Preview {
     AccountView()
+        .environment(AppModel())
+}
+
+#Preview("Homes") {
+    NavigationStack { HomesSettingsView() }
         .environment(AppModel())
 }
 

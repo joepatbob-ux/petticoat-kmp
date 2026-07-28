@@ -285,9 +285,11 @@ private struct OnlineThermostatCard: View {
             .textCase(nil)
         } footer: {
             HStack(spacing: 4) {
-                Image(systemName: footer.icon)
-                    .font(.caption2)
-                    .accessibilityHidden(true)
+                ForEach(footer.icons, id: \.self) { icon in
+                    Image(systemName: icon)
+                        .font(.caption2)
+                        .accessibilityHidden(true)
+                }
                 Text(footer.text)
             }
             .font(.footnote)
@@ -304,7 +306,7 @@ private struct OnlineThermostatCard: View {
     /// The footer mirrors the schedule settings. On a schedule it counts down to the
     /// next setpoint; the pin means the geofence can end the period early via auto
     /// home/away (any preset other than Away is treated as Home).
-    private var footer: (icon: String, text: String) {
+    private var footer: (icons: [String], text: String) {
         let geofenced = device.geofenceEnabled
         let isAway = model.activeProfile.name.lowercased() == "away"
         let presence = isAway ? "Home" : "Away"
@@ -315,26 +317,25 @@ private struct OnlineThermostatCard: View {
         case .schedule:
             if let nextTime {
                 return geofenced
-                    ? ("location.fill", "Until \(nextTime) or \(presence)")
-                    : ("clock", "Until \(nextTime)")
+                    ? (["location.fill"], "Until \(nextTime) or \(presence)")
+                    : (["clock"], "Until \(nextTime)")
             } else {
                 return geofenced
-                    ? ("location.fill", "Until next setpoint or \(presence)")
-                    : ("clock", "Until next setpoint")
+                    ? (["location.fill"], "Until next setpoint or \(presence)")
+                    : (["clock"], "Until next setpoint")
             }
         case .hold:
-            // A timed hold with geofencing can also end early on Away (the pin); an
-            // indefinite hold has no clock time, so it reads with the neutral icon.
             let awayApplies = geofenced && model.holdEndsAt != nil
-            return (awayApplies ? "location.fill" : "clock", "Until \(model.holdUntilText)")
+            let icons = awayApplies ? ["hand.raised.fill", "location.fill"] : ["hand.raised.fill"]
+            return (icons, "Hold · Until \(model.holdUntilText)")
         case .activity:
             return geofenced
-                ? ("location.fill", "Until \(device.holdUntil)")
-                : ("clock", "Until \(device.holdUntil.replacingOccurrences(of: " or Away", with: ""))")
+                ? (["location.fill"], "Until \(device.holdUntil)")
+                : (["clock"], "Until \(device.holdUntil.replacingOccurrences(of: " or Away", with: ""))")
         case .vacation:
-            return ("airplane", "Until your vacation ends")
+            return (["airplane"], "Until your vacation ends")
         case .standard:
-            return ("thermostat.medium", "Held until you change it")
+            return (["thermostat.medium"], "Held until you change it")
         }
     }
 }
@@ -583,11 +584,10 @@ struct SpotlightCard: View {
     @State private var showDetail = false
 
     private var kind: SpotlightItem.Kind { item.kind }
-    private var isOpen: Bool { expanded }
 
     var body: some View {
         Group {
-            if isOpen { expandedContent } else { collapsedContent }
+            if expanded { expandedContent } else { collapsedContent }
         }
         .sheet(isPresented: $showDetail) { SpotlightDetailView(item: item) }
     }
@@ -673,7 +673,7 @@ struct SpotlightCard: View {
             if item.startsInstall {
                 Button("Get Help", systemImage: "questionmark.circle") { model.showHelp = true }
             } else {
-                if !isOpen {
+                if !expanded {
                     Button("Learn More", systemImage: "arrow.up.right") { showDetail = true }
                 }
                 Button("Dismiss", systemImage: "xmark", role: .destructive) { onDismiss() }

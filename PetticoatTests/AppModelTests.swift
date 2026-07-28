@@ -311,4 +311,93 @@ struct AppModelTests {
         #expect(model.device.keepMin == profile.heatTo)
         #expect(model.device.keepMax == profile.coolTo)
     }
+
+    // MARK: Device online/offline
+
+    @Test func markSelectedDeviceOnline() {
+        let model = AppModel()
+        model.devices[0].isOffline = true
+        model.devices[0].offlineSince = "4:00PM November 24, 2023"
+        model.markSelectedDeviceOnline()
+        #expect(model.device.isOffline == false)
+        #expect(model.device.offlineSince == nil)
+    }
+
+    // MARK: Spotlight hide/unhide
+
+    @Test func hidingSpotlightRemovesFromVisible() {
+        let model = AppModel()
+        let item = model.spotlights[0]
+        let before = model.visibleSpotlights.count
+        model.setSpotlight(item, hidden: true)
+        #expect(!model.visibleSpotlights.contains { $0.id == item.id })
+        #expect(model.visibleSpotlights.count == before - 1)
+    }
+
+    @Test func unhidingSpotlightRestoresToVisible() {
+        let model = AppModel()
+        let item = model.spotlights[0]
+        model.setSpotlight(item, hidden: true)
+        model.setSpotlight(item, hidden: false)
+        #expect(model.visibleSpotlights.contains { $0.id == item.id })
+    }
+
+    // MARK: Hold until text
+
+    @Test func holdUntilTextIsIndefinitePhrase() {
+        let model = AppModel()
+        model.holdDuration = .indefinite
+        model.controlMode = .schedule
+        model.adjustKeep(.high, by: 1)   // holdEndsAt = indefinite.endDate() = nil
+        #expect(model.holdUntilText == "you resume it")
+    }
+
+    @Test func holdUntilTextIncludesAwayWhenGeofenced() {
+        let model = AppModel()
+        model.devices[0].geofenceEnabled = true
+        model.holdDuration = .oneHour
+        model.controlMode = .schedule
+        model.adjustKeep(.high, by: 1)
+        #expect(model.holdUntilText.hasSuffix(" or Away"))
+    }
+
+    @Test func holdUntilTextExcludesAwayWithoutGeofence() {
+        let model = AppModel()
+        model.devices[0].geofenceEnabled = false
+        model.holdDuration = .oneHour
+        model.controlMode = .schedule
+        model.adjustKeep(.high, by: 1)
+        #expect(!model.holdUntilText.contains("Away"))
+    }
+
+    // MARK: Hold duration re-anchors
+
+    @Test func changingDurationWhileHoldingReanchorsEndDate() {
+        let model = AppModel()
+        model.holdDuration = .oneHour
+        model.controlMode = .schedule
+        model.adjustKeep(.high, by: 1)    // enters hold, holdEndsAt ≈ now + 1hr
+        let firstEnd = model.holdEndsAt
+        model.holdDuration = .twoHours   // re-anchors holdEndsAt ≈ now + 2hr
+        #expect(model.holdEndsAt != firstEnd)
+    }
+
+    @Test func changingDurationOutsideHoldDoesNotAnchor() {
+        let model = AppModel()
+        model.controlMode = .standard
+        model.holdDuration = .twoHours
+        #expect(model.holdEndsAt == nil)
+    }
+
+    // MARK: Critical reminder count
+
+    @Test func criticalReminderCountReflectsThreshold() {
+        let model = AppModel()
+        // Samples start with one critical reminder (lifeRemaining: 0.15 < 0.25).
+        #expect(model.criticalReminderCount == 1)
+        model.serviceReminders[0].lifeRemaining = 0.2
+        #expect(model.criticalReminderCount == 2)
+        for i in model.serviceReminders.indices { model.serviceReminders[i].lifeRemaining = 0.5 }
+        #expect(model.criticalReminderCount == 0)
+    }
 }

@@ -1,5 +1,7 @@
 import SwiftUI
 import Observation
+import WidgetKit
+import ActivityKit
 
 // MARK: - Mock models
 
@@ -8,8 +10,6 @@ struct Device: Identifiable, Equatable {
     let name: String
     let location: String
     var currentTemp: Int
-    var setpoint: Int
-    var heatTo: Int
     var keepMin: Int
     var keepMax: Int
     let holdUntil: String
@@ -43,6 +43,8 @@ struct Device: Identifiable, Equatable {
     /// a pre-formatted display string.
     var isOffline: Bool = false
     var offlineSince: String? = nil
+    /// The home this thermostat belongs to. Nil means unassigned.
+    var homeID: Home.ID? = nil
 
     /// Whether the HVAC is actively calling, derived from mode + temp vs. range.
     var activity: HVACActivity {
@@ -64,8 +66,6 @@ struct Device: Identifiable, Equatable {
         name: "Home",
         location: "St. Louis, MO",
         currentTemp: 72,
-        setpoint: 72,
-        heatTo: 75,
         keepMin: 62,
         keepMax: 73,
         holdUntil: "6:00AM or Away",
@@ -81,8 +81,6 @@ struct Device: Identifiable, Equatable {
         name: "Upstairs",
         location: "St. Louis, MO",
         currentTemp: 74,
-        setpoint: 72,
-        heatTo: 70,
         keepMin: 66,
         keepMax: 76,
         holdUntil: "6:00AM or Away",
@@ -136,6 +134,24 @@ struct RoomSensor: Identifiable, Hashable {
         RoomSensor(name: "Bedroom",    temp: 70, humidity: 42, participating: true,  battery: 41),
         RoomSensor(name: "Office",     temp: 75, humidity: 38, participating: false, battery: 12),
     ]
+}
+
+/// A physical home that can contain one or more thermostats. Home-level settings
+/// (size, HVAC type) affect time-to-temp estimates for all assigned thermostats.
+struct Home: Identifiable, Equatable {
+    var id: UUID
+    var name: String
+    var homeSize: HomeSize
+    var hvacSystemType: HVACSystemType
+
+    init(id: UUID = UUID(), name: String,
+         homeSize: HomeSize = .medium,
+         hvacSystemType: HVACSystemType = .gasFurnace) {
+        self.id = id
+        self.name = name
+        self.homeSize = homeSize
+        self.hvacSystemType = hvacSystemType
+    }
 }
 
 struct SpotlightItem: Identifiable, Equatable {
@@ -292,6 +308,57 @@ enum FanMode: String, CaseIterable, Identifiable {
     var iconName: String { self == .auto ? "fan.auto" : "fan.on" }
 }
 
+/// Approximate home size used to scale the time-to-temp estimate.
+/// Larger homes take longer even when HVAC capacity scales up, because
+/// thermal mass, wall area, and duct runs all grow with square footage.
+enum HomeSize: String, CaseIterable, Identifiable {
+    case small, medium, large, xlarge
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .small:  "Small (< 1,000 sq ft)"
+        case .medium: "Medium (1,000–2,500 sq ft)"
+        case .large:  "Large (2,500–4,000 sq ft)"
+        case .xlarge: "Very Large (4,000+ sq ft)"
+        }
+    }
+    /// Multiplier applied to the baseline heating/cooling rate.
+    /// Small homes reach temp faster; very large homes much slower.
+    var rateMultiplier: Double {
+        switch self {
+        case .small:  1.35
+        case .medium: 1.0
+        case .large:  0.72
+        case .xlarge: 0.50
+        }
+    }
+}
+
+/// The type of heating/cooling system installed in the home, used to scale the
+/// time-to-temp estimate. Separate from `SystemMode` (which is the operating mode)
+/// so this can be set once at the account level rather than derived from mode state.
+enum HVACSystemType: String, CaseIterable, Identifiable {
+    case gasFurnace, electricFurnace, heatPump, auxHeat
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .gasFurnace:      "Gas Furnace"
+        case .electricFurnace: "Electric Furnace / Heat Strip"
+        case .heatPump:        "Heat Pump"
+        case .auxHeat:         "Auxiliary / Emergency Heat"
+        }
+    }
+    /// Multiplier on the heating rate — gas furnace outputs the highest peak heat.
+    var heatingFactor: Double {
+        switch self {
+        case .gasFurnace:      1.25
+        case .electricFurnace: 1.0
+        case .heatPump:        0.90
+        case .auxHeat:         0.80
+        }
+    }
+}
+
 /// How long a fan run, circulation, or temporary hold stays in effect before the
 /// thermostat returns to its schedule. `.indefinite` runs until manually changed;
 /// the rest expire after a fixed number of hours. Shared by the Mode sheet (Fan On
@@ -413,6 +480,9 @@ final class AppModel {
     var showAddDevice = false
     var showHelp = false
 
+    /// Running Live Activity for the "time to temp" heating/cooling banner.
+    private var liveActivity: Activity<PetticoatActivityAttributes>?
+
     /// All paired thermostats, shown as resortable cards on the dashboard. Empty
     /// means no thermostat has been added yet (the dashboard shows the onboarding
     /// welcome card instead).
@@ -436,6 +506,8 @@ final class AppModel {
     var showWeatherLocation = true
     /// Whether the setpoint stepper uses +/− or ↑↓ chevrons.
     var stepperStyle: StepperStyle = .plusMinus
+    /// All homes on the account. Each thermostat can be assigned to one home.
+    var homes: [Home] = [Home(name: "Home")]
 
     /// Spotlight cards currently shown on the dashboard (respecting hidden state).
     var visibleSpotlights: [SpotlightItem] {
@@ -453,9 +525,13 @@ final class AppModel {
         // The timeline depends on the device (usePresets / systemMode), so keep the
         // cache in step whenever the selected device changes.
         recomputeTimeline()
+        writeWidgetSnapshot()
     }
 
     init() {
+        // Assign sample devices to the default home so they show up pre-assigned.
+        let defaultID = homes.first?.id
+        for i in devices.indices { devices[i].homeID = defaultID }
         // Seed the cached device + timeline (property `didSet`s don't fire for
         // initial values).
         recomputeDevice()
@@ -873,6 +949,24 @@ final class AppModel {
         withAnimation { spotlights.removeAll { $0.id == item.id } }
     }
 
+    // MARK: - Homes
+
+    /// Assign (or unassign) a thermostat to a home. A thermostat belongs to at
+    /// most one home — assigning it here clears any previous home assignment.
+    func assignDevice(_ deviceID: Device.ID, toHome homeID: Home.ID?) {
+        guard let i = devices.firstIndex(where: { $0.id == deviceID }) else { return }
+        devices[i].homeID = homeID
+    }
+
+    /// Delete homes and unassign any thermostats that were in those homes.
+    func deleteHomes(at offsets: IndexSet) {
+        let removedIDs = Set(offsets.map { homes[$0].id })
+        for i in devices.indices where removedIDs.contains(devices[i].homeID ?? UUID()) {
+            devices[i].homeID = nil
+        }
+        homes.remove(atOffsets: offsets)
+    }
+
     func signIn() {
         withAnimation(.easeInOut) { route = .main }
     }
@@ -880,5 +974,136 @@ final class AppModel {
     func signOut() {
         showAccount = false
         withAnimation(.easeInOut) { route = .login }
+    }
+
+    // MARK: - Widget
+
+    /// Writes every device's current state to the App Group UserDefaults so
+    /// any configured widget can read it, and publishes the device list for the
+    /// widget's thermostat picker. Preserves in-flight comfort feedback.
+    func writeWidgetSnapshot() {
+        let list: [WidgetDeviceInfo] = devices.map {
+            WidgetDeviceInfo(id: $0.id.uuidString, name: $0.name)
+        }
+        WidgetSnapshot.saveDeviceList(list)
+
+        for d in devices {
+            let widgetActivity: WidgetActivity
+            switch d.activity {
+            case .idle:    widgetActivity = d.fanMode == .on ? .fan : .idle
+            case .heating: widgetActivity = .heating
+            case .cooling: widgetActivity = .cooling
+            }
+
+            let deviceID = d.id.uuidString
+            var snap = WidgetSnapshot.load(deviceID: deviceID)
+            // Reset feedback state when the HVAC activity changes.
+            if snap.activity != widgetActivity {
+                snap.feedbackGiven = false
+                snap.comfortFeedback = nil
+            }
+            snap.deviceName  = d.name
+            snap.currentTemp = d.currentTemp
+            snap.humidity    = d.humidity
+            snap.activity    = widgetActivity
+            snap.save()
+        }
+
+        WidgetCenter.shared.reloadTimelines(ofKind: WidgetSnapshot.widgetKind)
+        manageLiveActivity(for: device)
+    }
+
+    /// Estimates minutes to reach `target` from `current`, factoring in:
+    /// - Outdoor temperature (cold/hot outdoor air slows heating/cooling via heat loss or gain)
+    /// - HVAC system type from systemMode (gas furnace fastest; heat pump moderate; aux slowest)
+    /// - Home size (larger homes slower even with proportionally larger systems, due to
+    ///   greater thermal mass, wall area, and duct run length)
+    ///
+    /// Base rates: heating 10°F/hr, cooling 12°F/hr for a medium home on a moderate day.
+    private func estimateMinutesToTemp(current: Int, target: Int, for d: Device, isHeating: Bool) -> Int {
+        let delta = max(1, abs(target - current))
+        let base: Double = isHeating ? 10.0 / 60.0 : 12.0 / 60.0   // °F per minute
+
+        // Outdoor temperature penalty
+        let outdoorPenalty: Double
+        if isHeating {
+            outdoorPenalty = min(0.4, max(0, Double(target - d.outdoorTemp)) / 100.0)
+        } else {
+            outdoorPenalty = min(0.3, max(0, Double(d.outdoorTemp - target)) / 100.0)
+        }
+
+        // Look up home-level settings; fall back to medium/gas defaults when unassigned.
+        let home = homes.first { $0.id == d.homeID }
+        let hvacFactor: Double = isHeating ? (home?.hvacSystemType.heatingFactor ?? 1.0) : 1.0
+
+        let rate = base * (1.0 - outdoorPenalty) * hvacFactor * (home?.homeSize.rateMultiplier ?? 1.0)
+        return max(1, Int((Double(delta) / rate).rounded()))
+    }
+
+    /// Starts, updates, or ends the "time to temp" Live Activity based on the
+    /// selected device's current HVAC state.
+    private func manageLiveActivity(for d: Device) {
+        let isActive = d.activity == .heating || d.activity == .cooling
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+
+        if isActive {
+            let isHeating = d.activity == .heating
+            let target = isHeating ? d.keepMin : d.keepMax
+            let minutes = estimateMinutesToTemp(
+                current: d.currentTemp, target: target,
+                for: d, isHeating: isHeating
+            )
+            let endDate = Date().addingTimeInterval(Double(minutes) * 60)
+
+            let state = PetticoatActivityAttributes.ContentState(
+                currentTemp: d.currentTemp,
+                targetTemp: target,
+                estimatedEndDate: endDate,
+                isHeating: isHeating
+            )
+
+            if let activity = liveActivity, activity.activityState == .active {
+                Task { try? await activity.update(.init(state: state, staleDate: endDate)) }
+            } else {
+                let attrs = PetticoatActivityAttributes(deviceName: d.name, startTemp: d.currentTemp)
+                liveActivity = try? Activity.request(
+                    attributes: attrs,
+                    content: .init(state: state, staleDate: endDate)
+                )
+            }
+        } else if let activity = liveActivity {
+            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+            liveActivity = nil
+        }
+    }
+
+    /// Reads any pending thermostat command left by a widget interaction and
+    /// applies it. Called when the app returns to the foreground. Clears the
+    /// command before applying so a recomputeDevice()-triggered writeWidgetSnapshot()
+    /// doesn't see stale data.
+    func applyPendingWidgetCommand() {
+        let deviceID = device.id.uuidString
+        var snap = WidgetSnapshot.load(deviceID: deviceID)
+        guard snap.pendingSetpointDelta != nil || snap.pendingFanRun == true else { return }
+
+        let delta = snap.pendingSetpointDelta
+        let runFan = snap.pendingFanRun == true
+        snap.pendingSetpointDelta = nil
+        snap.pendingFanRun = nil
+        snap.save()
+
+        if let delta {
+            // Positive delta = user is cold → raise the heat bound.
+            // Negative delta = user is warm → lower the cool bound.
+            // adjustKeep ignores the bound in single-mode (heat/cool), so this
+            // is correct for all system modes.
+            let bound: SetpointBound = delta > 0 ? .low : .high
+            adjustKeep(bound, by: delta)
+        }
+
+        if runFan, let i = devices.firstIndex(where: { $0.id == device.id }) {
+            devices[i].fanMode = .on
+            devices[i].fanHoldDuration = .twoHours
+        }
     }
 }

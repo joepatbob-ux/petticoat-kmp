@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import Petticoat
 
 struct DeviceTests {
@@ -39,5 +40,38 @@ struct DeviceTests {
     @Test func profileRangeText() {
         let profile = ActivityProfile(name: "Test", symbol: "house.fill", colorHex: 0, heatTo: 62, coolTo: 78, subtitle: "")
         #expect(profile.rangeText == "62 · 78")
+    }
+
+    // MARK: HoldDuration
+
+    @Test func indefiniteDurationEndDateIsNil() {
+        #expect(HoldDuration.indefinite.endDate() == nil)
+        #expect(HoldDuration.indefinite.endTimeText() == nil)
+    }
+
+    @Test func timedDurationEndDateAddsCorrectHours() throws {
+        let now = Date()
+        let cal = Calendar.current
+        let oneHourEnd = try #require(HoldDuration.oneHour.endDate(from: now))
+        let twelveHourEnd = try #require(HoldDuration.twelveHours.endDate(from: now))
+        #expect(cal.dateComponents([.hour], from: now, to: oneHourEnd).hour == 1)
+        #expect(cal.dateComponents([.hour], from: now, to: twelveHourEnd).hour == 12)
+    }
+
+    // MARK: RoomSensor battery
+
+    @Test func batterySymbolBoundaries() {
+        #expect(RoomSensor.batterySymbol(100) == "battery.100")
+        #expect(RoomSensor.batterySymbol(67)  == "battery.100")
+        #expect(RoomSensor.batterySymbol(66)  == "battery.50")
+        #expect(RoomSensor.batterySymbol(34)  == "battery.50")
+        #expect(RoomSensor.batterySymbol(33)  == "battery.25")
+        #expect(RoomSensor.batterySymbol(1)   == "battery.25")
+        #expect(RoomSensor.batterySymbol(0)   == "battery.0")
+    }
+
+    @Test func batteryColorChangesAtThresholds() {
+        #expect(RoomSensor.batteryColor(50) != RoomSensor.batteryColor(49))
+        #expect(RoomSensor.batteryColor(20) != RoomSensor.batteryColor(19))
     }
 }

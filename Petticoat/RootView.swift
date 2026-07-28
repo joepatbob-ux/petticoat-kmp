@@ -5,6 +5,7 @@ import UIKit
 
 struct RootView: View {
     @State private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -26,6 +27,9 @@ struct RootView: View {
         // set on the presenter once they're open).
         .onChange(of: model.appearance, initial: true) { _, appearance in
             applyAppearance(appearance)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { model.applyPendingWidgetCommand() }
         }
     }
 
