@@ -26,8 +26,8 @@ struct WidgetSnapshot: Codable {
     /// True when the widget requested the fan to run for 2 hours (stuffy tap).
     var pendingFanRun: Bool?
 
-    // MARK: - App Group — replace with the ID from your entitlement.
-    static let appGroupID    = "group.YOUR_BUNDLE_ID.petticoat"
+    // MARK: - App Group — shared between the app and widget extension.
+    static let appGroupID    = "group.com.joepatbob.Petticoat"
     static let snapshotKey   = "widgetSnapshot"
     static let deviceListKey = "widgetDeviceList"
     static let widgetKind    = "PetticoatWidget"
@@ -83,11 +83,14 @@ struct WidgetSnapshot: Codable {
     }
 }
 
-enum WidgetActivity: String, Codable, Equatable {
+enum WidgetActivity: String, Codable, Equatable, Sendable {
     case idle, heating, cooling, fan
 }
 
-enum ComfortLevel: String, Codable, CaseIterable, Identifiable {
+// Declares Sendable in the same file as the enum so the widget's
+// `AppEnum` conformance (which refines Sendable) isn't a retroactive
+// conformance in another file.
+enum ComfortLevel: String, Codable, CaseIterable, Identifiable, Sendable {
     case cold, chilly, stuffy, warm, hot
     var id: String { rawValue }
 

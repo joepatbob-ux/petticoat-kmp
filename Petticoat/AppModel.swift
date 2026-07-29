@@ -1063,7 +1063,7 @@ final class AppModel {
             )
 
             if let activity = liveActivity, activity.activityState == .active {
-                Task { try? await activity.update(.init(state: state, staleDate: endDate)) }
+                Task { await activity.update(.init(state: state, staleDate: endDate)) }
             } else {
                 let attrs = PetticoatActivityAttributes(deviceName: d.name, startTemp: d.currentTemp)
                 liveActivity = try? Activity.request(

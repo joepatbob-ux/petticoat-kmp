@@ -1,25 +1,40 @@
 import SwiftUI
 import WidgetKit
 import AppIntents
+import UIKit
 
 // MARK: - Colors (mirrors Theme.swift tokens, redeclared for the widget target)
 
 private enum WC {
     static let heating      = Color(red: 0.969, green: 0.404, blue: 0.027) // #F76707
-    static let heatingTint  = Color(red: 0.969, green: 0.404, blue: 0.027).opacity(0.12)
     static let cooling      = Color(red: 0.0,   green: 0.576, blue: 0.784) // #0093C8
-    static let coolingTint  = Color.secondary.opacity(0.10)
-    static let fanTint      = Color.secondary.opacity(0.08)
+    // Neutral card background used by the "I feel better now" button in every
+    // activity state, so the button reads consistently regardless of heating /
+    // cooling / fan. Uses `.secondary` so it adapts to light and dark mode.
+    static let cardBackground = Color.secondary.opacity(0.10)
+}
+
+/// Builds a `Color` that resolves to a different value per color scheme,
+/// so the widget's tinted tiles stay legible in both light and dark mode.
+private func adaptive(light: Color, dark: Color) -> Color {
+    Color(uiColor: UIColor { traits in
+        UIColor(traits.userInterfaceStyle == .dark ? dark : light)
+    })
 }
 
 private extension ComfortLevel {
     var tileColor: Color {
         switch self {
-        case .cold:   Color(red: 0.82, green: 0.91, blue: 0.98)
-        case .chilly: Color(red: 0.85, green: 0.93, blue: 0.97)
-        case .stuffy: Color(red: 0.89, green: 0.87, blue: 0.97)
-        case .warm:   Color(red: 0.98, green: 0.92, blue: 0.84)
-        case .hot:    Color(red: 0.99, green: 0.87, blue: 0.82)
+        case .cold:   adaptive(light: Color(red: 0.82, green: 0.91, blue: 0.98),
+                               dark:  Color(red: 0.13, green: 0.22, blue: 0.33))
+        case .chilly: adaptive(light: Color(red: 0.85, green: 0.93, blue: 0.97),
+                               dark:  Color(red: 0.14, green: 0.24, blue: 0.30))
+        case .stuffy: adaptive(light: Color(red: 0.89, green: 0.87, blue: 0.97),
+                               dark:  Color(red: 0.20, green: 0.17, blue: 0.31))
+        case .warm:   adaptive(light: Color(red: 0.98, green: 0.92, blue: 0.84),
+                               dark:  Color(red: 0.30, green: 0.24, blue: 0.13))
+        case .hot:    adaptive(light: Color(red: 0.99, green: 0.87, blue: 0.82),
+                               dark:  Color(red: 0.33, green: 0.17, blue: 0.14))
         }
     }
 }
@@ -38,14 +53,6 @@ private extension WidgetActivity {
         case .heating: WC.heating
         case .cooling: WC.cooling
         case .fan, .idle: .secondary
-        }
-    }
-    var cardTint: Color {
-        switch self {
-        case .heating: WC.heatingTint
-        case .cooling: WC.coolingTint
-        case .fan:     WC.fanTint
-        case .idle:    .clear
         }
     }
 }
@@ -160,7 +167,7 @@ private struct ActivityContent: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(activity.cardTint, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(WC.cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
             .frame(maxHeight: .infinity)
