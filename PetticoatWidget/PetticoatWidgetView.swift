@@ -63,8 +63,12 @@ struct PetticoatWidgetView: View {
     let entry: PetticoatWidgetEntry
     private var snap: WidgetSnapshot { entry.snapshot }
 
+    /// The optimistic guess (set on a comfort tap) takes precedence until the
+    /// app writes the real activity and clears it.
+    private var activity: WidgetActivity { snap.optimisticActivity ?? snap.activity }
+
     private var showPicker: Bool {
-        snap.activity == .idle || snap.feedbackGiven
+        activity == .idle || snap.feedbackGiven
     }
 
     var body: some View {
@@ -73,7 +77,7 @@ struct PetticoatWidgetView: View {
             if showPicker {
                 ComfortPickerContent(deviceID: snap.deviceID)
             } else {
-                ActivityContent(activity: snap.activity, deviceID: snap.deviceID)
+                ActivityContent(activity: activity, deviceID: snap.deviceID)
             }
         }
     }

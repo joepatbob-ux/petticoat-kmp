@@ -25,6 +25,11 @@ struct WidgetSnapshot: Codable {
     var pendingSetpointDelta: Int?
     /// True when the widget requested the fan to run for 2 hours (stuffy tap).
     var pendingFanRun: Bool?
+    /// Activity the widget shows immediately after a comfort tap, before the app
+    /// recomputes the real HVAC state. Kept separate from `activity` so the app's
+    /// real-transition detection isn't confused by the widget's optimistic guess.
+    /// The app clears it on the next `writeWidgetSnapshot()`.
+    var optimisticActivity: WidgetActivity?
 
     // MARK: - App Group — shared between the app and widget extension.
     static let appGroupID    = "group.com.joepatbob.Petticoat"

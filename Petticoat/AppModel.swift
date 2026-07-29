@@ -1006,6 +1006,9 @@ final class AppModel {
             snap.currentTemp = d.currentTemp
             snap.humidity    = d.humidity
             snap.activity    = widgetActivity
+            // The app is the source of truth — drop any optimistic guess the
+            // widget wrote once the real activity is known.
+            snap.optimisticActivity = nil
             snap.save()
         }
 

@@ -190,7 +190,8 @@ struct PetticoatLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(context.state.verb, systemImage: context.state.icon)
+                    Label(context.state.isAtTarget ? "Comfortable" : context.state.verb,
+                          systemImage: context.state.isAtTarget ? "checkmark.circle.fill" : context.state.icon)
                         .font(.headline)
                         .foregroundStyle(context.state.accentColor)
                         .padding(.leading, 4)

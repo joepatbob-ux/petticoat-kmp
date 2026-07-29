@@ -94,7 +94,9 @@ struct ComfortFeedbackIntent: AppIntent {
         snap.comfortFeedback = level
         snap.feedbackGiven = false
         // Optimistically reflect the adjustment so the widget changes right away.
-        snap.activity = level.optimisticActivity
+        // Written to a separate field so the app's real-transition detection in
+        // writeWidgetSnapshot() isn't tripped by this guess.
+        snap.optimisticActivity = level.optimisticActivity
         snap.pendingSetpointDelta = level.setpointDelta
         snap.pendingFanRun = level.triggersFanRun ? true : nil
         snap.save()
