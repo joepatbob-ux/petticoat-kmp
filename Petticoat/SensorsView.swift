@@ -106,7 +106,10 @@ private struct SensorRow: View {
             Button(action: onToggle) {
                 Image(systemName: sensor.participating ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(sensor.participating ? SMA.accent : SMA.labelSecondary)
+                    // A locked-on (disabled) check reads as disabled grey rather
+                    // than the active accent, since it can't be toggled off.
+                    .foregroundStyle(lockedOn ? SMA.labelSecondary
+                                              : (sensor.participating ? SMA.accent : SMA.labelSecondary))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)

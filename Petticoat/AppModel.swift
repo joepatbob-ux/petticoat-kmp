@@ -1006,6 +1006,9 @@ final class AppModel {
             snap.currentTemp = d.currentTemp
             snap.humidity    = d.humidity
             snap.activity    = widgetActivity
+            // The app is the source of truth — drop any optimistic guess the
+            // widget wrote once the real activity is known.
+            snap.optimisticActivity = nil
             snap.save()
         }
 
@@ -1063,7 +1066,7 @@ final class AppModel {
             )
 
             if let activity = liveActivity, activity.activityState == .active {
-                Task { try? await activity.update(.init(state: state, staleDate: endDate)) }
+                Task { await activity.update(.init(state: state, staleDate: endDate)) }
             } else {
                 let attrs = PetticoatActivityAttributes(deviceName: d.name, startTemp: d.currentTemp)
                 liveActivity = try? Activity.request(

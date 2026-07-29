@@ -46,6 +46,17 @@ private extension ComfortLevel {
         }
     }
     var triggersFanRun: Bool { self == .stuffy }
+
+    /// HVAC activity to show immediately after the user reports how they feel,
+    /// before the app recomputes and writes the real state. Gives the widget an
+    /// instant visible response to the tap.
+    var optimisticActivity: WidgetActivity {
+        switch self {
+        case .cold, .chilly: .heating   // wants it warmer
+        case .warm, .hot:    .cooling    // wants it cooler
+        case .stuffy:        .fan
+        }
+    }
 }
 
 extension ComfortLevel: AppEnum {
@@ -64,7 +75,8 @@ extension ComfortLevel: AppEnum {
 // MARK: - Comfort feedback intents
 
 /// Tapping a comfort emoji tile records the level, writes the thermostat
-/// adjustment command, and returns the widget to the HVAC activity state.
+/// adjustment command, optimistically flips the widget to the matching HVAC
+/// activity state, and returns the widget to the HVAC activity view.
 struct ComfortFeedbackIntent: AppIntent {
     static var title: LocalizedStringResource = "Select Comfort Level"
 
@@ -81,6 +93,10 @@ struct ComfortFeedbackIntent: AppIntent {
         var snap = WidgetSnapshot.load(deviceID: deviceID)
         snap.comfortFeedback = level
         snap.feedbackGiven = false
+        // Optimistically reflect the adjustment so the widget changes right away.
+        // Written to a separate field so the app's real-transition detection in
+        // writeWidgetSnapshot() isn't tripped by this guess.
+        snap.optimisticActivity = level.optimisticActivity
         snap.pendingSetpointDelta = level.setpointDelta
         snap.pendingFanRun = level.triggersFanRun ? true : nil
         snap.save()

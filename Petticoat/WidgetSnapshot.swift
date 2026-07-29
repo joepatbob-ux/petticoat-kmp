@@ -25,9 +25,14 @@ struct WidgetSnapshot: Codable {
     var pendingSetpointDelta: Int?
     /// True when the widget requested the fan to run for 2 hours (stuffy tap).
     var pendingFanRun: Bool?
+    /// Activity the widget shows immediately after a comfort tap, before the app
+    /// recomputes the real HVAC state. Kept separate from `activity` so the app's
+    /// real-transition detection isn't confused by the widget's optimistic guess.
+    /// The app clears it on the next `writeWidgetSnapshot()`.
+    var optimisticActivity: WidgetActivity?
 
-    // MARK: - App Group — replace with the ID from your entitlement.
-    static let appGroupID    = "group.YOUR_BUNDLE_ID.petticoat"
+    // MARK: - App Group — shared between the app and widget extension.
+    static let appGroupID    = "group.com.joepatbob.Petticoat"
     static let snapshotKey   = "widgetSnapshot"
     static let deviceListKey = "widgetDeviceList"
     static let widgetKind    = "PetticoatWidget"
@@ -83,11 +88,14 @@ struct WidgetSnapshot: Codable {
     }
 }
 
-enum WidgetActivity: String, Codable, Equatable {
+enum WidgetActivity: String, Codable, Equatable, Sendable {
     case idle, heating, cooling, fan
 }
 
-enum ComfortLevel: String, Codable, CaseIterable, Identifiable {
+// Declares Sendable in the same file as the enum so the widget's
+// `AppEnum` conformance (which refines Sendable) isn't a retroactive
+// conformance in another file.
+enum ComfortLevel: String, Codable, CaseIterable, Identifiable, Sendable {
     case cold, chilly, stuffy, warm, hot
     var id: String { rawValue }
 
