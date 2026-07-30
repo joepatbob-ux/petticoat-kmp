@@ -21,9 +21,9 @@ struct ControlView: View {
         VStack(spacing: 0) {
             WeatherSummary(
                 location: model.showWeatherLocation ? device.location : "",
-                temp: device.outdoorTemp,
-                high: device.outdoorHigh,
-                low: device.outdoorLow
+                temp: model.tempUnit.format(device.outdoorTemp),
+                high: model.tempUnit.format(device.outdoorHigh),
+                low: model.tempUnit.format(device.outdoorLow)
             )
             .padding(.top, 8)
 
@@ -38,7 +38,7 @@ struct ControlView: View {
 
             Spacer().frame(maxHeight: 80)
 
-            DisplayTemp(value: device.currentTemp, size: 170, activity: device.activity)
+            DisplayTemp(value: model.tempUnit.convert(device.currentTemp), size: 170, activity: device.activity)
 
             HumidityLabel(humidity: device.humidity)
 
@@ -63,7 +63,7 @@ struct ControlView: View {
         // so the card matches the saved schedule on appear and across period changes.
         .task(id: model.currentPeriod?.id) { model.syncScheduleSetpoints() }
         .sheet(isPresented: $showMode) {
-            ModeSheet()
+            ModeSheet(deviceID: device.id)
         }
         .sheet(isPresented: $showSensors) {
             NavigationStack { SensorsView() }
@@ -75,9 +75,9 @@ struct ControlView: View {
 
 struct WeatherSummary: View {
     let location: String
-    let temp: Int
-    let high: Int
-    let low: Int
+    let temp: String
+    let high: String
+    let low: String
 
     var body: some View {
         VStack(spacing: 6) {
@@ -90,7 +90,7 @@ struct WeatherSummary: View {
                 Image(systemName: "sun.max.fill")
                     .foregroundStyle(SMA.labelPrimary)
                     .accessibilityHidden(true)
-                Text("\(temp)")
+                Text(temp)
                     .font(.title2.weight(.bold))
                     .foregroundStyle(SMA.labelPrimary)
                 VStack(alignment: .leading, spacing: 0) {
@@ -255,8 +255,20 @@ struct SetpointStepper: View {
     // MARK: Numbers
 
     @ViewBuilder private var numbers: some View {
-        Group {
-            if mode.isRangeSetpoint {
+        if mode.isRangeSetpoint {
+            if model.tempUnit == .celsius {
+                // Stacked layout for Celsius: decimal values are wider and stack more
+                // comfortably than sitting side-by-side in the horizontal layout.
+                VStack(spacing: 4) {
+                    segment(value: low, bound: .low)
+                    segment(value: high, bound: .high)
+                }
+                .contentShape(Capsule())
+                .onTapGesture { flip() }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 3)
+                .background { if editing != nil { Capsule().fill(SMA.fillTertiary) } }
+            } else {
                 HStack(spacing: 0) {
                     segment(value: low, bound: .low)
                     separator
@@ -265,14 +277,16 @@ struct SetpointStepper: View {
                 // Binary selection: a tap anywhere flips to the other bound.
                 .contentShape(Capsule())
                 .onTapGesture { flip() }
-            } else {
-                segment(value: mode == .cool ? high : low, bound: defaultBound)
-                    .contentShape(Capsule())
-                    .onTapGesture { select(defaultBound) }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 3)
+                .background { if editing != nil { Capsule().fill(SMA.fillTertiary) } }
             }
+        } else {
+            // Single-setpoint modes (Heat/Cool/AuxHeat) — no grouping container.
+            segment(value: mode == .cool ? high : low, bound: defaultBound, showsBackground: false)
+                .contentShape(Rectangle())
+                .onTapGesture { select(defaultBound) }
         }
-        .padding(6)
-        .background { if editing != nil { Capsule().fill(SMA.fillTertiary) } }
     }
 
     /// A constant-width gap between the digits: the dot at rest, an equal-width
@@ -286,16 +300,25 @@ struct SetpointStepper: View {
             .accessibilityHidden(true)
     }
 
-    private func segment(value: Int, bound: SetpointBound) -> some View {
+    private func segment(value: Int, bound: SetpointBound, showsBackground: Bool = true) -> some View {
         let selected = editing == bound
-        return Text("\(value)")
+        return Text(segmentText(value))
             .font(.title3.weight(.semibold))
             .monospacedDigit()
             .foregroundStyle(editing == nil || selected ? SMA.labelPrimary : SMA.labelSecondary)
-            .frame(width: 34, height: 36)
-            .background { if selected { Capsule().fill(SMA.card) } }
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background { if selected && showsBackground { Capsule().fill(SMA.card) } }
             .accessibilityAddTraits(selected ? [.isSelected] : [])
             .accessibilityLabel(bound == .low ? "Heat setpoint" : "Cool setpoint")
+    }
+
+    /// Always formats Celsius to one decimal place so the text width is stable
+    /// across whole-degree and half-degree values (e.g. "22.0" not "22").
+    private func segmentText(_ fahrenheit: Int) -> String {
+        guard model.tempUnit == .celsius else { return model.tempUnit.format(fahrenheit) }
+        return String(format: "%.1f", model.tempUnit.convert(fahrenheit))
     }
 
     /// Whether the relevant bound can no longer move in either direction. Uses the
@@ -717,6 +740,7 @@ struct ControllerSection: View {
 
 /// Upcoming schedule period — a read-only preview card (no setpoint control).
 private struct PeriodCard: View {
+    @Environment(AppModel.self) private var model
     let period: TimelinePeriod
     /// On a profile schedule every period leads with its profile icon + title, matching
     /// the current-period card; otherwise it shows the period name alone.
@@ -738,10 +762,10 @@ private struct PeriodCard: View {
             }
             Spacer(minLength: 8)
             HStack(spacing: 8) {
-                Text("\(period.heatTo)")
+                Text(model.tempUnit.format(period.heatTo))
                 Image(systemName: "circle.fill").font(.system(size: 4))
                     .accessibilityHidden(true)
-                Text("\(period.coolTo)")
+                Text(model.tempUnit.format(period.coolTo))
             }
             .font(.title3.weight(.semibold))
             .foregroundStyle(SMA.labelSecondary)

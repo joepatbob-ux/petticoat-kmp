@@ -8,7 +8,9 @@ struct DeviceTests {
     private func device(mode: SystemMode, temp: Int, low: Int = 62, high: Int = 73) -> Device {
         var d = Device.sample
         d.systemMode = mode
-        d.currentTemp = temp
+        // Drive currentTemp by setting all participating sensors to the same value.
+        d.sensors = d.sensors.map { RoomSensor(name: $0.name, temp: temp, humidity: $0.humidity,
+                                               participating: $0.participating, battery: $0.battery) }
         d.keepMin = low
         d.keepMax = high
         return d

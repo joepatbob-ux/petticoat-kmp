@@ -6,6 +6,9 @@ struct DashboardView: View {
     /// IDs of spotlight cards shown in their abbreviated form. Empty = all expanded.
     /// The header chevron collapses/expands all at once; tapping a card toggles just that one.
     @State private var collapsedSpotlights: Set<UUID> = []
+    /// Tracks which device's Mode sheet is open. Kept at this level (above the List) so
+    /// the sheet isn't hosted inside a List row, where re-renders can dismiss it prematurely.
+    @State private var modeSheetDeviceID: Device.ID? = nil
 
     var body: some View {
         List {
@@ -23,6 +26,14 @@ struct DashboardView: View {
         .background(SMA.groupedBackground.ignoresSafeArea())
         .navigationDestination(isPresented: $showControl) { DeviceTabView() }
         .toolbar { DashboardToolbar() }
+        .sheet(isPresented: Binding(
+            get: { modeSheetDeviceID != nil },
+            set: { if !$0 { modeSheetDeviceID = nil } }
+        )) {
+            if let id = modeSheetDeviceID {
+                ModeSheet(deviceID: id)
+            }
+        }
     }
 
     /// Thermostat cards (or the onboarding welcome card when there are none).
@@ -32,7 +43,8 @@ struct DashboardView: View {
                 .spotlightCardStyle(kind: .promotional)
         } else {
             ForEach(model.devices) { device in
-                DashboardThermostatCard(device: device, showControl: $showControl)
+                DashboardThermostatCard(device: device, showControl: $showControl,
+                                        onShowMode: { modeSheetDeviceID = device.id })
             }
         }
     }
@@ -148,12 +160,15 @@ struct DashboardThermostatCard: View {
     /// Drives the push to the device Control screen. Owned by DashboardView so the
     /// navigationDestination lives on the List, not inside a List row.
     @Binding var showControl: Bool
+    /// Called when the mode pill is tapped. Owned by DashboardView so the sheet is
+    /// presented from outside the List rows, preventing premature dismissal.
+    let onShowMode: () -> Void
 
     var body: some View {
         if device.isOffline {
             OfflineThermostatCard(device: device, showControl: $showControl)
         } else {
-            OnlineThermostatCard(device: device, showControl: $showControl)
+            OnlineThermostatCard(device: device, showControl: $showControl, onShowMode: onShowMode)
         }
     }
 }
@@ -216,7 +231,7 @@ private struct OnlineThermostatCard: View {
     @Environment(AppModel.self) private var model
     let device: Device
     @Binding var showControl: Bool
-    @State private var showMode = false
+    let onShowMode: () -> Void
     /// Inline sensor disclosure — reveals the participating-sensor selection in place.
     @State private var sensorsExpanded = false
 
@@ -224,8 +239,7 @@ private struct OnlineThermostatCard: View {
         Section {
             HStack(spacing: 14) {
                 ModeSelectPill(axis: .vertical, systemMode: device.systemMode, fanMode: device.fanMode) {
-                    model.selectDevice(device.id)
-                    showMode = true
+                    onShowMode()
                 }
 
                 Button {
@@ -233,7 +247,7 @@ private struct OnlineThermostatCard: View {
                     showControl = true
                 } label: {
                     HStack(spacing: 8) {
-                        DisplayTemp(value: device.currentTemp, size: 46, activity: device.activity)
+                        DisplayTemp(value: model.tempUnit.convert(device.currentTemp), size: 46, activity: device.activity)
                         Spacer(minLength: 8)
                     }
                     .contentShape(Rectangle())
@@ -252,13 +266,6 @@ private struct OnlineThermostatCard: View {
             // shared SetpointStepper sits the same distance from the card's trailing edge
             // here as it does on the Control screen's single and schedule cards.
             .listRowInsets(EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 18))
-
-            if sensorsExpanded && model.showSensorsOnDashboard {
-                ForEach(device.sensors) { sensor in
-                    SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor, in: device.id) }
-                        .listRowBackground(SMA.card)
-                }
-            }
         } header: {
             Group {
                 if model.showSensorsOnDashboard {
@@ -303,8 +310,14 @@ private struct OnlineThermostatCard: View {
             .textCase(nil)
         }
         .headerProminence(.increased)
-        .sheet(isPresented: $showMode) {
-            ModeSheet()
+
+        if sensorsExpanded && model.showSensorsOnDashboard {
+            Section {
+                ForEach(device.sensors) { sensor in
+                    SensorSelectRow(sensor: sensor) { model.toggleSensor(sensor, in: device.id) }
+                        .listRowBackground(SMA.card)
+                }
+            }
         }
     }
 
@@ -350,6 +363,7 @@ private struct OnlineThermostatCard: View {
 /// and humidity are shown as plain numbers; the battery icon shifts green → orange →
 /// red as the charge falls.
 struct SensorSelectRow: View {
+    @Environment(AppModel.self) private var model
     let sensor: RoomSensor
     let onToggle: () -> Void
 
@@ -371,7 +385,7 @@ struct SensorSelectRow: View {
                             .accessibilityLabel("Battery \(level) percent")
                     }
                     Text("\(sensor.humidity)%")
-                    Text("\(sensor.temp)°")
+                    Text("\(model.tempUnit.format(sensor.temp))°")
                 }
                 .font(.footnote)
                 .foregroundStyle(SMA.labelSecondary)

@@ -142,7 +142,18 @@ struct SchedulePresetsList: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { editorPreset = SchedulePreset(name: "") } label: { Image(systemName: "plus") }
+                Menu {
+                    Button("New Schedule", systemImage: "plus") {
+                        editorPreset = SchedulePreset(name: "")
+                    }
+                    if let active = model.activeSchedule {
+                        Button("Duplicate \"\(active.name)\"", systemImage: "plus.square.on.square") {
+                            model.duplicateSchedule(active)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                }
             }
         }
         .navigationDestination(item: $editorPreset) { draft in

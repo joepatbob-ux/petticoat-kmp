@@ -9,11 +9,9 @@ struct Device: Identifiable, Equatable {
     let id = UUID()
     let name: String
     let location: String
-    var currentTemp: Int
     var keepMin: Int
     var keepMax: Int
     let holdUntil: String
-    let humidity: Int
     let outdoorTemp: Int
     let outdoorHigh: Int
     let outdoorLow: Int
@@ -46,6 +44,20 @@ struct Device: Identifiable, Equatable {
     /// The home this thermostat belongs to. Nil means unassigned.
     var homeID: Home.ID? = nil
 
+    /// Averaged temperature across all participating sensors.
+    var currentTemp: Int {
+        let active = sensors.filter(\.participating)
+        guard !active.isEmpty else { return 0 }
+        return active.map(\.temp).reduce(0, +) / active.count
+    }
+
+    /// Averaged humidity across all participating sensors.
+    var humidity: Int {
+        let active = sensors.filter(\.participating)
+        guard !active.isEmpty else { return 0 }
+        return active.map(\.humidity).reduce(0, +) / active.count
+    }
+
     /// Whether the HVAC is actively calling, derived from mode + temp vs. range.
     var activity: HVACActivity {
         switch systemMode {
@@ -65,11 +77,9 @@ struct Device: Identifiable, Equatable {
     static let sample = Device(
         name: "Home",
         location: "St. Louis, MO",
-        currentTemp: 72,
         keepMin: 62,
         keepMax: 73,
         holdUntil: "6:00AM or Away",
-        humidity: 40,
         outdoorTemp: 89,
         outdoorHigh: 89,
         outdoorLow: 81,
@@ -80,11 +90,9 @@ struct Device: Identifiable, Equatable {
     static let sampleUpstairs = Device(
         name: "Upstairs",
         location: "St. Louis, MO",
-        currentTemp: 74,
         keepMin: 66,
         keepMax: 76,
         holdUntil: "6:00AM or Away",
-        humidity: 44,
         outdoorTemp: 89,
         outdoorHigh: 89,
         outdoorLow: 81,
@@ -557,6 +565,17 @@ final class AppModel {
         }
     }
 
+    /// Write-through projection keyed by an explicit device ID. Used by ModeSheet so it
+    /// can bind to a specific card's device without requiring `selectDevice` to be called
+    /// first — avoiding the model cascade that can dismiss the sheet on first open.
+    subscript<Value>(deviceID id: Device.ID, _ keyPath: WritableKeyPath<Device, Value>) -> Value {
+        get { (devices.first { $0.id == id } ?? device)[keyPath: keyPath] }
+        set {
+            guard let i = devices.firstIndex(where: { $0.id == id }) else { return }
+            devices[i][keyPath: keyPath] = newValue
+        }
+    }
+
     /// Make a device the target of the single-device screens.
     func selectDevice(_ id: Device.ID) { selectedDeviceID = id }
 
@@ -647,6 +666,7 @@ final class AppModel {
     /// Persisted thermostat settings (Display Options, System Configuration, About,
     /// Location) so the Settings screens survive navigating away and back.
     var thermostatSettings = ThermostatSettings()
+    var tempUnit: TemperatureUnit { thermostatSettings.units }
 
     /// The active schedule — the selected one, or the first available.
     var activeSchedule: SchedulePreset? {
@@ -891,7 +911,15 @@ final class AppModel {
 
     func duplicateSchedule(_ preset: SchedulePreset) {
         guard let i = schedules.firstIndex(where: { $0.id == preset.id }) else { return }
-        schedules.insert(SchedulePreset(name: preset.name + " Copy", groups: preset.groups), at: i + 1)
+        let base = preset.name + " (Copy)"
+        let taken = Set(schedules.map(\.name))
+        var candidate = base
+        var n = 2
+        while taken.contains(candidate) {
+            candidate = "\(base) \(n)"
+            n += 1
+        }
+        schedules.insert(SchedulePreset(name: candidate, groups: preset.groups), at: i + 1)
     }
 
     func deleteSchedule(_ id: SchedulePreset.ID) {

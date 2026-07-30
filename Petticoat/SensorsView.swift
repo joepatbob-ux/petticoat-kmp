@@ -26,7 +26,7 @@ struct SensorsView: View {
         List {
             Section {
                 HStack(spacing: 16) {
-                    SensorMetricTile(value: "\(device.currentTemp)", label: "Temperature")
+                    SensorMetricTile(value: model.tempUnit.format(device.currentTemp), label: "Temperature")
                     SensorMetricTile(value: "\(device.humidity)%", label: "Humidity")
                 }
                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
@@ -93,6 +93,7 @@ private struct SensorMetricTile: View {
 /// A selectable sensor row: the leading checkmark toggles participation in the average;
 /// room sensors additionally drill into their details.
 private struct SensorRow: View {
+    @Environment(AppModel.self) private var model
     let sensor: RoomSensor
     let showsDrillIn: Bool
     /// The last participating sensor can't be deselected (the average needs a source), so
@@ -123,7 +124,7 @@ private struct SensorRow: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(sensor.name)
                             .foregroundStyle(SMA.labelPrimary)
-                        Text("\(sensor.temp) (\(sensor.humidity)% Humidity)")
+                        Text("\(model.tempUnit.format(sensor.temp)) (\(sensor.humidity)% Humidity)")
                             .font(.footnote)
                             .foregroundStyle(SMA.labelSecondary)
                     }
@@ -169,7 +170,7 @@ struct SensorDetailView: View {
             }
 
             Section("Sensor Information") {
-                LabeledContent("Temperature", value: "\(sensor.temp)")
+                LabeledContent("Temperature", value: model.tempUnit.format(sensor.temp))
                 LabeledContent("Humidity", value: "\(sensor.humidity)%")
                 LabeledContent("Signal Strength", value: "Good")
                 LabeledContent("Battery Health", value: batteryHealth)

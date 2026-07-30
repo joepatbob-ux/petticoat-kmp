@@ -33,6 +33,18 @@ enum TemperatureUnit: String, CaseIterable, Identifiable {
     case fahrenheit, celsius
     var id: String { rawValue }
     var label: String { self == .fahrenheit ? "°F" : "°C" }
+    /// Converts a Fahrenheit value to this unit. Celsius is rounded to the nearest 0.5°.
+    func convert(_ fahrenheit: Int) -> Double {
+        if self == .fahrenheit { return Double(fahrenheit) }
+        let c = Double(fahrenheit - 32) * 5.0 / 9.0
+        return (c * 2).rounded() / 2
+    }
+    /// Returns a display string: whole numbers for Fahrenheit (and whole-degree Celsius),
+    /// one decimal place for half-degree Celsius values.
+    func format(_ fahrenheit: Int) -> String {
+        let v = convert(fahrenheit)
+        return v.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(v))" : String(format: "%.1f", v)
+    }
 }
 
 /// All persisted thermostat settings (Display Options, System Configuration, About, and

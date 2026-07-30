@@ -307,7 +307,7 @@ private struct SidebarDeviceCard: View {
                             .foregroundStyle(SMA.labelSecondary)
                         Spacer(minLength: 0)
                     } else {
-                        DisplayTemp(value: device.currentTemp, size: 42, activity: device.activity)
+                        DisplayTemp(value: model.tempUnit.convert(device.currentTemp), size: 42, activity: device.activity)
                         Spacer(minLength: 8)
                         if !setpointText.isEmpty {
                             Text(setpointText)
@@ -353,9 +353,9 @@ private struct SidebarDeviceCard: View {
 
     private var setpointText: String {
         switch device.systemMode {
-        case .cool:            return "\(device.keepMax)\u{00B0}"
-        case .heat, .auxHeat:  return "\(device.keepMin)\u{00B0}"
-        case .auto:            return "\(device.keepMin)\u{00B7}\(device.keepMax)"
+        case .cool:            return "\(model.tempUnit.format(device.keepMax))\u{00B0}"
+        case .heat, .auxHeat:  return "\(model.tempUnit.format(device.keepMin))\u{00B0}"
+        case .auto:            return "\(model.tempUnit.format(device.keepMin))\u{00B7}\(model.tempUnit.format(device.keepMax))"
         case .off:             return ""
         }
     }

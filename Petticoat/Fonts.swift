@@ -37,20 +37,23 @@ extension SMA {
 /// idle, Lato-Bold for active) can't interpolate, so the idle and active renderings
 /// are layered and cross-faded; heating↔cooling is a color tween on the active layer.
 struct DisplayTemp: View {
-    let value: Int
+    let value: Double
     var size: CGFloat
     let activity: HVACActivity
 
     private var activeColor: Color { activity == .cooling ? SMA.accent : SMA.tempOrange }
+    private var displayString: String {
+        value.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(value))" : String(format: "%.1f", value)
+    }
 
     var body: some View {
         ZStack {
-            Text("\(value)")
+            Text(displayString)
                 .font(SMA.displayTemp(size: size, activity: .idle))
                 .foregroundStyle(SMA.tempColor(.idle))
                 .opacity(activity == .idle ? 1 : 0)
 
-            Text("\(value)")
+            Text(displayString)
                 .font(SMA.displayTemp(size: size, activity: .heating))
                 .foregroundStyle(activeColor)
                 .opacity(activity == .idle ? 0 : 1)
@@ -61,6 +64,6 @@ struct DisplayTemp: View {
         .animation(.easeInOut(duration: 0.45), value: activity)
         .animation(.snappy, value: value)
         .accessibilityElement()
-        .accessibilityLabel("\(value) degrees")
+        .accessibilityLabel("\(displayString) degrees")
     }
 }
