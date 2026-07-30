@@ -312,6 +312,50 @@ struct AppModelTests {
         #expect(model.device.keepMax == profile.coolTo)
     }
 
+    // MARK: Menu-bar helpers (nudge setpoint / activate by name)
+
+    @Test func nudgeSetpointInAutoMovesBothBounds() {
+        let model = AppModel()
+        model.devices[0].systemMode = .auto
+        let lo = model.device.keepMin
+        let hi = model.device.keepMax
+        model.nudgeSetpoint(by: 1)
+        #expect(model.device.keepMin == lo + 1)
+        #expect(model.device.keepMax == hi + 1)
+    }
+
+    @Test func nudgeSetpointInHeatMovesHeatTarget() {
+        let model = AppModel()
+        model.devices[0].systemMode = .heat
+        let before = model.device.keepMin
+        model.nudgeSetpoint(by: 2)
+        #expect(model.device.keepMin == before + 2)
+    }
+
+    @Test func nudgeSetpointInCoolMovesCoolTarget() {
+        let model = AppModel()
+        model.devices[0].systemMode = .cool
+        let before = model.device.keepMax
+        model.nudgeSetpoint(by: -1)
+        #expect(model.device.keepMax == before - 1)
+    }
+
+    @Test func activateProfileNamedActivatesMatch() {
+        let model = AppModel()
+        model.activateProfileNamed("Away")
+        #expect(model.controlMode == .activity)
+        #expect(model.activeProfile.name == "Away")
+    }
+
+    @Test func activateProfileNamedUnknownIsNoOp() {
+        let model = AppModel()
+        let activeID = model.activeProfile.id
+        let mode = model.controlMode
+        model.activateProfileNamed("Does Not Exist")
+        #expect(model.activeProfile.id == activeID)
+        #expect(model.controlMode == mode)
+    }
+
     // MARK: Device online/offline
 
     @Test func markSelectedDeviceOnline() {

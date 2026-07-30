@@ -4,7 +4,8 @@ import UIKit
 #endif
 
 struct RootView: View {
-    @State private var model = AppModel()
+    /// Owned by the `App` scene so the menu bar can share it; injected here.
+    let model: AppModel
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -81,5 +82,5 @@ struct MainView: View {
 }
 
 #Preview {
-    RootView()
+    RootView(model: AppModel())
 }

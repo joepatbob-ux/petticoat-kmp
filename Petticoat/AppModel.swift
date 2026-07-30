@@ -480,6 +480,15 @@ final class AppModel {
     var showAddDevice = false
     var showHelp = false
 
+    // Shared iPad detail state — lifted here so the hardware-keyboard menu bar
+    // (`PetticoatCommands`) and `MainSplitView` drive the same selection.
+    /// The device tab shown in the iPad detail pane.
+    var selectedTab: DeviceTab = .control
+    /// Whether the iPad sidebar (dashboard) column is visible.
+    var sidebarVisible = true
+    /// Presents the New Reminder editor in the iPad detail.
+    var addingReminder = false
+
     /// Running Live Activity for the "time to temp" heating/cooling banner.
     private var liveActivity: Activity<PetticoatActivityAttributes>?
 
@@ -769,6 +778,24 @@ final class AppModel {
     /// Convenience for the single-device screens: adjusts the selected device.
     func adjustKeep(_ bound: SetpointBound, by delta: Int) {
         adjustKeep(bound, by: delta, in: device.id)
+    }
+
+    /// Menu/keyboard convenience: nudge the active setpoint(s) for the selected
+    /// device, moving whichever bound(s) the current mode targets.
+    func nudgeSetpoint(by delta: Int) {
+        switch device.systemMode {
+        case .heat, .auxHeat: adjustKeep(.low, by: delta)
+        case .cool:           adjustKeep(.high, by: delta)
+        case .auto, .off:     adjustKeep(.low, by: delta); adjustKeep(.high, by: delta)
+        }
+    }
+
+    /// Activate the activity profile with the given name, if one exists (used by
+    /// the menu bar's Home / Away shortcuts).
+    func activateProfileNamed(_ name: String) {
+        if let profile = activityProfiles.first(where: { $0.name == name }) {
+            activateProfile(profile)
+        }
     }
 
     /// Toggle whether a paired sensor feeds the averaged temperature on a device. At least
