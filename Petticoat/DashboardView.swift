@@ -101,6 +101,9 @@ struct DashboardView: View {
 struct DashboardToolbar: ToolbarContent {
     @Environment(AppModel.self) private var model
     var showWordmark = true
+    /// Pass `false` when the help button lives elsewhere (e.g. the iPad detail pane)
+    /// so it isn't duplicated across split-view columns.
+    var showHelp = true
 
     var body: some ToolbarContent {
         if showWordmark {
@@ -112,11 +115,13 @@ struct DashboardToolbar: ToolbarContent {
         }
         // Help is tertiary — leading edge of the trailing cluster, with the primary
         // actions (Add a Device, Account) grouped to its right.
-        ToolbarItem(placement: .topBarTrailing) {
-            Button { model.showHelp = true } label: {
-                Image(systemName: "questionmark.bubble")
+        if showHelp {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { model.showHelp = true } label: {
+                    Image(systemName: "questionmark.bubble")
+                }
+                .accessibilityLabel("Help and Support")
             }
-            .accessibilityLabel("Help and Support")
         }
         ToolbarSpacer(.fixed, placement: .topBarTrailing)
         ToolbarItemGroup(placement: .topBarTrailing) {

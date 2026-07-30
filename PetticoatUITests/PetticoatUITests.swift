@@ -88,4 +88,40 @@ final class PetticoatUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Recent"].waitForExistence(timeout: 5),
                       "The Usage tab should show the range selector")
     }
+
+    /// On iPad (regular width) the sidebar shows device cards with a selected-state
+    /// indicator. The initially active device should be selected; tapping another
+    /// device moves the selection to it.
+    @MainActor
+    func testSidebarSelectionState() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let loginButton = app.buttons["Login"]
+        XCTAssertTrue(loginButton.waitForExistence(timeout: 10),
+                      "Login button should appear after the splash screen")
+        loginButton.tap()
+
+        // The sidebar device cards are only present on regular-width (iPad) layouts.
+        // On iPhone the compact dashboard is shown instead — skip gracefully.
+        let homeCard = app.buttons["Home"].firstMatch
+        guard homeCard.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Sidebar only visible on regular-width (iPad) layout")
+        }
+
+        // The first device should start selected.
+        XCTAssertTrue(homeCard.isSelected,
+                      "'Home' device card should be selected on launch")
+
+        // Tapping the second device should move the selection.
+        let upstairsCard = app.buttons["Upstairs"].firstMatch
+        XCTAssertTrue(upstairsCard.waitForExistence(timeout: 3),
+                      "'Upstairs' device card should appear in the sidebar")
+        upstairsCard.tap()
+
+        XCTAssertTrue(upstairsCard.isSelected,
+                      "'Upstairs' should be selected after tapping it")
+        XCTAssertFalse(homeCard.isSelected,
+                       "'Home' should no longer be selected after switching devices")
+    }
 }

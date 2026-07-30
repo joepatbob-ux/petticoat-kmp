@@ -36,7 +36,7 @@ struct ControlView: View {
             .accessibilityHint("Opens the sensors screen")
             .padding(.top, 20)
 
-            Spacer()
+            Spacer().frame(maxHeight: 80)
 
             DisplayTemp(value: device.currentTemp, size: 170, activity: device.activity)
 

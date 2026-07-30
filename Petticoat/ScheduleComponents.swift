@@ -22,11 +22,12 @@ enum WeekDay {
     }
 }
 
-/// The 7-circle day selector used by the schedule editors. The caller owns the
-/// day set and is notified which index was toggled.
+/// The 7-day selector used by the schedule editors. On compact (iPhone) each day
+/// is a single-letter circle; on regular (iPad) it expands to abbreviated-name pills.
 struct DayPicker: View {
     let days: Set<Int>
     let onToggle: (Int) -> Void
+    @Environment(\.horizontalSizeClass) private var hSize
 
     var body: some View {
         HStack(spacing: 6) {
@@ -35,11 +36,20 @@ struct DayPicker: View {
                 Button {
                     onToggle(i)
                 } label: {
-                    Text(WeekDay.labels[i])
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(on ? .white : SMA.labelPrimary)
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(on ? SMA.accent : SMA.fillTertiary))
+                    if hSize == .regular {
+                        Text(WeekDay.short[i])
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(on ? .white : SMA.labelPrimary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .background(Capsule().fill(on ? SMA.accent : SMA.fillTertiary))
+                    } else {
+                        Text(WeekDay.labels[i])
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(on ? .white : SMA.labelPrimary)
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(on ? SMA.accent : SMA.fillTertiary))
+                    }
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
