@@ -451,9 +451,9 @@ struct ThermostatOfflineDetail: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(SMA.groupedBackground.ignoresSafeArea())
-        .navigationTitle("")
-        .inlineNavTitle()
-        .toolbar { DashboardToolbar(showWordmark: false) }
+        // No toolbar / title of its own: this view is always embedded in a device
+        // tab (iPhone `DeviceTabView` or the iPad `MainSplitView` detail), so it
+        // inherits the same nav-bar chrome and tab strip as a connected device.
         .navigationDestination(isPresented: $showReconnect) { ReconnectWiFiView() }
         .navigationDestination(for: Route.self) { route in
             switch route {

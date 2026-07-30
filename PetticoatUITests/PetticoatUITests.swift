@@ -21,14 +21,16 @@ final class PetticoatUITests: XCTestCase {
                       "Login button should appear after the splash screen")
         loginButton.tap()
 
-        // Dashboard shows the device card; its temperature button opens the detail
-        // screen (accessibility label "Open <device name> controls").
+        // Compact (iPhone): the dashboard shows a device card whose temperature
+        // button ("Open <device name> controls") opens the detail screen.
+        // Regular width (iPad): the split view already shows the selected
+        // device's detail, so there's no dashboard row to tap.
         let deviceRow = app.buttons["Open Home controls"].firstMatch
-        XCTAssertTrue(deviceRow.waitForExistence(timeout: 5),
-                      "The dashboard device row should appear after logging in")
-        deviceRow.tap()
+        if deviceRow.waitForExistence(timeout: 4) {
+            deviceRow.tap()
+        }
 
-        // The device detail screen has a Control tab in the bottom tab bar.
+        // Both layouts converge on the device detail's Control tab.
         let controlTab = app.buttons["Control"].firstMatch
         XCTAssertTrue(controlTab.waitForExistence(timeout: 5),
                       "The device detail screen's Control tab should appear")
@@ -95,6 +97,9 @@ final class PetticoatUITests: XCTestCase {
     @MainActor
     func testSidebarSelectionState() throws {
         let app = XCUIApplication()
+        // Landscape so the split view shows the sidebar column alongside the
+        // detail; in portrait iPad collapses it and the cards aren't present.
+        XCUIDevice.shared.orientation = .landscapeLeft
         app.launch()
 
         let loginButton = app.buttons["Login"]
@@ -102,9 +107,10 @@ final class PetticoatUITests: XCTestCase {
                       "Login button should appear after the splash screen")
         loginButton.tap()
 
-        // The sidebar device cards are only present on regular-width (iPad) layouts.
-        // On iPhone the compact dashboard is shown instead — skip gracefully.
-        let homeCard = app.buttons["Home"].firstMatch
+        // The sidebar device cards are only present on regular-width (iPad)
+        // layouts. Queried by identifier to disambiguate from the detail
+        // toolbar's device-picker menu, which shares the device name.
+        let homeCard = app.buttons["sidebar-device-Home"]
         guard homeCard.waitForExistence(timeout: 5) else {
             throw XCTSkip("Sidebar only visible on regular-width (iPad) layout")
         }
@@ -114,7 +120,7 @@ final class PetticoatUITests: XCTestCase {
                       "'Home' device card should be selected on launch")
 
         // Tapping the second device should move the selection.
-        let upstairsCard = app.buttons["Upstairs"].firstMatch
+        let upstairsCard = app.buttons["sidebar-device-Upstairs"]
         XCTAssertTrue(upstairsCard.waitForExistence(timeout: 3),
                       "'Upstairs' device card should appear in the sidebar")
         upstairsCard.tap()
