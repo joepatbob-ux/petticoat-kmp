@@ -74,12 +74,20 @@
 			);
 			target = 48393B813019526D00765E44 /* PetticoatWidgetExtension */;
 		};
+		48AAC71A301D4A2700ADDB41 /* Exceptions for "Petticoat" folder in "Petticoat" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 000000000000000100000000 /* Petticoat */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* Petticoat */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				48AAC71A301D4A2700ADDB41 /* Exceptions for "Petticoat" folder in "Petticoat" target */,
 				48393BA53019551A00765E44 /* Exceptions for "Petticoat" folder in "PetticoatWidgetExtension" target */,
 			);
 			path = Petticoat;
@@ -507,6 +515,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Petticoat/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo of your existing thermostat wiring so you can reference it while installing your Sensi thermostat.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -552,6 +561,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Petticoat/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo of your existing thermostat wiring so you can reference it while installing your Sensi thermostat.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;

@@ -31,6 +31,7 @@ struct PetticoatWidgetIntent: WidgetConfigurationIntent {
     static var description = IntentDescription("Choose which thermostat to display.")
 
     @Parameter(title: "Thermostat") var thermostat: ThermostatEntity?
+    @Parameter(title: "Show Thermostat Name", default: false) var showThermostatName: Bool
 }
 
 // MARK: - ComfortLevel as AppEnum

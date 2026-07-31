@@ -66,16 +66,17 @@ struct PetticoatWidgetView: View {
     /// The optimistic guess (set on a comfort tap) takes precedence until the
     /// app writes the real activity and clears it.
     private var activity: WidgetActivity { snap.optimisticActivity ?? snap.activity }
-
-    private var showPicker: Bool {
-        activity == .idle || snap.feedbackGiven
-    }
+    private var systemMode: WidgetSystemMode { snap.systemMode ?? .auto }
+    private var showPicker: Bool { activity == .idle || snap.feedbackGiven }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            WidgetHeader(snap: snap)
-            if showPicker {
-                ComfortPickerContent(deviceID: snap.deviceID)
+            WidgetHeader(snap: snap, showThermostatName: entry.showThermostatName)
+            Divider()
+            if snap.isOffline == true {
+                OfflineContent()
+            } else if showPicker {
+                ComfortPickerContent(deviceID: snap.deviceID, systemMode: systemMode)
             } else {
                 ActivityContent(activity: activity, deviceID: snap.deviceID)
             }
@@ -87,31 +88,60 @@ struct PetticoatWidgetView: View {
 
 private struct WidgetHeader: View {
     let snap: WidgetSnapshot
+    let showThermostatName: Bool
 
     var body: some View {
-        HStack(spacing: 0) {
-            Text(snap.deviceName)
-                .font(.headline)
-                .foregroundStyle(.primary)
-            Spacer()
-            HStack(spacing: 10) {
-                HStack(spacing: 3) {
-                    Image(systemName: "thermometer.medium")
-                        .font(.caption2)
-                        .foregroundStyle(WC.heating)
-                    Text("\(snap.currentTemp)°")
-                        .font(.footnote.weight(.semibold))
-                }
-                HStack(spacing: 3) {
-                    Image(systemName: "humidity.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.teal)
-                    Text("\(snap.humidity)%")
-                        .font(.footnote)
-                }
+        HStack(spacing: 8) {
+            if showThermostatName {
+                Text(snap.deviceName)
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Image("sensi.logo")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .frame(height: 11)
+                    .foregroundStyle(.secondary)
             }
-            .foregroundStyle(.primary)
+
+            Spacer()
+
+            Text("\(snap.currentTemp)°")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text("\(snap.humidity)%")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
+    }
+}
+
+// MARK: Offline state
+
+private struct OfflineContent: View {
+    var body: some View {
+        VStack(spacing: 8) {
+            VStack(spacing: 4) {
+                Image(systemName: "wifi.slash")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text("Thermostat Offline")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Link(destination: URL(string: "petticoat://offline")!) {
+                Text("Learn More")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(WC.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -119,15 +149,21 @@ private struct WidgetHeader: View {
 
 private struct ComfortPickerContent: View {
     let deviceID: String
+    let systemMode: WidgetSystemMode
+
+    private var availableLevels: [ComfortLevel] {
+        ComfortLevel.allCases.filter { $0.isAvailable(for: systemMode) }
+    }
 
     var body: some View {
         VStack(spacing: 8) {
             Text("How are you feeling?")
-                .font(.subheadline.weight(.semibold))
+                .font(.subheadline.weight(.bold))
                 .foregroundStyle(.primary)
+                .padding(.bottom, 2)
 
             HStack(spacing: 6) {
-                ForEach(ComfortLevel.allCases) { level in
+                ForEach(availableLevels) { level in
                     Button(intent: ComfortFeedbackIntent(level, deviceID: deviceID)) {
                         VStack(spacing: 4) {
                             Text(level.emoji)
@@ -202,11 +238,14 @@ struct PetticoatWidget: Widget {
 #Preview(as: .systemMedium) {
     PetticoatWidget()
 } timeline: {
-    PetticoatWidgetEntry(date: .now, snapshot: .sample)
+    PetticoatWidgetEntry(date: .now, snapshot: .sample, showThermostatName: false)
     PetticoatWidgetEntry(date: .now, snapshot: WidgetSnapshot(
         deviceID: "default", deviceName: "Home", currentTemp: 72, humidity: 40,
-        activity: .heating, feedbackGiven: false))
+        activity: .heating, feedbackGiven: false), showThermostatName: true)
     PetticoatWidgetEntry(date: .now, snapshot: WidgetSnapshot(
         deviceID: "default", deviceName: "Home", currentTemp: 72, humidity: 40,
-        activity: .cooling, feedbackGiven: false))
+        activity: .cooling, feedbackGiven: false), showThermostatName: false)
+    PetticoatWidgetEntry(date: .now, snapshot: WidgetSnapshot(
+        deviceID: "default", deviceName: "Upstairs", currentTemp: 74, humidity: 44,
+        activity: .idle, feedbackGiven: false, isOffline: true), showThermostatName: false)
 }

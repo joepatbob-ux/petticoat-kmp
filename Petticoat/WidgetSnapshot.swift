@@ -30,6 +30,10 @@ struct WidgetSnapshot: Codable {
     /// real-transition detection isn't confused by the widget's optimistic guess.
     /// The app clears it on the next `writeWidgetSnapshot()`.
     var optimisticActivity: WidgetActivity?
+    /// Current system mode — controls which comfort tiles are offered.
+    var systemMode: WidgetSystemMode?
+    /// True when the thermostat has lost its cloud connection.
+    var isOffline: Bool?
 
     // MARK: - App Group — shared between the app and widget extension.
     static let appGroupID    = "group.com.joepatbob.Petticoat"
@@ -92,6 +96,10 @@ enum WidgetActivity: String, Codable, Equatable, Sendable {
     case idle, heating, cooling, fan
 }
 
+enum WidgetSystemMode: String, Codable, Sendable {
+    case heat, cool, auto, off
+}
+
 // Declares Sendable in the same file as the enum so the widget's
 // `AppEnum` conformance (which refines Sendable) isn't a retroactive
 // conformance in another file.
@@ -112,10 +120,19 @@ enum ComfortLevel: String, Codable, CaseIterable, Identifiable, Sendable {
     var emoji: String {
         switch self {
         case .cold:   "🥶"
-        case .chilly: "😦"
-        case .stuffy: "😐"
-        case .warm:   "😢"
+        case .chilly: "😮‍💨"
+        case .stuffy: "🫤"
+        case .warm:   "😓"
         case .hot:    "🥵"
+        }
+    }
+
+    func isAvailable(for mode: WidgetSystemMode) -> Bool {
+        switch mode {
+        case .heat: self == .cold || self == .chilly || self == .stuffy
+        case .cool: self == .warm || self == .hot    || self == .stuffy
+        case .off:  self == .stuffy
+        case .auto: true
         }
     }
 }

@@ -1061,6 +1061,15 @@ final class AppModel {
             snap.currentTemp = d.currentTemp
             snap.humidity    = d.humidity
             snap.activity    = widgetActivity
+            snap.isOffline   = d.isOffline
+            let widgetMode: WidgetSystemMode
+            switch d.systemMode {
+            case .heat, .auxHeat: widgetMode = .heat
+            case .cool:           widgetMode = .cool
+            case .auto:           widgetMode = .auto
+            case .off:            widgetMode = .off
+            }
+            snap.systemMode = widgetMode
             // The app is the source of truth — drop any optimistic guess the
             // widget wrote once the real activity is known.
             snap.optimisticActivity = nil
