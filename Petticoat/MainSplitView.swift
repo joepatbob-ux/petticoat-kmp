@@ -155,13 +155,17 @@ struct MainSplitView: View {
 
 // MARK: - Tab strip
 
-/// Pill-style segmented tab selector displayed inline in the navigation bar.
+/// Liquid Glass segmented tab selector displayed inline in the navigation bar. Each
+/// tab shows an icon + label (matching the iPhone tab bar); the bar itself is a glass
+/// capsule and the selected tab slides a glass pill between segments.
 private struct DeviceTabStrip: View {
     @Binding var selection: DeviceTab
     let badgeCount: Int
+    /// Drives the selected pill's matched-geometry slide between tabs.
+    @Namespace private var indicator
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 2) {
             ForEach(DeviceTab.allCases) { tab in
                 Button { selection = tab } label: {
                     tabLabel(tab)
@@ -172,27 +176,57 @@ private struct DeviceTabStrip: View {
             }
         }
         .padding(3)
-        .background(SMA.fillTertiary, in: Capsule())
+        .glassEffect(in: .capsule)
         .animation(.snappy, value: selection)
     }
 
     @ViewBuilder
     private func tabLabel(_ tab: DeviceTab) -> some View {
         let on = selection == tab
-        Text(tab.label)
-            .font(.subheadline.weight(on ? .semibold : .regular))
-            .foregroundStyle(on ? SMA.labelPrimary : SMA.labelSecondary)
+        DeviceTabIcon(tab: tab)
+            .frame(width: 22, height: 22)
             .overlay(alignment: .topTrailing) {
                 if tab == .reminders && badgeCount > 0 {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 7, height: 7)
-                        .offset(x: 5, y: -3)
+                        .offset(x: 4, y: -2)
                 }
             }
+            .foregroundStyle(on ? SMA.labelPrimary : SMA.labelSecondary)
             .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(on ? SMA.segmentedSelected : Color.clear, in: Capsule())
+            .padding(.vertical, 8)
+        .background {
+            if on {
+                Capsule()
+                    .fill(SMA.segmentedSelected)
+                    .matchedGeometryEffect(id: "selection", in: indicator)
+            }
+        }
+        .contentShape(Capsule())
+    }
+}
+
+/// A single tab glyph, bridging the two icon sources (custom template art vs SF
+/// Symbols) into one resizable, tintable image so foreground styling drives the color.
+private struct DeviceTabIcon: View {
+    let tab: DeviceTab
+
+    var body: some View {
+        let icon = tab.icon
+        Group {
+            if icon.isSystem {
+                Image(systemName: icon.name)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(icon.name)
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -307,6 +341,12 @@ private struct SidebarDeviceCard: View {
                             .foregroundStyle(SMA.labelSecondary)
                         Spacer(minLength: 0)
                     } else {
+                        // System + fan mode icons stacked vertically at the leading
+                        // edge, before the temperature — a read-only glance at the mode.
+                        VStack(spacing: 6) {
+                            SystemModeIcon(mode: device.systemMode, size: 22)
+                            FanModeIcon(mode: device.fanMode, size: 22)
+                        }
                         DisplayTemp(value: model.tempUnit.convert(device.currentTemp), size: 42, activity: device.activity)
                         Spacer(minLength: 8)
                         if !setpointText.isEmpty {

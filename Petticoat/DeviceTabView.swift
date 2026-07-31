@@ -108,6 +108,19 @@ enum DeviceTab: Hashable, CaseIterable, Identifiable {
         case .settings:  "Settings"
         }
     }
+
+    /// The tab's glyph, matching the iPhone tab bar. Control and Schedule use custom
+    /// (template) art from the catalog; the rest are SF Symbols. `isSystem`
+    /// distinguishes `Image(systemName:)` from `Image(_:)`.
+    var icon: (name: String, isSystem: Bool) {
+        switch self {
+        case .control:   ("thermostat.fill", false)
+        case .schedule:  ("schedule.activity", false)
+        case .usage:     ("gauge.with.needle.fill", true)
+        case .reminders: ("bell", true)
+        case .settings:  ("gearshape", true)
+        }
+    }
 }
 
 struct DeviceTabContent: View {

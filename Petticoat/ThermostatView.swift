@@ -258,20 +258,28 @@ struct SetpointStepper: View {
         if mode.isRangeSetpoint {
             if model.tempUnit == .celsius {
                 // Stacked layout for Celsius: decimal values are wider and stack more
-                // comfortably than sitting side-by-side in the horizontal layout.
-                VStack(spacing: 4) {
-                    segment(value: low, bound: .low)
-                    segment(value: high, bound: .high)
+                // comfortably than sitting side-by-side in the horizontal layout. The
+                // dot sits between the rows, mirroring the Fahrenheit separator.
+                VStack(spacing: 0) {
+                    segment(value: low, bound: .low, verticalPadding: 4)
+                    separator(.vertical)
+                    segment(value: high, bound: .high, verticalPadding: 4)
                 }
-                .contentShape(Capsule())
+                // A rounded rect rather than a Capsule: the stack is tall enough that
+                // a full capsule bulges into an oval around the numbers.
+                .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .onTapGesture { flip() }
                 .padding(.horizontal, 4)
                 .padding(.vertical, 3)
-                .background { if editing != nil { Capsule().fill(SMA.fillTertiary) } }
+                .background {
+                    if editing != nil {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous).fill(SMA.fillTertiary)
+                    }
+                }
             } else {
                 HStack(spacing: 0) {
                     segment(value: low, bound: .low)
-                    separator
+                    separator(.horizontal)
                     segment(value: high, bound: .high)
                 }
                 // Binary selection: a tap anywhere flips to the other bound.
@@ -289,18 +297,21 @@ struct SetpointStepper: View {
         }
     }
 
-    /// A constant-width gap between the digits: the dot at rest, an equal-width
-    /// blank while editing — so the digits never shift when the dot appears/vanishes.
-    private var separator: some View {
+    /// A constant-size gap between the digits: the dot at rest, an equal-size blank
+    /// while editing — so the digits never shift when the dot appears/vanishes. The
+    /// gap runs along the layout axis (horizontal for Fahrenheit, vertical for the
+    /// stacked Celsius numbers).
+    private func separator(_ axis: Axis) -> some View {
         Image(systemName: "circle.fill")
             .font(.system(size: 4))
             .foregroundStyle(SMA.labelSecondary)
-            .frame(width: 12)
+            .frame(width: axis == .horizontal ? 12 : nil,
+                   height: axis == .vertical ? 4 : nil)
             .opacity(editing == nil ? 1 : 0)
             .accessibilityHidden(true)
     }
 
-    private func segment(value: Int, bound: SetpointBound, showsBackground: Bool = true) -> some View {
+    private func segment(value: Int, bound: SetpointBound, showsBackground: Bool = true, verticalPadding: CGFloat = 8) -> some View {
         let selected = editing == bound
         return Text(segmentText(value))
             .font(.title3.weight(.semibold))
@@ -308,7 +319,7 @@ struct SetpointStepper: View {
             .foregroundStyle(editing == nil || selected ? SMA.labelPrimary : SMA.labelSecondary)
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.vertical, verticalPadding)
             .background { if selected && showsBackground { Capsule().fill(SMA.card) } }
             .accessibilityAddTraits(selected ? [.isSelected] : [])
             .accessibilityLabel(bound == .low ? "Heat setpoint" : "Cool setpoint")
