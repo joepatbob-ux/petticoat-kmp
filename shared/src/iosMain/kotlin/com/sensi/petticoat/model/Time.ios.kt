@@ -19,3 +19,16 @@ actual fun platformFormatTime(epochMillis: Long): String {
         NSDate.dateWithTimeIntervalSince1970(epochMillis.toDouble() / 1000.0),
     )
 }
+
+actual fun platformFormatDate(epochMillis: Long): String {
+    val formatter = NSDateFormatter().apply {
+        dateStyle = platform.Foundation.NSDateFormatterMediumStyle
+        timeStyle = NSDateFormatterNoStyle
+    }
+    return formatter.stringFromDate(
+        NSDate.dateWithTimeIntervalSince1970(epochMillis.toDouble() / 1000.0),
+    )
+}
+
+actual fun platformFormatDateRange(startEpochMillis: Long, endEpochMillis: Long): String =
+    "${platformFormatDate(startEpochMillis)} – ${platformFormatDate(endEpochMillis)}"

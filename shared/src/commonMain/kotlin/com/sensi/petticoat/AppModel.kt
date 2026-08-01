@@ -8,6 +8,7 @@ import com.sensi.petticoat.model.Contractor
 import com.sensi.petticoat.model.DashboardSection
 import com.sensi.petticoat.model.Device
 import com.sensi.petticoat.model.DeviceTab
+import com.sensi.petticoat.model.DistanceUnit
 import com.sensi.petticoat.model.FanMode
 import com.sensi.petticoat.model.HoldDuration
 import com.sensi.petticoat.model.Home
@@ -22,6 +23,7 @@ import com.sensi.petticoat.model.StepperStyle
 import com.sensi.petticoat.model.SystemMode
 import com.sensi.petticoat.model.ThermostatSettings
 import com.sensi.petticoat.model.TimelinePeriod
+import com.sensi.petticoat.model.VacationTrip
 import com.sensi.petticoat.model.formatMinutes
 import com.sensi.petticoat.model.newId
 import com.sensi.petticoat.model.platformFormatTime
@@ -77,6 +79,7 @@ data class AppState(
     ),
     val selectedProgramId: Map<ScheduleKind, String> = emptyMap(),
     val serviceReminders: List<ServiceReminder> = ServiceReminder.samples(),
+    val vacations: List<VacationTrip> = VacationTrip.samples(),
     val contractor: Contractor = Contractor.sample(),
     val thermostatSettings: ThermostatSettings = ThermostatSettings(),
     val todaysTimeline: List<TimelineEntry> = emptyList(),
@@ -418,6 +421,14 @@ class AppModel(
     fun setDeviceGeofenceEnabled(v: Boolean, deviceId: String? = null) =
         updateDevice(deviceId) { copy(geofenceEnabled = v) }
 
+    fun setDeviceGeofenceRadius(v: Int, deviceId: String? = null) =
+        updateDevice(deviceId) { copy(geofenceRadius = v.coerceIn(geofenceUnit.range)) }
+
+    fun setDeviceGeofenceUnit(v: DistanceUnit, deviceId: String? = null) =
+        updateDevice(deviceId) {
+            copy(geofenceUnit = v, geofenceRadius = geofenceRadius.coerceIn(v.range))
+        }
+
     fun setDeviceUsePresets(v: Boolean, deviceId: String? = null) =
         updateDevice(deviceId) { copy(usePresets = v) }
 
@@ -499,6 +510,43 @@ class AppModel(
         )
     }
 
+    fun saveVacation(trip: VacationTrip) = update { s ->
+        val normalized = trip.normalized()
+        val list = s.vacations.toMutableList()
+        val index = list.indexOfFirst { it.id == normalized.id }
+        if (index >= 0) list[index] = normalized else list.add(normalized)
+        s.copy(vacations = list)
+    }
+
+    fun deleteVacation(id: String) = update { s ->
+        val removedActive = s.vacations.any { it.id == id && it.isActive }
+        val next = s.copy(vacations = s.vacations.filterNot { it.id == id })
+        if (removedActive) syncScheduleSetpoints(next.copy(controlMode = ControlMode.Schedule)) else next
+    }
+
+    fun setVacationActive(id: String, active: Boolean) = update { s ->
+        val target = s.vacations.firstOrNull { it.id == id } ?: return@update s
+        val vacations = s.vacations.map {
+            it.copy(isActive = active && it.id == id)
+        }
+        if (!active) {
+            return@update syncScheduleSetpoints(
+                s.copy(vacations = vacations, controlMode = ControlMode.Schedule),
+            )
+        }
+        val profile = target.profileId?.let { profileId ->
+            s.activityProfiles.firstOrNull { it.id == profileId }
+        }
+        val devices = if (profile == null) s.devices else s.devices.map {
+            if (it.id == s.device.id) {
+                it.copy(keepMin = profile.heatTo, keepMax = profile.coolTo)
+            } else {
+                it
+            }
+        }
+        s.copy(vacations = vacations, devices = devices, controlMode = ControlMode.Vacation)
+    }
+
     fun resumeSchedule() = update { s ->
         syncScheduleSetpoints(s.copy(holdEndsAtEpochMs = null, controlMode = ControlMode.Schedule))
     }
@@ -543,7 +591,7 @@ class AppModel(
     }
 
     fun selectProgram(id: String, kind: ScheduleKind) = update {
-        it.copy(selectedProgramId = it.selectedProgramId + (kind to id))
+        syncScheduleSetpoints(it.copy(selectedProgramId = it.selectedProgramId + (kind to id)))
     }
 
     fun saveProgram(program: ScheduleProgram, kind: ScheduleKind) = update { s ->
@@ -554,7 +602,9 @@ class AppModel(
             list.add(program)
             selected[kind] = program.id
         }
-        s.copy(programs = s.programs + (kind to list), selectedProgramId = selected)
+        syncScheduleSetpoints(
+            s.copy(programs = s.programs + (kind to list), selectedProgramId = selected),
+        )
     }
 
     fun deleteProgram(id: String, kind: ScheduleKind) = update { s ->
@@ -564,7 +614,9 @@ class AppModel(
             val first = list.firstOrNull()?.id
             if (first == null) selected.remove(kind) else selected[kind] = first
         }
-        s.copy(programs = s.programs + (kind to list), selectedProgramId = selected)
+        syncScheduleSetpoints(
+            s.copy(programs = s.programs + (kind to list), selectedProgramId = selected),
+        )
     }
 
     fun duplicateProgram(program: ScheduleProgram, kind: ScheduleKind) = update { s ->

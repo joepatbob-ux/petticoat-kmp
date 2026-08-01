@@ -4,12 +4,14 @@ import com.sensi.petticoat.model.ControlMode
 import com.sensi.petticoat.model.HVACActivity
 import com.sensi.petticoat.model.HoldDuration
 import com.sensi.petticoat.model.Home
+import com.sensi.petticoat.model.DistanceUnit
 import com.sensi.petticoat.model.ScheduleKind
 import com.sensi.petticoat.model.ScheduleProgram
 import com.sensi.petticoat.model.ServiceReminder
 import com.sensi.petticoat.model.SetpointBound
 import com.sensi.petticoat.model.SetpointConfig
 import com.sensi.petticoat.model.SystemMode
+import com.sensi.petticoat.model.VacationTrip
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -288,5 +290,50 @@ class AppModelTest {
         model.syncScheduleSetpoints()
         assertEquals(period.heatTo, model.snapshot.device.keepMin)
         assertEquals(period.coolTo, model.snapshot.device.keepMax)
+    }
+
+    @Test
+    fun geofenceRadiusAndUnitPersistAndClamp() {
+        val model = model()
+        model.setDeviceGeofenceRadius(9)
+        model.setDeviceGeofenceUnit(DistanceUnit.Kilometers)
+        assertEquals(9, model.snapshot.device.geofenceRadius)
+        assertEquals(DistanceUnit.Kilometers, model.snapshot.device.geofenceUnit)
+        model.setDeviceGeofenceRadius(99)
+        assertEquals(16, model.snapshot.device.geofenceRadius)
+    }
+
+    @Test
+    fun vacationCrudAndActivationUseSharedState() {
+        val model = model()
+        val profile = model.snapshot.activityProfiles.first()
+        val trip = VacationTrip(
+            name = "Trip",
+            startEpochMs = 200,
+            endEpochMs = 100,
+            profileId = profile.id,
+        )
+        model.saveVacation(trip)
+        val saved = model.snapshot.vacations.first { it.id == trip.id }
+        assertEquals(saved.startEpochMs, saved.endEpochMs)
+        model.setVacationActive(trip.id, true)
+        assertEquals(ControlMode.Vacation, model.snapshot.controlMode)
+        assertEquals(profile.heatTo, model.snapshot.device.keepMin)
+        assertEquals(1, model.snapshot.vacations.count { it.isActive })
+        model.setVacationActive(trip.id, false)
+        assertEquals(ControlMode.Schedule, model.snapshot.controlMode)
+        model.deleteVacation(trip.id)
+        assertFalse(model.snapshot.vacations.any { it.id == trip.id })
+    }
+
+    @Test
+    fun timelineUsesProgramsWhenPresetsAreDisabled() {
+        val model = model()
+        model.setDeviceUsePresets(false)
+        model.setSystemMode(SystemMode.Heat)
+        val program = model.programsFor(ScheduleKind.Heat).first()
+        model.selectProgram(program.id, ScheduleKind.Heat)
+        assertEquals(program.groups.first().events.size, model.snapshot.todaysTimeline.size)
+        assertEquals(model.snapshot.currentPeriod(600)?.heatTo, model.snapshot.device.keepMin)
     }
 }
