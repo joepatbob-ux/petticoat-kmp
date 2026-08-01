@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -54,7 +55,7 @@ class AndroidParityFlowTest {
         openDevice()
         composeRule.onNodeWithTag("device-tab-usage").performClick()
         composeRule.onNodeWithTag("usage-range-recent").assertIsDisplayed()
-        composeRule.onAllNodes(hasTestTag("usage-runtime-bar"))[0].assertIsDisplayed()
+        composeRule.onAllNodes(hasTestTag("usage-runtime-bar"))[0].performScrollTo().assertIsDisplayed()
 
         composeRule.onNodeWithTag("device-tab-control").performClick()
         composeRule.onNodeWithTag("sensor-average-pill").performClick()
