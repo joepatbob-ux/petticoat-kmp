@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -82,7 +83,16 @@ fun DashboardScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = { model.setShowAccount(true) }) {
+                    IconButton(
+                        onClick = { model.setShowHelp(true) },
+                        modifier = Modifier.testTag("dashboard-help"),
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
+                    }
+                    IconButton(
+                        onClick = { model.setShowAccount(true) },
+                        modifier = Modifier.testTag("dashboard-account"),
+                    ) {
                         Icon(Icons.Outlined.AccountCircle, contentDescription = "Account")
                     }
                 },
@@ -95,6 +105,7 @@ fun DashboardScreen(
             FloatingActionButton(
                 onClick = { model.setShowAddDevice(true) },
                 containerColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.testTag("dashboard-add-device"),
             ) {
                 Icon(Icons.Outlined.Add, contentDescription = "Add device")
             }

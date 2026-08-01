@@ -16,6 +16,7 @@ import com.sensi.petticoat.AppModel
 import com.sensi.petticoat.AppState
 import com.sensi.petticoat.Route
 import com.sensi.petticoat.ui.device.DeviceScaffold
+import com.sensi.petticoat.ui.navigation.GlobalSheets
 import com.sensi.petticoat.ui.screens.DashboardScreen
 import com.sensi.petticoat.ui.screens.LoginScreen
 import com.sensi.petticoat.ui.screens.SplashScreen
@@ -34,6 +35,7 @@ fun PetticoatApp(model: AppModel, state: AppState) {
                 Route.Main -> MainNav(model = model, state = state)
             }
         }
+        GlobalSheets(model, state)
     }
 }
 

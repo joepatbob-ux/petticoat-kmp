@@ -35,11 +35,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,6 +65,8 @@ fun ControlScreen(
     state: AppState,
     onBack: () -> Unit,
 ) {
+    var showMode by remember { mutableStateOf(false) }
+    var showSensors by remember { mutableStateOf(false) }
     val device = state.device
     val activityColor = when (device.activity) {
         HVACActivity.Heating -> SensiHeating
@@ -162,6 +168,21 @@ fun ControlScreen(
 
             Spacer(Modifier.height(32.dp))
 
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = false,
+                    onClick = { showMode = true },
+                    label = { Text("Mode · ${device.systemMode.label}") },
+                    modifier = Modifier.testTag("mode-pill"),
+                )
+                FilterChip(
+                    selected = false,
+                    onClick = { showSensors = true },
+                    label = { Text("${device.participatingCount} Sensors") },
+                    modifier = Modifier.testTag("sensor-average-pill"),
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -216,6 +237,9 @@ fun ControlScreen(
             }
         }
     }
+
+    if (showMode) ModeSheet(model, state) { showMode = false }
+    if (showSensors) SensorsSheet(model, state) { showSensors = false }
 }
 
 @Composable

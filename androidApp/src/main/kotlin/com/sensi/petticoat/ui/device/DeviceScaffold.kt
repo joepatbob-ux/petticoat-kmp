@@ -24,7 +24,7 @@ import com.sensi.petticoat.AppModel
 import com.sensi.petticoat.AppState
 import com.sensi.petticoat.model.DeviceTab
 import com.sensi.petticoat.ui.screens.ControlScreen
-import com.sensi.petticoat.ui.screens.PlaceholderUsageScreen
+import com.sensi.petticoat.ui.screens.UsageScreen
 import com.sensi.petticoat.ui.screens.reminders.RemindersScreen
 import com.sensi.petticoat.ui.screens.schedule.ScheduleScreen
 import com.sensi.petticoat.ui.screens.settings.SettingsScreen
@@ -64,7 +64,7 @@ fun DeviceScaffold(
             when (state.selectedTab) {
                 DeviceTab.Control -> ControlScreen(model, state, onBack)
                 DeviceTab.Schedule -> ScheduleScreen(model, state, onBack)
-                DeviceTab.Usage -> PlaceholderUsageScreen(state, onBack)
+                DeviceTab.Usage -> UsageScreen(model, state, onBack)
                 DeviceTab.Reminders -> RemindersScreen(model, state, onBack)
                 DeviceTab.Settings -> SettingsScreen(model, state, onBack)
             }
