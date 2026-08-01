@@ -42,7 +42,8 @@ run the **androidApp** configuration.
 
 The adaptive Android device experience includes native Material Expressive Control,
 Schedule, Usage, Reminders, and Settings tabs. Schedule supports activity profiles,
-preset/program editing, vacations, geofence radius, and a draggable radial dial.
+preset/program editing, vacations, geofence radius, and a draggable radial dial. Usage,
+Sensors, Mode, Account, Help, and guided Add Device flows are also native Compose.
 
 ### Shared tests
 

@@ -40,7 +40,9 @@ Android owns its Compose UI and collects `AppModel.state` with
 `collectAsStateWithLifecycle()`. The theme uses `MaterialExpressiveTheme` and expressive
 motion. The adaptive device shell exposes Control, Schedule, Usage, Reminders, and
 Settings tabs. Schedule includes profiles, preset/program editing, vacations, geofence,
-and a draggable Canvas dial; Reminders and Settings use native Material forms and sheets.
+and a draggable Canvas dial. Usage includes runtime ranges and expandable mode charts;
+Control exposes Sensors and Mode sheets; global Account, Help, and Add Device flows use
+native Material sheets.
 
 ## iOS
 
