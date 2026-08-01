@@ -206,15 +206,16 @@ private fun SensorRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (sensor.battery != null) {
+        val battery = sensor.battery
+        if (battery != null) {
             Icon(
                 Icons.Outlined.BatteryFull,
                 contentDescription = "Battery",
-                tint = batteryColor(sensor.battery),
+                tint = batteryColor(battery),
                 modifier = Modifier.size(20.dp),
             )
             Text(
-                "${sensor.battery}%",
+                "$battery%",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -278,11 +279,12 @@ private fun SensorDetail(
                 InfoRow("Temperature", "${sensor.temp}$unitLabel")
                 RowDivider()
                 InfoRow("Humidity", "${sensor.humidity}%")
-                if (sensor.battery != null) {
+                val battery = sensor.battery
+                if (battery != null) {
                     RowDivider()
-                    InfoRow("Battery", "${sensor.battery}%")
+                    InfoRow("Battery", "$battery%")
                     RowDivider()
-                    InfoRow("Battery Health", batteryHealth(sensor.battery))
+                    InfoRow("Battery Health", batteryHealth(battery))
                 }
             }
         }

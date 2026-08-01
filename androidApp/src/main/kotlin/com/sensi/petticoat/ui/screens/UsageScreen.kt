@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -166,6 +167,12 @@ private fun DataRow(sample: UsageSample, expanded: Boolean) {
 
 @Composable
 private fun UsageBar(sample: UsageSample) {
+    val segments = listOf(
+        sample.coolMinutes to SensiCooling,
+        sample.heatMinutes to SensiHeating,
+        sample.auxMinutes to SensiAux,
+        sample.fanMinutes to SensiFanPurple,
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -175,23 +182,18 @@ private fun UsageBar(sample: UsageSample) {
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
         if (sample.hasData && sample.totalMinutes > 0) {
-            Segment(sample.coolMinutes, SensiCooling)
-            Segment(sample.heatMinutes, SensiHeating)
-            Segment(sample.auxMinutes, SensiAux)
-            Segment(sample.fanMinutes, SensiFanPurple)
+            segments.forEach { (minutes, color) ->
+                if (minutes > 0) {
+                    Box(
+                        modifier = Modifier
+                            .weight(minutes.toFloat())
+                            .fillMaxHeight()
+                            .background(color),
+                    )
+                }
+            }
         }
     }
-}
-
-@Composable
-private fun androidx.compose.foundation.layout.RowScope.Segment(minutes: Int, color: Color) {
-    if (minutes <= 0) return
-    Box(
-        modifier = Modifier
-            .weight(minutes.toFloat())
-            .fillMaxSize()
-            .background(color),
-    )
 }
 
 @Composable
