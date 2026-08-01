@@ -23,7 +23,10 @@ struct ScheduleView: View {
             }
 
             Section {
-                Toggle("Use Presets", isOn: $model[device: \.usePresets])
+                Toggle("Use Presets", isOn: Binding(
+                    get: { model.device.usePresets },
+                    set: model.setUsePresets
+                ))
                 if model.device.usePresets {
                     NavigationLink {
                         ActivityProfilesList()
@@ -55,13 +58,19 @@ struct ScheduleView: View {
             }
 
             Section {
-                Toggle("Early Start", isOn: $model[device: \.earlyStart])
+                Toggle("Early Start", isOn: Binding(
+                    get: { model.device.earlyStart },
+                    set: model.setEarlyStart
+                ))
             } footer: {
                 Text("Heat or cool ahead of time to reach your set temperature at the scheduled time.")
             }
 
             Section {
-                Toggle("Auto Home/Away", isOn: $model[device: \.geofenceEnabled])
+                Toggle("Auto Home/Away", isOn: Binding(
+                    get: { model.device.geofenceEnabled },
+                    set: model.setGeofenceEnabled
+                ))
                 if model.device.geofenceEnabled {
                     NavigationLink {
                         GeofenceRadiusView(radius: $geofenceRadius, unit: $geofenceUnit)

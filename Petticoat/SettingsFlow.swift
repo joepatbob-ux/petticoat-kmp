@@ -54,34 +54,37 @@ enum TemperatureUnit: String, CaseIterable, Identifiable {
     // toggle/picker only invalidates that control, not the whole Settings screen.
 
     // Display Options
-    var continuousBacklight = true
-    var displayHumidity = true
-    var displayTime = true
-    var units: TemperatureUnit = .fahrenheit
+    @ObservationIgnored var onChange: (() -> Void)?
+    private func changed() { onChange?() }
+
+    var continuousBacklight = true { didSet { changed() } }
+    var displayHumidity = true { didSet { changed() } }
+    var displayTime = true { didSet { changed() } }
+    var units: TemperatureUnit = .fahrenheit { didSet { changed() } }
 
     // System Configuration
-    var lockThermostat = false
-    var coolingMin = 55
-    var heatingMax = 99
-    var humidification = true
-    var humidifyTo = 40
-    var dehumidification = true
-    var dehumidifyTo = 40
-    var coolingBoost = "Comfort"
-    var heatingBoost = "Comfort"
-    var auxBoost = "Comfort"
-    var temperatureOffset = 0
-    var humidityOffset = 0
-    var acProtection = true
+    var lockThermostat = false { didSet { changed() } }
+    var coolingMin = 55 { didSet { changed() } }
+    var heatingMax = 99 { didSet { changed() } }
+    var humidification = true { didSet { changed() } }
+    var humidifyTo = 40 { didSet { changed() } }
+    var dehumidification = true { didSet { changed() } }
+    var dehumidifyTo = 40 { didSet { changed() } }
+    var coolingBoost = "Comfort" { didSet { changed() } }
+    var heatingBoost = "Comfort" { didSet { changed() } }
+    var auxBoost = "Comfort" { didSet { changed() } }
+    var temperatureOffset = 0 { didSet { changed() } }
+    var humidityOffset = 0 { didSet { changed() } }
+    var acProtection = true { didSet { changed() } }
 
     // About / Location
-    var name = ""
-    var locationAddress = ""
-    var locationUnit = ""
-    var locationCity = ""
-    var locationState = ""
-    var locationZip = ""
-    var locationCountry = "United States"
+    var name = "" { didSet { changed() } }
+    var locationAddress = "" { didSet { changed() } }
+    var locationUnit = "" { didSet { changed() } }
+    var locationCity = "" { didSet { changed() } }
+    var locationState = "" { didSet { changed() } }
+    var locationZip = "" { didSet { changed() } }
+    var locationCountry = "United States" { didSet { changed() } }
 }
 
 struct DisplayOptionsView: View {
@@ -123,12 +126,15 @@ struct DisplayOptionsView: View {
 /// the reminder "Call Contractor" action share one source of truth. A reference type so
 /// editing one field doesn't invalidate every field's view.
 @Observable final class Contractor {
-    var company: String
-    var address: String
-    var phone: String
-    var city: String
-    var state: String
-    var country: String
+    @ObservationIgnored var onChange: (() -> Void)?
+    private func changed() { onChange?() }
+
+    var company: String { didSet { changed() } }
+    var address: String { didSet { changed() } }
+    var phone: String { didSet { changed() } }
+    var city: String { didSet { changed() } }
+    var state: String { didSet { changed() } }
+    var country: String { didSet { changed() } }
 
     init(company: String = "", address: String = "", phone: String = "",
          city: String = "", state: String = "", country: String = "") {

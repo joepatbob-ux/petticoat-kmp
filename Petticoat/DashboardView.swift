@@ -129,7 +129,7 @@ struct DashboardToolbar: ToolbarContent {
         // actions (Add a Device, Account) grouped to its right.
         if showHelp {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { model.showHelp = true } label: {
+                Button { model.setShowHelp(true) } label: {
                     Image(systemName: "questionmark.bubble")
                 }
                 .accessibilityLabel("Help and Support")
@@ -137,11 +137,11 @@ struct DashboardToolbar: ToolbarContent {
         }
         ToolbarSpacer(.fixed, placement: .topBarTrailing)
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Button { model.showAddDevice = true } label: {
+            Button { model.setShowAddDevice(true) } label: {
                 Image(systemName: "plus")
             }
             .accessibilityLabel("Add a Device")
-            Button { model.showAccount = true } label: {
+            Button { model.setShowAccount(true) } label: {
                 Image(systemName: "person.crop.circle")
             }
             .accessibilityLabel("Account")
@@ -690,7 +690,7 @@ struct SpotlightCard: View {
     private var overflow: some View {
         Menu {
             if item.startsInstall {
-                Button("Get Help", systemImage: "questionmark.circle") { model.showHelp = true }
+                Button("Get Help", systemImage: "questionmark.circle") { model.setShowHelp(true) }
             } else {
                 if !expanded {
                     Button("Learn More", systemImage: "arrow.up.right") { showDetail = true }
@@ -710,7 +710,7 @@ struct SpotlightCard: View {
     }
 
     private func primaryAction() {
-        if item.startsInstall { model.showAddDevice = true } else { showDetail = true }
+        if item.startsInstall { model.setShowAddDevice(true) } else { showDetail = true }
     }
 
     private var titleColor: Color { kind.isFilled ? .white : SMA.labelPrimary }

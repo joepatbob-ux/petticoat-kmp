@@ -11,12 +11,11 @@ struct MainSplitView: View {
     @State private var usageRange: UsageRange = .recent
 
     var body: some View {
-        @Bindable var model = model
         // Map the shared `sidebarVisible` flag to the split view's column visibility,
         // so the menu bar's Show/Hide Dashboard command and the toolbar button agree.
         let columnVisibility = Binding<NavigationSplitViewVisibility>(
             get: { model.sidebarVisible ? .all : .detailOnly },
-            set: { model.sidebarVisible = $0 != .detailOnly }
+            set: { model.setSidebarVisible($0 != .detailOnly) }
         )
         NavigationSplitView(columnVisibility: columnVisibility) {
             // Drop the default sidebar toggle; the dashboard button in the detail's
@@ -35,7 +34,9 @@ struct MainSplitView: View {
                     // Expand / collapse the sidebar (dashboard) column.
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
-                            withAnimation(.snappy) { model.sidebarVisible.toggle() }
+                            withAnimation(.snappy) {
+                                model.setSidebarVisible(!model.sidebarVisible)
+                            }
                         } label: {
                             Image(systemName: "sidebar.leading")
                         }
@@ -50,13 +51,19 @@ struct MainSplitView: View {
                     }
                     // Tab strip centred in the nav bar, same row as all other actions
                     ToolbarItem(placement: .principal) {
-                        DeviceTabStrip(selection: $model.selectedTab, badgeCount: model.criticalReminderCount)
+                        DeviceTabStrip(
+                            selection: Binding(
+                                get: { model.selectedTab },
+                                set: model.setSelectedTab
+                            ),
+                            badgeCount: model.criticalReminderCount
+                        )
                     }
                     // Usage range toggle sits between the tab strip and the help button
                     usageRangeToolbarItem
                     // Help button — always visible, right of the usage toggle
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button { model.showHelp = true } label: {
+                        Button { model.setShowHelp(true) } label: {
                             Image(systemName: "questionmark.bubble")
                         }
                         .accessibilityLabel("Help and Support")
@@ -66,7 +73,10 @@ struct MainSplitView: View {
                 }
             }
         }
-        .sheet(isPresented: $model.addingReminder) {
+        .sheet(isPresented: Binding(
+            get: { model.addingReminder },
+            set: model.setAddingReminder
+        )) {
             ReminderEditor(initial: nil) { model.saveReminder($0) }
         }
     }
@@ -146,7 +156,7 @@ struct MainSplitView: View {
         if model.selectedTab == .reminders {
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
-                Button { model.addingReminder = true } label: { Image(systemName: "plus") }
+                Button { model.setAddingReminder(true) } label: { Image(systemName: "plus") }
                     .accessibilityLabel("Add Reminder")
             }
         }

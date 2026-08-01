@@ -14,7 +14,7 @@ enum ReminderBasis: String, CaseIterable, Identifiable {
 }
 
 struct ServiceReminder: Identifiable, Hashable {
-    var id = UUID()
+    var id: UUID
     var name: String
     var type: String
     var basedOn: ReminderBasis
@@ -26,6 +26,30 @@ struct ServiceReminder: Identifiable, Hashable {
     var lifeRemaining: Double
     /// Whether a contractor is on file (shows the "Call Contractor" action).
     var hasContractor: Bool = false
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        type: String,
+        basedOn: ReminderBasis,
+        durationText: String,
+        nextService: Date,
+        lastCompleted: Date?,
+        spec: String,
+        lifeRemaining: Double,
+        hasContractor: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.basedOn = basedOn
+        self.durationText = durationText
+        self.nextService = nextService
+        self.lastCompleted = lastCompleted
+        self.spec = spec
+        self.lifeRemaining = lifeRemaining
+        self.hasContractor = hasContractor
+    }
 
     /// Below this fraction the life bar turns red (matches `MetricBar`'s red band).
     static let criticalThreshold = 0.25

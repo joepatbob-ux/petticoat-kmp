@@ -2,9 +2,19 @@ package com.sensi.petticoat.model
 
 import kotlin.random.Random
 
-/** Opaque string id — stable across platforms without kotlinx.uuid. */
-fun newId(): String = buildString(32) {
-    repeat(32) { append("0123456789abcdef"[Random.nextInt(16)]) }
+/** RFC 4122-shaped UUID string, generated without another common dependency. */
+fun newId(): String {
+    val hex = "0123456789abcdef"
+    val chars = CharArray(36)
+    for (index in chars.indices) {
+        chars[index] = when (index) {
+            8, 13, 18, 23 -> '-'
+            14 -> '4' // version 4
+            19 -> "89ab"[Random.nextInt(4)] // RFC 4122 variant
+            else -> hex[Random.nextInt(16)]
+        }
+    }
+    return chars.concatToString()
 }
 
 enum class SystemMode {
@@ -27,19 +37,24 @@ enum class SystemMode {
         }
 
     val isRangeSetpoint: Boolean get() = this == Auto || this == Off
+    val wireValue: String get() = name
 }
 
 enum class FanMode {
     Auto, On;
 
     val label: String get() = if (this == Auto) "Auto" else "On"
+    val wireValue: String get() = name
 }
 
-enum class HVACActivity { Idle, Heating, Cooling }
+enum class HVACActivity { Idle, Heating, Cooling; val wireValue: String get() = name }
 
-enum class ControlMode { Standard, Schedule, Hold, Activity, Vacation }
+enum class ControlMode {
+    Standard, Schedule, Hold, Activity, Vacation;
+    val wireValue: String get() = name
+}
 
-enum class SetpointBound { Low, High }
+enum class SetpointBound { Low, High; val wireValue: String get() = name }
 
 object SetpointConfig {
     const val MIN_TEMP = 45
@@ -69,6 +84,7 @@ enum class HoldDuration {
             SixHours -> 6
             TwelveHours -> 12
         }
+    val wireValue: String get() = name
 }
 
 enum class HomeSize {
@@ -89,6 +105,7 @@ enum class HomeSize {
             Large -> 0.72
             XLarge -> 0.50
         }
+    val wireValue: String get() = name
 }
 
 enum class HVACSystemType {
@@ -109,12 +126,14 @@ enum class HVACSystemType {
             HeatPump -> 0.90
             AuxHeat -> 0.80
         }
+    val wireValue: String get() = name
 }
 
 enum class DashboardSection {
     Thermostats, Spotlight;
 
     val title: String get() = if (this == Thermostats) "Thermostats" else "Spotlight"
+    val wireValue: String get() = name
 }
 
 enum class StepperStyle {
@@ -125,6 +144,7 @@ enum class StepperStyle {
             PlusMinus -> "Plus / Minus"
             Chevron -> "Chevrons"
         }
+    val wireValue: String get() = name
 }
 
 enum class AppAppearance {
@@ -136,6 +156,7 @@ enum class AppAppearance {
             System -> "System"
             Dark -> "Dark"
         }
+    val wireValue: String get() = name
 }
 
 enum class TemperatureUnit {
@@ -153,6 +174,7 @@ enum class TemperatureUnit {
         val v = convert(fahrenheit)
         return if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
     }
+    val wireValue: String get() = name
 }
 
 enum class DeviceTab {
@@ -166,6 +188,7 @@ enum class DeviceTab {
             Reminders -> "Reminders"
             Settings -> "Settings"
         }
+    val wireValue: String get() = name
 }
 
 enum class ScheduleKind {
@@ -177,8 +200,9 @@ enum class ScheduleKind {
             Cool -> "Cooling Schedule"
             Auto -> "Auto Schedule"
         }
+    val wireValue: String get() = name
 }
 
-enum class ReminderBasis { Runtime, Calendar }
+enum class ReminderBasis { Runtime, Calendar; val wireValue: String get() = name }
 
-enum class SpotlightKind { Promotional, Generic, Partner }
+enum class SpotlightKind { Promotional, Generic, Partner; val wireValue: String get() = name }

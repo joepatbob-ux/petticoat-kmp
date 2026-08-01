@@ -3,13 +3,31 @@ import SwiftUI
 // MARK: - Model
 
 struct ActivityProfile: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var name: String
     var symbol: String
     var colorHex: UInt
     var heatTo: Int
     var coolTo: Int
     var subtitle: String
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        symbol: String,
+        colorHex: UInt,
+        heatTo: Int,
+        coolTo: Int,
+        subtitle: String
+    ) {
+        self.id = id
+        self.name = name
+        self.symbol = symbol
+        self.colorHex = colorHex
+        self.heatTo = heatTo
+        self.coolTo = coolTo
+        self.subtitle = subtitle
+    }
 
     var rangeText: String { "\(heatTo) · \(coolTo)" }
 

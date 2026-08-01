@@ -56,7 +56,6 @@ struct MainView: View {
     @Environment(\.horizontalSizeClass) private var hSize
 
     var body: some View {
-        @Bindable var model = model
         Group {
             if hSize == .regular {
                 MainSplitView()
@@ -66,15 +65,24 @@ struct MainView: View {
                 }
             }
         }
-        .sheet(isPresented: $model.showAccount) {
+        .sheet(isPresented: Binding(
+            get: { model.showAccount },
+            set: model.setShowAccount
+        )) {
             AccountView()
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $model.showAddDevice) {
+        .sheet(isPresented: Binding(
+            get: { model.showAddDevice },
+            set: model.setShowAddDevice
+        )) {
             AddDeviceView()
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $model.showHelp) {
+        .sheet(isPresented: Binding(
+            get: { model.showHelp },
+            set: model.setShowHelp
+        )) {
             HelpSupportView()
                 .presentationDragIndicator(.visible)
         }

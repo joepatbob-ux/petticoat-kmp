@@ -30,9 +30,9 @@ struct PetticoatCommands: Commands {
     var body: some Commands {
         // File ▸ Add a Device / New Reminder
         CommandGroup(replacing: .newItem) {
-            Button("Add a Device…") { model.showAddDevice = true }
+            Button("Add a Device…") { model.setShowAddDevice(true) }
                 .keyboardShortcut("n", modifiers: .command)
-            Button("New Reminder…") { model.addingReminder = true }
+            Button("New Reminder…") { model.setAddingReminder(true) }
                 .keyboardShortcut("r", modifiers: .command)
                 .disabled(model.devices.isEmpty)
         }
@@ -40,7 +40,7 @@ struct PetticoatCommands: Commands {
         // View ▸ Dashboard toggle + tab switching (⌘0, ⌘1–⌘5)
         CommandGroup(after: .sidebar) {
             Button(model.sidebarVisible ? "Hide Dashboard" : "Show Dashboard") {
-                model.sidebarVisible.toggle()
+                model.setSidebarVisible(!model.sidebarVisible)
             }
             .keyboardShortcut("0", modifiers: .command)
 
@@ -48,7 +48,7 @@ struct PetticoatCommands: Commands {
 
             Group {
                 ForEach(Array(DeviceTab.allCases.enumerated()), id: \.element) { index, tab in
-                    Button(tab.label) { model.selectedTab = tab }
+                    Button(tab.label) { model.setSelectedTab(tab) }
                         .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
                 }
             }
@@ -68,10 +68,10 @@ struct PetticoatCommands: Commands {
                 }
 
                 Menu("Set Mode") {
-                    Button("Heat") { model[device: \.systemMode] = .heat }
-                    Button("Cool") { model[device: \.systemMode] = .cool }
-                    Button("Auto") { model[device: \.systemMode] = .auto }
-                    Button("Off")  { model[device: \.systemMode] = .off }
+                    Button("Heat") { model.setSystemMode(.heat, for: model.device.id) }
+                    Button("Cool") { model.setSystemMode(.cool, for: model.device.id) }
+                    Button("Auto") { model.setSystemMode(.auto, for: model.device.id) }
+                    Button("Off")  { model.setSystemMode(.off, for: model.device.id) }
                 }
 
                 Button("Raise Temperature") { model.nudgeSetpoint(by: 1) }
@@ -89,7 +89,7 @@ struct PetticoatCommands: Commands {
 
         // Help ▸ Sensi Help & Support
         CommandGroup(replacing: .help) {
-            Button("Sensi Help & Support") { model.showHelp = true }
+            Button("Sensi Help & Support") { model.setShowHelp(true) }
         }
     }
 }

@@ -61,7 +61,7 @@ struct SensorsView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { model.showHelp = true } label: { Image(systemName: "questionmark.bubble") }
+                Button { model.setShowHelp(true) } label: { Image(systemName: "questionmark.bubble") }
                     .accessibilityLabel("Help and Support")
             }
         }

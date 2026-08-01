@@ -15,7 +15,7 @@ struct SplashView: View {
         }
         .task {
             try? await Task.sleep(for: .seconds(0.6))
-            model.route = .login
+            model.finishSplash()
         }
     }
 }

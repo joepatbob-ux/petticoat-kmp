@@ -33,7 +33,12 @@ import kotlinx.coroutines.flow.update
 
 data class TimelineEntry(val minutes: Int, val period: TimelinePeriod)
 
-enum class Route { Splash, Login, Main }
+enum class Route { Splash, Login, Main; val wireValue: String get() = name }
+
+/** Stable zero-argument construction point for Swift/Objective-C export. */
+object SharedAppModelFactory {
+    fun create(): AppModel = AppModel()
+}
 
 /**
  * Snapshot of all app state. Views collect [AppModel.state]; mutations go through
@@ -133,6 +138,13 @@ data class AppState(
 
     fun selectedProgramIdFor(kind: ScheduleKind): String? =
         selectedProgramId[kind] ?: programs[kind]?.firstOrNull()?.id
+
+    val heatPrograms: List<ScheduleProgram> get() = programsFor(ScheduleKind.Heat)
+    val coolPrograms: List<ScheduleProgram> get() = programsFor(ScheduleKind.Cool)
+    val autoPrograms: List<ScheduleProgram> get() = programsFor(ScheduleKind.Auto)
+    val selectedHeatProgramId: String? get() = selectedProgramIdFor(ScheduleKind.Heat)
+    val selectedCoolProgramId: String? get() = selectedProgramIdFor(ScheduleKind.Cool)
+    val selectedAutoProgramId: String? get() = selectedProgramIdFor(ScheduleKind.Auto)
 }
 
 /**
@@ -148,6 +160,82 @@ class AppModel(
     val state: StateFlow<AppState> = _state.asStateFlow()
 
     val snapshot: AppState get() = _state.value
+
+    // String-based entry points keep the Objective-C/Swift boundary stable even when
+    // Kotlin enum export rules evolve. Android uses the strongly typed APIs below.
+    fun setSelectedTabWire(value: String) =
+        setSelectedTab(DeviceTab.entries.firstOrNull { it.wireValue == value } ?: DeviceTab.Control)
+
+    fun setAppearanceWire(value: String) =
+        setAppearance(AppAppearance.entries.firstOrNull { it.wireValue == value } ?: AppAppearance.System)
+
+    fun setStepperStyleWire(value: String) =
+        setStepperStyle(StepperStyle.entries.firstOrNull { it.wireValue == value } ?: StepperStyle.PlusMinus)
+
+    fun setControlModeWire(value: String) =
+        setControlMode(ControlMode.entries.firstOrNull { it.wireValue == value } ?: ControlMode.Schedule)
+
+    fun setHoldDurationWire(value: String) =
+        setHoldDuration(HoldDuration.entries.firstOrNull { it.wireValue == value } ?: HoldDuration.Indefinite)
+
+    fun setSystemModeWire(value: String, deviceId: String? = null) =
+        setSystemMode(SystemMode.entries.firstOrNull { it.wireValue == value } ?: SystemMode.Auto, deviceId)
+
+    fun setFanModeWire(value: String, deviceId: String? = null) =
+        setFanMode(FanMode.entries.firstOrNull { it.wireValue == value } ?: FanMode.Auto, deviceId)
+
+    fun adjustKeepWire(bound: String, delta: Int, deviceId: String? = null) =
+        adjustKeep(
+            SetpointBound.entries.firstOrNull { it.wireValue == bound } ?: SetpointBound.Low,
+            delta,
+            deviceId,
+        )
+
+    fun setDeviceFanHoldDurationWire(value: String, deviceId: String? = null) =
+        setDeviceFanHoldDuration(
+            HoldDuration.entries.firstOrNull { it.wireValue == value } ?: HoldDuration.Indefinite,
+            deviceId,
+        )
+
+    fun setDeviceCirculateHoldDurationWire(value: String, deviceId: String? = null) =
+        setDeviceCirculateHoldDuration(
+            HoldDuration.entries.firstOrNull { it.wireValue == value } ?: HoldDuration.Indefinite,
+            deviceId,
+        )
+
+    fun activateProfileById(id: String) {
+        snapshot.activityProfiles.firstOrNull { it.id == id }?.let(::activateProfile)
+    }
+
+    fun duplicateProfileById(id: String) {
+        snapshot.activityProfiles.firstOrNull { it.id == id }?.let(::duplicateProfile)
+    }
+
+    fun duplicateScheduleById(id: String) {
+        snapshot.schedules.firstOrNull { it.id == id }?.let(::duplicateSchedule)
+    }
+
+    fun duplicateProgramById(id: String, kind: String) {
+        val parsed = ScheduleKind.entries.firstOrNull { it.wireValue == kind } ?: return
+        snapshot.programsFor(parsed).firstOrNull { it.id == id }?.let {
+            duplicateProgram(it, parsed)
+        }
+    }
+
+    fun selectProgramWire(id: String, kind: String) {
+        val parsed = ScheduleKind.entries.firstOrNull { it.wireValue == kind } ?: return
+        selectProgram(id, parsed)
+    }
+
+    fun saveProgramWire(program: ScheduleProgram, kind: String) {
+        val parsed = ScheduleKind.entries.firstOrNull { it.wireValue == kind } ?: return
+        saveProgram(program, parsed)
+    }
+
+    fun deleteProgramWire(id: String, kind: String) {
+        val parsed = ScheduleKind.entries.firstOrNull { it.wireValue == kind } ?: return
+        deleteProgram(id, parsed)
+    }
 
     private fun seedState(): AppState {
         var s = AppState()

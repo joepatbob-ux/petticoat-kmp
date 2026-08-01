@@ -19,17 +19,22 @@ struct ModeSheet: View {
     }
 
     var body: some View {
-        @Bindable var model = model
         NavigationStack {
             List {
                 Section("System") {
-                    SystemModeSelector(selected: $model[deviceID: deviceID, \.systemMode])
+                    SystemModeSelector(selected: Binding(
+                        get: { device.systemMode },
+                        set: { model.setSystemMode($0, for: deviceID) }
+                    ))
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
 
                 Section("Fan") {
-                    FanModeSelector(selected: $model[deviceID: deviceID, \.fanMode])
+                    FanModeSelector(selected: Binding(
+                        get: { device.fanMode },
+                        set: { model.setFanMode($0, for: deviceID) }
+                    ))
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
@@ -37,7 +42,10 @@ struct ModeSheet: View {
                 // Fan On runs for a chosen duration — no per-hour amount, unlike Circulate.
                 if device.fanMode == .on {
                     Section {
-                        DurationPicker(title: "Run For", selection: $model[deviceID: deviceID, \.fanHoldDuration])
+                        DurationPicker(title: "Run For", selection: Binding(
+                            get: { device.fanHoldDuration },
+                            set: { model.setFanHoldDuration($0, for: deviceID) }
+                        ))
                     } footer: {
                         Text(fanRunFooter)
                     }
@@ -48,7 +56,10 @@ struct ModeSheet: View {
                 // On continuously supersedes it, so the settings are hidden then.
                 if device.fanMode != .on {
                     Section {
-                        Toggle("Circulate Fan", isOn: $model[deviceID: deviceID, \.circulateFan])
+                        Toggle("Circulate Fan", isOn: Binding(
+                            get: { device.circulateFan },
+                            set: { model.setCirculateFan($0, for: deviceID) }
+                        ))
                             .tint(Color(hex: 0x34C759))
 
                         // The amount and duration only apply while circulation is on.
@@ -71,14 +82,20 @@ struct ModeSheet: View {
                             .buttonStyle(.plain)
 
                             if showWheel {
-                                Picker("Amount Per Hour", selection: $model[deviceID: deviceID, \.circulateAmount]) {
+                                Picker("Amount Per Hour", selection: Binding(
+                                    get: { device.circulateAmount },
+                                    set: { model.setCirculateAmount($0, for: deviceID) }
+                                )) {
                                     ForEach(circulateOptions, id: \.self) { Text($0).tag($0) }
                                 }
                                 .pickerStyle(.wheel)
                                 .frame(height: 160)
                             }
 
-                            DurationPicker(title: "Run For", selection: $model[deviceID: deviceID, \.circulateHoldDuration])
+                            DurationPicker(title: "Run For", selection: Binding(
+                                get: { device.circulateHoldDuration },
+                                set: { model.setCirculateHoldDuration($0, for: deviceID) }
+                            ))
                         }
                     } footer: {
                         if device.circulateFan {

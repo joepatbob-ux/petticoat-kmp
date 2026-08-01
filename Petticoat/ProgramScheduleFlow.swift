@@ -39,10 +39,17 @@ enum ScheduleKind: String, CaseIterable, Identifiable {
 /// One scheduled period: a start time and the setpoint(s) it applies. Which
 /// setpoints are meaningful depends on the schedule's `ScheduleKind`.
 struct ProgramEvent: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var time: Date
     var heatTo: Int
     var coolTo: Int
+
+    init(id: UUID = UUID(), time: Date, heatTo: Int, coolTo: Int) {
+        self.id = id
+        self.time = time
+        self.heatTo = heatTo
+        self.coolTo = coolTo
+    }
 
     var timeText: String { time.formatted(date: .omitted, time: .shortened) }
 
@@ -61,16 +68,28 @@ struct ProgramEvent: Identifiable, Hashable {
 
 /// A set of days sharing the same list of events (e.g. "Weekdays" + "Weekend").
 struct ProgramDayGroup: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var days: Set<Int>
     var events: [ProgramEvent]
+
+    init(id: UUID = UUID(), days: Set<Int>, events: [ProgramEvent]) {
+        self.id = id
+        self.days = days
+        self.events = events
+    }
 }
 
 /// A named schedule program (one or more day groups).
 struct ScheduleProgram: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var name: String
     var groups: [ProgramDayGroup]
+
+    init(id: UUID = UUID(), name: String, groups: [ProgramDayGroup]) {
+        self.id = id
+        self.name = name
+        self.groups = groups
+    }
 
     static func sampleEvents() -> [ProgramEvent] {
         [
@@ -286,7 +305,7 @@ struct ProgramScheduleEditor: View {
         .inlineNavTitle()
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { model.showHelp = true } label: { Image(systemName: "questionmark.bubble") }
+                Button { model.setShowHelp(true) } label: { Image(systemName: "questionmark.bubble") }
                     .accessibilityLabel("Help and Support")
                 EditorSaveButton {
                     if let issue = validationIssue() {

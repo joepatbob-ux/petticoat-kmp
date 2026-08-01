@@ -4,10 +4,22 @@ import UIKit
 // MARK: - Models
 
 struct SchedulePreset: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var name: String
     /// The schedule itself: one or more day groups, each with its own events.
     var groups: [ScheduleDayGroup] = [ScheduleDayGroup(days: Set(0..<7), events: ScheduleEvent.samples())]
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        groups: [ScheduleDayGroup] = [
+            ScheduleDayGroup(days: Set(0..<7), events: ScheduleEvent.samples())
+        ]
+    ) {
+        self.id = id
+        self.name = name
+        self.groups = groups
+    }
 
     /// Default saved schedules, all week on the sample events.
     static func samples() -> [SchedulePreset] {
@@ -18,16 +30,22 @@ struct SchedulePreset: Identifiable, Hashable {
 /// A set of days sharing the same list of events. A schedule is one or more of
 /// these (e.g. "Weekdays" + "Weekend").
 struct ScheduleDayGroup: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var days: Set<Int>
     var events: [ScheduleEvent]
+
+    init(id: UUID = UUID(), days: Set<Int>, events: [ScheduleEvent]) {
+        self.id = id
+        self.days = days
+        self.events = events
+    }
 }
 
 /// One scheduled period: an Activity Profile snapshot (name/icon/color/range) that
 /// starts at `time`. Snapshotting keeps a saved schedule stable if the source
 /// profile is later edited.
 struct ScheduleEvent: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var name: String
     var symbol: String
     var colorHex: UInt
@@ -44,7 +62,9 @@ struct ScheduleEvent: Identifiable, Hashable {
             && heatTo == other.heatTo && coolTo == other.coolTo
     }
 
-    init(name: String, symbol: String, colorHex: UInt, heatTo: Int, coolTo: Int, time: Date) {
+    init(id: UUID = UUID(), name: String, symbol: String, colorHex: UInt,
+         heatTo: Int, coolTo: Int, time: Date) {
+        self.id = id
         self.name = name
         self.symbol = symbol
         self.colorHex = colorHex
@@ -334,7 +354,7 @@ struct ScheduleEditorView: View {
         .inlineNavTitle()
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button { model.showHelp = true } label: { Image(systemName: "questionmark.bubble") }
+                Button { model.setShowHelp(true) } label: { Image(systemName: "questionmark.bubble") }
                     .accessibilityLabel("Help and Support")
                 EditorSaveButton {
                     if let issue = validationIssue() {

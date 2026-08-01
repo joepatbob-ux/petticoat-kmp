@@ -855,7 +855,10 @@ struct ControllerStatusSheet: View {
                     if mode == .hold {
                         // The hold sheet only needs the duration control — the range and
                         // end time are already shown on the controller card.
-                        Picker("Hold For", selection: $model.holdDuration) {
+                        Picker("Hold For", selection: Binding(
+                            get: { model.holdDuration },
+                            set: model.setHoldDuration
+                        )) {
                             ForEach(HoldDuration.allCases) { Text($0.label).tag($0) }
                         }
                     } else {

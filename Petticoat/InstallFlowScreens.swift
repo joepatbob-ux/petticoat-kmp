@@ -861,7 +861,7 @@ struct RoomSensorView: View {
             }
 
             InstallButtonBar(link: "Learn More About Sensors", onLink: { showHelp = true },
-                             primary: "Complete", onPrimary: { model.showAddDevice = false })
+                             primary: "Complete", onPrimary: { model.setShowAddDevice(false) })
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SMA.groupedBackground.ignoresSafeArea())

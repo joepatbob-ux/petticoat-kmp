@@ -247,7 +247,9 @@ data class ScheduleDayGroup(
     val id: String = newId(),
     var days: Set<Int>,
     var events: List<ScheduleEvent>,
-)
+) {
+    val dayNumbers: List<Int> get() = days.sorted()
+}
 
 data class SchedulePreset(
     val id: String = newId(),
@@ -277,7 +279,9 @@ data class ProgramDayGroup(
     val id: String = newId(),
     var days: Set<Int>,
     var events: List<ProgramEvent>,
-)
+) {
+    val dayNumbers: List<Int> get() = days.sorted()
+}
 
 data class ScheduleProgram(
     val id: String = newId(),
