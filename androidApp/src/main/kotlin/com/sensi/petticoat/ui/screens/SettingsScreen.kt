@@ -1,14 +1,24 @@
 package com.sensi.petticoat.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Handyman
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -25,8 +35,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.sensi.petticoat.AppModel
 import com.sensi.petticoat.AppState
@@ -61,7 +73,11 @@ fun SettingsScreen(
         SettingsRoute.Menu -> SettingsMenu(state, onBack) { route = it }
         SettingsRoute.Display -> DisplayOptions(model, state) { route = SettingsRoute.Menu }
         SettingsRoute.System -> SystemConfiguration(model, state) { route = SettingsRoute.Menu }
-        SettingsRoute.About -> AboutThermostat(state) { route = SettingsRoute.Menu }
+        SettingsRoute.About -> AboutThermostat(
+            state = state,
+            onOpenLocation = { route = SettingsRoute.Location },
+            onBack = { route = SettingsRoute.Menu },
+        )
         SettingsRoute.Location -> LocationForm(model, state) { route = SettingsRoute.Menu }
         SettingsRoute.Contractor -> ContractorForm(model, state) { route = SettingsRoute.Menu }
         SettingsRoute.Energy -> EnergyPrograms { route = SettingsRoute.Menu }
@@ -110,27 +126,69 @@ private fun SettingsMenu(
     SubScaffold(title = "${state.device.name} Settings", onBack = onBack) { modifier ->
         Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsCard {
-                NavRow("Display Options") { onNavigate(SettingsRoute.Display) }
+                MenuItem(
+                    Icons.Outlined.Tune, "Display Options",
+                    "Backlight, humidity, time, and temperature units.",
+                ) { onNavigate(SettingsRoute.Display) }
                 RowDivider()
-                NavRow("System Configuration") { onNavigate(SettingsRoute.System) }
-                RowDivider()
-                NavRow("About Thermostat") { onNavigate(SettingsRoute.About) }
+                MenuItem(
+                    Icons.Outlined.Settings, "System Options",
+                    "Temperature limits, humidity, boost, and calibration.",
+                ) { onNavigate(SettingsRoute.System) }
             }
             SettingsCard {
-                NavRow("Thermostat Location") { onNavigate(SettingsRoute.Location) }
+                MenuItem(
+                    Icons.Outlined.Info, "About Thermostat",
+                    "Model, firmware, Wi-Fi, location, and removal.",
+                ) { onNavigate(SettingsRoute.About) }
                 RowDivider()
-                NavRow("Contractor Information") { onNavigate(SettingsRoute.Contractor) }
-                RowDivider()
-                NavRow("Energy Programs") { onNavigate(SettingsRoute.Energy) }
+                MenuItem(
+                    Icons.Outlined.Handyman, "Contractor Information",
+                    "Your installer's contact details.",
+                ) { onNavigate(SettingsRoute.Contractor) }
+            }
+            SettingsCard {
+                MenuItem(
+                    Icons.Outlined.Bolt, "Energy Savings Programs",
+                    "Enroll in utility savings programs.",
+                ) { onNavigate(SettingsRoute.Energy) }
             }
         }
     }
 }
 
-// Local nav-row wrapper so the menu reads cleanly; delegates to the shared NavRow.
 @Composable
-private fun NavRow(title: String, onClick: () -> Unit) =
-    com.sensi.petticoat.ui.components.NavRow(title = title, onClick = onClick)
+private fun MenuItem(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            Icons.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 @Composable
 private fun DisplayOptions(model: AppModel, state: AppState, onBack: () -> Unit) {
@@ -219,7 +277,7 @@ private fun SystemConfiguration(model: AppModel, state: AppState, onBack: () -> 
 }
 
 @Composable
-private fun AboutThermostat(state: AppState, onBack: () -> Unit) {
+private fun AboutThermostat(state: AppState, onOpenLocation: () -> Unit, onBack: () -> Unit) {
     var showRemove by remember { mutableStateOf(false) }
     SubScaffold(title = "About Thermostat", onBack = onBack) { modifier ->
         Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -237,6 +295,8 @@ private fun AboutThermostat(state: AppState, onBack: () -> Unit) {
                 InfoRow("Battery", "Good")
             }
             SettingsCard {
+                com.sensi.petticoat.ui.components.NavRow("Thermostat Location", onClick = onOpenLocation)
+                RowDivider()
                 com.sensi.petticoat.ui.components.NavRow("Remove Thermostat") { showRemove = true }
             }
         }
