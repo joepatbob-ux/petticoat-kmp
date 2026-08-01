@@ -52,20 +52,25 @@ fun GlobalSheets(model: AppModel, state: AppState) {
 private fun AccountSheet(model: AppModel, onDismiss: () -> Unit) {
     var confirmLogout by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("account-sheet")) {
-        Column(Modifier.padding(20.dp)) {
-            Text("Account", style = MaterialTheme.typography.headlineSmall)
-            listOf("Personal information", "Homes", "Application settings", "Notifications", "Energy", "About").forEach {
+        val rows = listOf("Personal information", "Homes", "Application settings", "Notifications", "Energy", "About")
+        LazyColumn(Modifier.padding(20.dp)) {
+            item { Text("Account", style = MaterialTheme.typography.headlineSmall) }
+            items(rows) {
                 ListItem(
                     headlineContent = { Text(it) },
                     trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null) },
                 )
             }
-            ListItem(
-                headlineContent = { Text("Help & Support") },
-                modifier = Modifier.clickable { onDismiss(); model.setShowHelp(true) },
-            )
-            TextButton(onClick = { confirmLogout = true }, modifier = Modifier.testTag("account-logout")) {
-                Text("Log out")
+            item {
+                ListItem(
+                    headlineContent = { Text("Help & Support") },
+                    modifier = Modifier.clickable { onDismiss(); model.setShowHelp(true) },
+                )
+            }
+            item {
+                TextButton(onClick = { confirmLogout = true }, modifier = Modifier.testTag("account-logout")) {
+                    Text("Log out")
+                }
             }
         }
     }
