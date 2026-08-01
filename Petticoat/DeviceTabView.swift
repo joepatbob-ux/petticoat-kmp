@@ -72,7 +72,7 @@ struct DeviceTabView: View {
 
     @ToolbarContentBuilder private var helpButton: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            Button { model.showHelp = true } label: {
+            Button { model.setShowHelp(true) } label: {
                 Image(systemName: "questionmark.bubble")
             }
             .accessibilityLabel("Help and Support")

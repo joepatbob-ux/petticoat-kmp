@@ -22,3 +22,16 @@ DerivedData/
 # CocoaPods / Carthage (unused today, ignored for safety)
 Pods/
 Carthage/Build/
+
+# Kotlin / Gradle / Android
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+.cxx/
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex

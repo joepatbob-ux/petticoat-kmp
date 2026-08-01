@@ -482,7 +482,7 @@ struct InstallFlowView: View {
 
     /// Finish the flow by closing the whole Add Device sheet.
     private func finish() {
-        model.showAddDevice = false
+        model.setShowAddDevice(false)
     }
 }
 

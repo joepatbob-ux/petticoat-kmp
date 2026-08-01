@@ -1,22 +1,26 @@
 # Petticoat (Sensi) — Prototype → Production Handoff
 
-This app is a **working SwiftUI prototype** of the Sensi thermostat experience. All UI,
-navigation, and interaction is real; all **data is in-memory mock data** and all
-"actions" mutate that in-memory state synchronously. This doc is the map for wiring in
-real functionality (BLE/cloud/backend, persistence, permissions).
+This app is a **working multiplatform prototype** of the Sensi thermostat experience
+(SwiftUI on iOS, Material 3 Expressive Compose on Android). All UI, navigation, and
+interaction is real; all **data is in-memory mock data** and all "actions" mutate that
+in-memory state synchronously. Domain logic lives in the KMP `shared/` module —
+see [`KMP.md`](KMP.md). This doc is the map for wiring in real functionality
+(BLE/cloud/backend, persistence, permissions).
 
 ## 1. Architecture & the one integration seam
 
-- **`AppModel`** (`Petticoat/AppModel.swift`) is an `@Observable` class and the single
-  source of truth. Views read `model.x` and call `model.doThing()`. It's injected once at
-  the root via `.environment(AppModel())`.
+- **KMP `AppModel`** (`shared/.../AppModel.kt`) exposes `StateFlow<AppState>` and is the
+  source of truth on both platforms. Android collects it directly; SwiftUI uses the
+  `@Observable` facade in `Petticoat/AppModel.swift`, with SKIE and
+  `PetticoatShared.framework`.
 - Feature state already lives on the model (persists for the session): `devices`,
   `activityProfiles`, `schedules` / `selectedScheduleID`, `programs` /
   `selectedProgramID`, `serviceReminders`, `contractor`, `thermostatSettings`,
   `controlMode`, `activeProfile`, `spotlights`.
-- **Recommended seam:** introduce a service/repository protocol layer that `AppModel`
+- **Next seam:** introduce a service/repository protocol layer that `AppModel`
   depends on, e.g. `ThermostatService`, `ScheduleService`, `UsageService`,
-  `ReminderService`. Keep `AppModel` as the view-facing state holder; move I/O behind the
+  `ReminderService`. Prefer defining those interfaces in `shared/` so both platforms
+  share them. Keep `AppModel` as the view-facing state holder; move I/O behind the
   protocols and inject a live implementation in the app / a mock in previews & tests.
   Views should not change.
 

@@ -76,7 +76,7 @@ struct UsageView: View {
                             entry: entry,
                             isExpanded: expanded.contains(entry.id),
                             onToggle: { toggle(entry.id) },
-                            onLearnMore: { model.showHelp = true }
+                            onLearnMore: { model.setShowHelp(true) }
                         )
                     }
                     UsageLegend()

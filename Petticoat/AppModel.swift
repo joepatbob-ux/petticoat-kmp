@@ -1,12 +1,13 @@
 import SwiftUI
 import Observation
-import WidgetKit
-import ActivityKit
+#if canImport(PetticoatShared) && os(iOS)
+import PetticoatShared
+#endif
 
 // MARK: - Mock models
 
 struct Device: Identifiable, Equatable {
-    let id = UUID()
+    let id: UUID
     let name: String
     let location: String
     var keepMin: Int
@@ -43,6 +44,58 @@ struct Device: Identifiable, Equatable {
     var offlineSince: String? = nil
     /// The home this thermostat belongs to. Nil means unassigned.
     var homeID: Home.ID? = nil
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        location: String,
+        keepMin: Int,
+        keepMax: Int,
+        holdUntil: String,
+        outdoorTemp: Int,
+        outdoorHigh: Int,
+        outdoorLow: Int,
+        scheduleName: String,
+        sensorSummary: String,
+        sensors: [RoomSensor] = RoomSensor.samples,
+        systemMode: SystemMode = .auto,
+        fanMode: FanMode = .auto,
+        fanHoldDuration: HoldDuration = .indefinite,
+        circulateFan: Bool = true,
+        circulateAmount: String = "33% (15min)",
+        circulateHoldDuration: HoldDuration = .indefinite,
+        geofenceEnabled: Bool = true,
+        usePresets: Bool = true,
+        earlyStart: Bool = true,
+        isOffline: Bool = false,
+        offlineSince: String? = nil,
+        homeID: Home.ID? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.location = location
+        self.keepMin = keepMin
+        self.keepMax = keepMax
+        self.holdUntil = holdUntil
+        self.outdoorTemp = outdoorTemp
+        self.outdoorHigh = outdoorHigh
+        self.outdoorLow = outdoorLow
+        self.scheduleName = scheduleName
+        self.sensorSummary = sensorSummary
+        self.sensors = sensors
+        self.systemMode = systemMode
+        self.fanMode = fanMode
+        self.fanHoldDuration = fanHoldDuration
+        self.circulateFan = circulateFan
+        self.circulateAmount = circulateAmount
+        self.circulateHoldDuration = circulateHoldDuration
+        self.geofenceEnabled = geofenceEnabled
+        self.usePresets = usePresets
+        self.earlyStart = earlyStart
+        self.isOffline = isOffline
+        self.offlineSince = offlineSince
+        self.homeID = homeID
+    }
 
     /// Averaged temperature across all participating sensors.
     var currentTemp: Int {
@@ -111,12 +164,28 @@ struct Device: Identifiable, Equatable {
 /// temperature the thermostat controls to. `battery` is the remaining charge
 /// (0–100), or nil for hard-wired models that have no battery.
 struct RoomSensor: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     var name: String
     let temp: Int
     let humidity: Int
     var participating: Bool
     var battery: Int? = nil
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        temp: Int,
+        humidity: Int,
+        participating: Bool,
+        battery: Int? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.temp = temp
+        self.humidity = humidity
+        self.participating = participating
+        self.battery = battery
+    }
 
     /// Battery icon that steps down with the remaining charge.
     static func batterySymbol(_ level: Int) -> String {
@@ -168,7 +237,7 @@ struct SpotlightItem: Identifiable, Equatable {
     /// white card.
     enum Kind { case promotional, generic, partner }
 
-    let id = UUID()
+    let id: UUID
     var kind: Kind = .generic
     let provider: String
     let title: String
@@ -181,6 +250,28 @@ struct SpotlightItem: Identifiable, Equatable {
     /// Onboarding cards launch the install flow from their CTA (and can't be
     /// dismissed); other cards open their detail.
     var startsInstall: Bool = false
+
+    init(
+        id: UUID = UUID(),
+        kind: Kind = .generic,
+        provider: String,
+        title: String,
+        body: String,
+        validUntil: String = "",
+        actionLabel: String? = nil,
+        heroImage: String? = nil,
+        startsInstall: Bool = false
+    ) {
+        self.id = id
+        self.kind = kind
+        self.provider = provider
+        self.title = title
+        self.body = body
+        self.validUntil = validUntil
+        self.actionLabel = actionLabel
+        self.heroImage = heroImage
+        self.startsInstall = startsInstall
+    }
 
     /// The "Expires: …" line under the body (empty when there's no expiry).
     var subline: String { validUntil.isEmpty ? "" : "Expires: \(validUntil)" }
@@ -496,19 +587,25 @@ final class AppModel {
     var sidebarVisible = true
     /// Presents the New Reminder editor in the iPad detail.
     var addingReminder = false
+    private var isApplyingSharedState = false
 
-    /// Running Live Activity for the "time to temp" heating/cooling banner.
-    private var liveActivity: Activity<PetticoatActivityAttributes>?
+    #if canImport(PetticoatShared) && os(iOS)
+    /// Canonical domain model. This Swift type is now an observation/binding facade.
+    private let sharedModel = PetticoatShared.SharedAppModelFactory.shared.create()
+    private var sharedObservationTask: Task<Void, Never>?
+    #endif
+
+    private let widgetSyncService = WidgetSyncService()
 
     /// All paired thermostats, shown as resortable cards on the dashboard. Empty
     /// means no thermostat has been added yet (the dashboard shows the onboarding
     /// welcome card instead).
     var devices: [Device] = [.sample, .sampleUpstairs] {
-        didSet { recomputeDevice() }
+        didSet { if !isApplyingSharedState { recomputeDevice() } }
     }
     /// The device the single-device screens (Control, Mode, Schedule) act on.
     var selectedDeviceID: Device.ID? = nil {
-        didSet { recomputeDevice() }
+        didSet { if !isApplyingSharedState { recomputeDevice() } }
     }
     var spotlights: [SpotlightItem] = SpotlightItem.samples
     /// Spotlight cards hidden from the dashboard (reversible, unlike dismiss).
@@ -552,7 +649,145 @@ final class AppModel {
         // Seed the cached device + timeline (property `didSet`s don't fire for
         // initial values).
         recomputeDevice()
+        installNativeChangeObservers()
+        #if canImport(PetticoatShared) && os(iOS)
+        applySharedState(sharedModel.snapshot)
+        #endif
+        startSharedObservation()
     }
+
+    deinit {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedObservationTask?.cancel()
+        #endif
+    }
+
+    private func startSharedObservation() {
+        #if canImport(PetticoatShared) && os(iOS)
+        let shared = sharedModel
+        sharedObservationTask = Task { [weak self, shared] in
+            for await state in shared.state {
+                guard !Task.isCancelled else { return }
+                await self?.applySharedState(state)
+            }
+        }
+        #endif
+    }
+
+    private func installNativeChangeObservers() {
+        contractor.onChange = { [weak self] in self?.persistContractor() }
+        thermostatSettings.onChange = { [weak self] in self?.persistThermostatSettings() }
+    }
+
+    private func persistContractor() {
+        guard !isApplyingSharedState else { return }
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setContractor(v: SharedStateMapper.sharedContractor(contractor))
+        #endif
+    }
+
+    private func persistThermostatSettings() {
+        guard !isApplyingSharedState else { return }
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setThermostatSettings(v: SharedStateMapper.sharedSettings(thermostatSettings))
+        #endif
+    }
+
+    #if canImport(PetticoatShared) && os(iOS)
+    @MainActor
+    private func applySharedState(_ state: PetticoatShared.AppState) {
+        isApplyingSharedState = true
+        defer {
+            isApplyingSharedState = false
+            recomputeDevice()
+        }
+
+        route = SharedStateMapper.route(state.route.wireValue)
+        showAccount = state.showAccount
+        showAddDevice = state.showAddDevice
+        showHelp = state.showHelp
+        selectedTab = SharedStateMapper.deviceTab(state.selectedTab.wireValue)
+        sidebarVisible = state.sidebarVisible
+        addingReminder = state.addingReminder
+
+        devices = state.devices.map(SharedStateMapper.device)
+        selectedDeviceID = SharedStateMapper.uuid(state.selectedDeviceId)
+        spotlights = state.spotlights.map(SharedStateMapper.spotlight)
+        hiddenSpotlights = Set(state.hiddenSpotlights.compactMap(SharedStateMapper.uuid))
+        dashboardSectionOrder = state.dashboardSectionOrder.map {
+            SharedStateMapper.dashboardSection($0.wireValue)
+        }
+        showSensorsOnDashboard = state.showSensorsOnDashboard
+        appearance = SharedStateMapper.appearance(state.appearance.wireValue)
+        showWeatherLocation = state.showWeatherLocation
+        stepperStyle = SharedStateMapper.stepperStyle(state.stepperStyle.wireValue)
+        homes = state.homes.map(SharedStateMapper.home)
+
+        controlMode = SharedStateMapper.controlMode(state.controlMode.wireValue)
+        holdDuration = SharedStateMapper.holdDuration(state.holdDuration.wireValue)
+        holdEndsAt = state.holdEndsAtEpochMs.map {
+            Date(timeIntervalSince1970: TimeInterval(truncating: $0) / 1_000)
+        }
+        activeProfile = SharedStateMapper.profile(state.activeProfile)
+        activityProfiles = state.activityProfiles.map(SharedStateMapper.profile)
+        schedules = state.schedules.map(SharedStateMapper.schedule)
+        selectedScheduleID = SharedStateMapper.uuid(state.selectedScheduleId)
+
+        programs = [
+            .heat: state.heatPrograms.map(SharedStateMapper.program),
+            .cool: state.coolPrograms.map(SharedStateMapper.program),
+            .auto: state.autoPrograms.map(SharedStateMapper.program),
+        ]
+        selectedProgramID = [
+            .heat: SharedStateMapper.uuid(state.selectedHeatProgramId),
+            .cool: SharedStateMapper.uuid(state.selectedCoolProgramId),
+            .auto: SharedStateMapper.uuid(state.selectedAutoProgramId),
+        ].compactMapValues { $0 }
+
+        serviceReminders = state.serviceReminders.map(SharedStateMapper.reminder)
+        copyContractor(from: state.contractor)
+        copySettings(from: state.thermostatSettings)
+        todaysTimeline = state.todaysTimeline.map {
+            (Int($0.minutes), SharedStateMapper.timelinePeriod($0.period))
+        }
+    }
+
+    private func copyContractor(from value: PetticoatShared.Contractor) {
+        contractor.company = value.company
+        contractor.address = value.address
+        contractor.phone = value.phone
+        contractor.city = value.city
+        contractor.state = value.state
+        contractor.country = value.country
+    }
+
+    private func copySettings(from value: PetticoatShared.ThermostatSettings) {
+        thermostatSettings.continuousBacklight = value.continuousBacklight
+        thermostatSettings.displayHumidity = value.displayHumidity
+        thermostatSettings.displayTime = value.displayTime
+        thermostatSettings.units = SharedStateMapper.temperatureUnit(value.units.wireValue)
+        thermostatSettings.lockThermostat = value.lockThermostat
+        thermostatSettings.coolingMin = Int(value.coolingMin)
+        thermostatSettings.heatingMax = Int(value.heatingMax)
+        thermostatSettings.humidification = value.humidification
+        thermostatSettings.humidifyTo = Int(value.humidifyTo)
+        thermostatSettings.dehumidification = value.dehumidification
+        thermostatSettings.dehumidifyTo = Int(value.dehumidifyTo)
+        thermostatSettings.coolingBoost = value.coolingBoost
+        thermostatSettings.heatingBoost = value.heatingBoost
+        thermostatSettings.auxBoost = value.auxBoost
+        thermostatSettings.temperatureOffset = Int(value.temperatureOffset)
+        thermostatSettings.humidityOffset = Int(value.humidityOffset)
+        thermostatSettings.acProtection = value.acProtection
+        thermostatSettings.name = value.name
+        thermostatSettings.locationAddress = value.locationAddress
+        thermostatSettings.locationUnit = value.locationUnit
+        thermostatSettings.locationCity = value.locationCity
+        thermostatSettings.locationState = value.locationState
+        thermostatSettings.locationZip = value.locationZip
+        thermostatSettings.locationCountry = value.locationCountry
+    }
+    #endif
 
     /// Write-through projection into the selected device for two-way bindings
     /// (`$model[device: \.systemMode]`), keeping `devices` the source of truth. Reads
@@ -577,11 +812,195 @@ final class AppModel {
     }
 
     /// Make a device the target of the single-device screens.
-    func selectDevice(_ id: Device.ID) { selectedDeviceID = id }
+    func selectDevice(_ id: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.selectDevice(id: id.kmpID)
+        #else
+        selectedDeviceID = id
+        #endif
+    }
+
+    func finishSplash() {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.finishSplash()
+        #else
+        route = .login
+        #endif
+    }
+
+    func setShowAccount(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setShowAccount(v: value)
+        #else
+        showAccount = value
+        #endif
+    }
+
+    func setShowAddDevice(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setShowAddDevice(v: value)
+        #else
+        showAddDevice = value
+        #endif
+    }
+
+    func setShowHelp(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setShowHelp(v: value)
+        #else
+        showHelp = value
+        #endif
+    }
+
+    func setSelectedTab(_ value: DeviceTab) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setSelectedTabWire(value: value.sharedWireValue)
+        #else
+        selectedTab = value
+        #endif
+    }
+
+    func setSidebarVisible(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setSidebarVisible(v: value)
+        #else
+        sidebarVisible = value
+        #endif
+    }
+
+    func setAddingReminder(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setAddingReminder(v: value)
+        #else
+        addingReminder = value
+        #endif
+    }
+
+    func setAppearance(_ value: AppAppearance) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setAppearanceWire(value: value.sharedWireValue)
+        #else
+        appearance = value
+        #endif
+    }
+
+    func setShowWeatherLocation(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setShowWeatherLocation(v: value)
+        #else
+        showWeatherLocation = value
+        #endif
+    }
+
+    func setShowSensorsOnDashboard(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setShowSensorsOnDashboard(v: value)
+        #else
+        showSensorsOnDashboard = value
+        #endif
+    }
+
+    func setStepperStyle(_ value: StepperStyle) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setStepperStyleWire(value: value.sharedWireValue)
+        #else
+        stepperStyle = value
+        #endif
+    }
+
+    func setHoldDuration(_ value: HoldDuration) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setHoldDurationWire(value: value.sharedWireValue)
+        #else
+        holdDuration = value
+        #endif
+    }
+
+    func setSystemMode(_ value: SystemMode, for deviceID: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setSystemModeWire(value: value.sharedWireValue, deviceId: deviceID.kmpID)
+        #else
+        self[deviceID: deviceID, \.systemMode] = value
+        #endif
+    }
+
+    func setFanMode(_ value: FanMode, for deviceID: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setFanModeWire(value: value.sharedWireValue, deviceId: deviceID.kmpID)
+        #else
+        self[deviceID: deviceID, \.fanMode] = value
+        #endif
+    }
+
+    func setFanHoldDuration(_ value: HoldDuration, for deviceID: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setDeviceFanHoldDurationWire(
+            value: value.sharedWireValue,
+            deviceId: deviceID.kmpID
+        )
+        #else
+        self[deviceID: deviceID, \.fanHoldDuration] = value
+        #endif
+    }
+
+    func setCirculateFan(_ value: Bool, for deviceID: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setDeviceCirculateFan(v: value, deviceId: deviceID.kmpID)
+        #else
+        self[deviceID: deviceID, \.circulateFan] = value
+        #endif
+    }
+
+    func setCirculateAmount(_ value: String, for deviceID: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setDeviceCirculateAmount(v: value, deviceId: deviceID.kmpID)
+        #else
+        self[deviceID: deviceID, \.circulateAmount] = value
+        #endif
+    }
+
+    func setCirculateHoldDuration(_ value: HoldDuration, for deviceID: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setDeviceCirculateHoldDurationWire(
+            value: value.sharedWireValue,
+            deviceId: deviceID.kmpID
+        )
+        #else
+        self[deviceID: deviceID, \.circulateHoldDuration] = value
+        #endif
+    }
+
+    func setUsePresets(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setDeviceUsePresets(v: value, deviceId: device.id.kmpID)
+        #else
+        self[device: \.usePresets] = value
+        #endif
+    }
+
+    func setEarlyStart(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setDeviceEarlyStart(v: value, deviceId: device.id.kmpID)
+        #else
+        self[device: \.earlyStart] = value
+        #endif
+    }
+
+    func setGeofenceEnabled(_ value: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setDeviceGeofenceEnabled(v: value, deviceId: device.id.kmpID)
+        #else
+        self[device: \.geofenceEnabled] = value
+        #endif
+    }
 
     /// Bring the selected thermostat back online after a successful Wi-Fi reconnect,
     /// clearing the offline card and its "offline since" timestamp.
     func markSelectedDeviceOnline() {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.markSelectedDeviceOnline()
+        return
+        #endif
         guard let i = devices.firstIndex(where: { $0.id == device.id }) else { return }
         devices[i].isOffline = false
         devices[i].offlineSince = nil
@@ -589,21 +1008,40 @@ final class AppModel {
 
     /// Reorder the dashboard thermostat cards (from the Organize Dashboard screen).
     func moveDevices(from source: IndexSet, to destination: Int) {
+        #if canImport(PetticoatShared) && os(iOS)
+        guard let first = source.first else { return }
+        sharedModel.moveDevices(fromIndex: Int32(first), toIndex: Int32(destination))
+        return
+        #endif
         devices.move(fromOffsets: source, toOffset: destination)
     }
 
     /// Reorder the spotlight cards.
     func moveSpotlights(from source: IndexSet, to destination: Int) {
+        #if canImport(PetticoatShared) && os(iOS)
+        guard let first = source.first else { return }
+        sharedModel.moveSpotlights(fromIndex: Int32(first), toIndex: Int32(destination))
+        return
+        #endif
         spotlights.move(fromOffsets: source, toOffset: destination)
     }
 
     /// Reorder the dashboard sections themselves.
     func moveDashboardSections(from source: IndexSet, to destination: Int) {
+        #if canImport(PetticoatShared) && os(iOS)
+        guard let first = source.first else { return }
+        sharedModel.moveDashboardSections(fromIndex: Int32(first), toIndex: Int32(destination))
+        return
+        #endif
         dashboardSectionOrder.move(fromOffsets: source, toOffset: destination)
     }
 
     /// Show or hide a spotlight card on the dashboard (reversible).
     func setSpotlight(_ item: SpotlightItem, hidden: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setSpotlightHidden(itemId: item.id.kmpID, hidden: hidden)
+        return
+        #endif
         if hidden { hiddenSpotlights.insert(item.id) } else { hiddenSpotlights.remove(item.id) }
     }
 
@@ -637,11 +1075,11 @@ final class AppModel {
     var activityProfiles: [ActivityProfile] = ActivityProfile.samples
     /// Saved profile-based schedules (the "Schedules" list, used when Use Presets is on).
     var schedules: [SchedulePreset] = SchedulePreset.samples() {
-        didSet { recomputeTimeline() }
+        didSet { if !isApplyingSharedState { recomputeTimeline() } }
     }
     /// The schedule currently driving the controller timeline (falls back to the first).
     var selectedScheduleID: SchedulePreset.ID? {
-        didSet { recomputeTimeline() }
+        didSet { if !isApplyingSharedState { recomputeTimeline() } }
     }
     /// Non-preset setpoint programs, one selectable list per mode (Use Presets off).
     var programs: [ScheduleKind: [ScheduleProgram]] = [
@@ -649,11 +1087,11 @@ final class AppModel {
         .cool: ScheduleProgram.samples(for: .cool),
         .auto: ScheduleProgram.samples(for: .auto),
     ] {
-        didSet { recomputeTimeline() }
+        didSet { if !isApplyingSharedState { recomputeTimeline() } }
     }
     /// The selected program per mode.
     var selectedProgramID: [ScheduleKind: ScheduleProgram.ID] = [:] {
-        didSet { recomputeTimeline() }
+        didSet { if !isApplyingSharedState { recomputeTimeline() } }
     }
     /// HVAC service reminders shown in the Reminders tab. Single source of truth so
     /// edits persist across the session.
@@ -662,10 +1100,20 @@ final class AppModel {
     /// the notification bubble on the Reminders tab.
     var criticalReminderCount: Int { serviceReminders.filter(\.isCritical).count }
     /// The contractor on file — shared by Settings and the reminder "Call Contractor".
-    var contractor: Contractor = .sample
+    var contractor: Contractor = .sample {
+        didSet {
+            installNativeChangeObservers()
+            persistContractor()
+        }
+    }
     /// Persisted thermostat settings (Display Options, System Configuration, About,
     /// Location) so the Settings screens survive navigating away and back.
-    var thermostatSettings = ThermostatSettings()
+    var thermostatSettings = ThermostatSettings() {
+        didSet {
+            installNativeChangeObservers()
+            persistThermostatSettings()
+        }
+    }
     var tempUnit: TemperatureUnit { thermostatSettings.units }
 
     /// The active schedule — the selected one, or the first available.
@@ -763,6 +1211,14 @@ final class AppModel {
     /// following a schedule creates a temporary hold that overrides it; adjusting a
     /// running profile (no schedule) just nudges that profile in place.
     func adjustKeep(_ bound: SetpointBound, by delta: Int, in id: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.adjustKeepWire(
+            bound: bound == .low ? "Low" : "High",
+            delta: Int32(delta),
+            deviceId: id.kmpID
+        )
+        return
+        #endif
         guard let i = devices.firstIndex(where: { $0.id == id }) else { return }
         let lo = SetpointConfig.minTemp
         let hi = SetpointConfig.maxTemp
@@ -803,6 +1259,10 @@ final class AppModel {
     /// Menu/keyboard convenience: nudge the active setpoint(s) for the selected
     /// device, moving whichever bound(s) the current mode targets.
     func nudgeSetpoint(by delta: Int) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.nudgeSetpoint(delta: Int32(delta))
+        return
+        #endif
         switch device.systemMode {
         case .heat, .auxHeat: adjustKeep(.low, by: delta)
         case .cool:           adjustKeep(.high, by: delta)
@@ -813,6 +1273,10 @@ final class AppModel {
     /// Activate the activity profile with the given name, if one exists (used by
     /// the menu bar's Home / Away shortcuts).
     func activateProfileNamed(_ name: String) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.activateProfileNamed(name: name)
+        return
+        #endif
         if let profile = activityProfiles.first(where: { $0.name == name }) {
             activateProfile(profile)
         }
@@ -821,6 +1285,10 @@ final class AppModel {
     /// Toggle whether a paired sensor feeds the averaged temperature on a device. At least
     /// one sensor must always feed the average, so deselecting the last participant is a no-op.
     func toggleSensor(_ sensor: RoomSensor, in id: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.toggleSensor(sensorId: sensor.id.kmpID, deviceId: id.kmpID)
+        return
+        #endif
         guard let di = devices.firstIndex(where: { $0.id == id }),
               let si = devices[di].sensors.firstIndex(where: { $0.id == sensor.id }) else { return }
         if devices[di].sensors[si].participating,
@@ -830,6 +1298,10 @@ final class AppModel {
 
     /// Rename a paired sensor. No-op if the name is blank/unchanged.
     func renameSensor(_ sensorID: RoomSensor.ID, to name: String, in id: Device.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.renameSensor(sensorId: sensorID.kmpID, name: name, deviceId: id.kmpID)
+        return
+        #endif
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty,
               let di = devices.firstIndex(where: { $0.id == id }),
@@ -840,17 +1312,29 @@ final class AppModel {
 
     /// Automation Schedule/Off toggle drives schedule vs. standard control.
     func setScheduleEnabled(_ enabled: Bool) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.setScheduleEnabled(enabled: enabled)
+        return
+        #endif
         withAnimation(.snappy) { controlMode = enabled ? .schedule : .standard }
     }
 
     /// Activate an activity profile as the current controller mode.
     func activateProfile(_ profile: ActivityProfile) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.activateProfileById(id: profile.id.kmpID)
+        return
+        #endif
         activeProfile = profile
         withAnimation(.snappy) { controlMode = .activity }
     }
 
     /// Insert a new profile or update an existing one (matched by id).
     func saveProfile(_ updated: ActivityProfile) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.saveProfile(updated: SharedStateMapper.sharedProfile(updated))
+        return
+        #endif
         if let i = activityProfiles.firstIndex(where: { $0.id == updated.id }) {
             activityProfiles[i] = updated
         } else {
@@ -860,6 +1344,10 @@ final class AppModel {
     }
 
     func duplicateProfile(_ profile: ActivityProfile) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.duplicateProfileById(id: profile.id.kmpID)
+        return
+        #endif
         guard let i = activityProfiles.firstIndex(where: { $0.id == profile.id }) else { return }
         let copy = ActivityProfile(name: profile.name + " Copy", symbol: profile.symbol, colorHex: profile.colorHex,
                                    heatTo: profile.heatTo, coolTo: profile.coolTo, subtitle: profile.subtitle)
@@ -867,12 +1355,24 @@ final class AppModel {
     }
 
     func deleteProfile(_ profile: ActivityProfile) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.deleteProfile(profileId: profile.id.kmpID)
+        return
+        #endif
         activityProfiles.removeAll { $0.id == profile.id }
     }
 
     /// Enter or leave vacation mode. When entering with an assigned profile, the
     /// device holds that profile's setpoints; otherwise it keeps its current setback.
     func setVacation(_ on: Bool, profile: ActivityProfile? = nil) {
+        #if canImport(PetticoatShared) && os(iOS)
+        if let profile {
+            sharedModel.setVacation(on: on, profile: SharedStateMapper.sharedProfile(profile))
+        } else {
+            sharedModel.setVacation(on: on, profile: nil)
+        }
+        return
+        #endif
         if on, let profile, let i = devices.firstIndex(where: { $0.id == device.id }) {
             devices[i].keepMin = profile.heatTo
             devices[i].keepMax = profile.coolTo
@@ -883,6 +1383,10 @@ final class AppModel {
     /// Resume the schedule, clearing any hold/vacation and restoring the
     /// current scheduled period's setpoints.
     func resumeSchedule() {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.resumeSchedule()
+        return
+        #endif
         holdEndsAt = nil
         withAnimation(.snappy) { controlMode = .schedule }
         // Restore the setpoints of the schedule's current period.
@@ -893,6 +1397,10 @@ final class AppModel {
 
     /// Select a schedule to run and snap the current setpoints to its active period.
     func selectSchedule(_ id: SchedulePreset.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.selectSchedule(id: id.kmpID)
+        return
+        #endif
         selectedScheduleID = id
         syncScheduleSetpoints()
     }
@@ -900,6 +1408,10 @@ final class AppModel {
     /// Insert a new schedule or update an existing one (matched by id); a new one
     /// becomes selected.
     func saveSchedule(_ updated: SchedulePreset) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.saveSchedule(updated: SharedStateMapper.sharedSchedule(updated))
+        return
+        #endif
         if let i = schedules.firstIndex(where: { $0.id == updated.id }) {
             schedules[i] = updated
         } else {
@@ -910,6 +1422,10 @@ final class AppModel {
     }
 
     func duplicateSchedule(_ preset: SchedulePreset) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.duplicateScheduleById(id: preset.id.kmpID)
+        return
+        #endif
         guard let i = schedules.firstIndex(where: { $0.id == preset.id }) else { return }
         let base = preset.name + " (Copy)"
         let taken = Set(schedules.map(\.name))
@@ -923,6 +1439,10 @@ final class AppModel {
     }
 
     func deleteSchedule(_ id: SchedulePreset.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.deleteSchedule(id: id.kmpID)
+        return
+        #endif
         schedules.removeAll { $0.id == id }
         if selectedScheduleID == id { selectedScheduleID = schedules.first?.id }
         syncScheduleSetpoints()
@@ -932,6 +1452,10 @@ final class AppModel {
     /// current-period card reflects the running schedule. Only while following a schedule
     /// (a hold keeps its own held value). Call on appear and when the period changes.
     func syncScheduleSetpoints() {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.syncScheduleSetpoints()
+        return
+        #endif
         guard controlMode == .schedule, let p = currentPeriod,
               let i = devices.firstIndex(where: { $0.id == device.id }) else { return }
         devices[i].keepMin = p.heatTo
@@ -946,11 +1470,22 @@ final class AppModel {
     }
 
     func selectProgram(_ id: ScheduleProgram.ID, kind: ScheduleKind) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.selectProgramWire(id: id.kmpID, kind: kind.sharedWireValue)
+        return
+        #endif
         selectedProgramID[kind] = id
         syncScheduleSetpoints()
     }
 
     func saveProgram(_ program: ScheduleProgram, kind: ScheduleKind) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.saveProgramWire(
+            program: SharedStateMapper.sharedProgram(program),
+            kind: kind.sharedWireValue
+        )
+        return
+        #endif
         if let i = programs[kind]?.firstIndex(where: { $0.id == program.id }) {
             programs[kind]?[i] = program
         } else {
@@ -961,11 +1496,19 @@ final class AppModel {
     }
 
     func duplicateProgram(_ program: ScheduleProgram, kind: ScheduleKind) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.duplicateProgramById(id: program.id.kmpID, kind: kind.sharedWireValue)
+        return
+        #endif
         guard let i = programs[kind]?.firstIndex(where: { $0.id == program.id }) else { return }
         programs[kind]?.insert(ScheduleProgram(name: program.name + " Copy", groups: program.groups), at: i + 1)
     }
 
     func deleteProgram(_ id: ScheduleProgram.ID, kind: ScheduleKind) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.deleteProgramWire(id: id.kmpID, kind: kind.sharedWireValue)
+        return
+        #endif
         programs[kind]?.removeAll { $0.id == id }
         if selectedProgramID[kind] == id { selectedProgramID[kind] = programs[kind]?.first?.id }
         syncScheduleSetpoints()
@@ -975,6 +1518,10 @@ final class AppModel {
 
     /// Insert a new reminder or update an existing one (matched by id).
     func saveReminder(_ reminder: ServiceReminder) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.saveReminder(reminder: SharedStateMapper.sharedReminder(reminder))
+        return
+        #endif
         if let i = serviceReminders.firstIndex(where: { $0.id == reminder.id }) {
             serviceReminders[i] = reminder
         } else {
@@ -983,15 +1530,30 @@ final class AppModel {
     }
 
     func deleteReminder(_ id: ServiceReminder.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.deleteReminder(id: id.kmpID)
+        return
+        #endif
         serviceReminders.removeAll { $0.id == id }
     }
 
     func deleteReminders(_ offsets: IndexSet) {
+        #if canImport(PetticoatShared) && os(iOS)
+        let ids = offsets.compactMap {
+            serviceReminders.indices.contains($0) ? serviceReminders[$0].id.kmpID : nil
+        }
+        sharedModel.deleteReminders(ids: ids)
+        return
+        #endif
         serviceReminders.remove(atOffsets: offsets)
     }
 
     /// Mark a reminder serviced: reset its life and push the next-service date out.
     func completeReminder(_ id: ServiceReminder.ID) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.completeReminder(id: id.kmpID)
+        return
+        #endif
         guard let i = serviceReminders.firstIndex(where: { $0.id == id }) else { return }
         serviceReminders[i].lastCompleted = Date()
         serviceReminders[i].lifeRemaining = 1
@@ -1001,6 +1563,10 @@ final class AppModel {
     /// Dismisses a spotlight card. When the last card is dismissed the Spotlight area
     /// is hidden entirely.
     func dismissSpotlight(_ item: SpotlightItem) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.dismissSpotlight(itemId: item.id.kmpID)
+        return
+        #endif
         withAnimation { spotlights.removeAll { $0.id == item.id } }
     }
 
@@ -1009,12 +1575,43 @@ final class AppModel {
     /// Assign (or unassign) a thermostat to a home. A thermostat belongs to at
     /// most one home — assigning it here clears any previous home assignment.
     func assignDevice(_ deviceID: Device.ID, toHome homeID: Home.ID?) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.assignDevice(
+            deviceId: deviceID.kmpID,
+            homeId: homeID?.kmpID
+        )
+        return
+        #endif
         guard let i = devices.firstIndex(where: { $0.id == deviceID }) else { return }
         devices[i].homeID = homeID
     }
 
+    func addHome(_ home: Home) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.addHome(home: SharedStateMapper.sharedHome(home))
+        #else
+        homes.append(home)
+        #endif
+    }
+
+    func updateHome(_ home: Home) {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.updateHome(home: SharedStateMapper.sharedHome(home))
+        #else
+        guard let index = homes.firstIndex(where: { $0.id == home.id }) else { return }
+        homes[index] = home
+        #endif
+    }
+
     /// Delete homes and unassign any thermostats that were in those homes.
     func deleteHomes(at offsets: IndexSet) {
+        #if canImport(PetticoatShared) && os(iOS)
+        let ids = offsets.compactMap {
+            homes.indices.contains($0) ? homes[$0].id.kmpID : nil
+        }
+        sharedModel.deleteHomes(ids: ids)
+        return
+        #endif
         let removedIDs = Set(offsets.map { homes[$0].id })
         for i in devices.indices where removedIDs.contains(devices[i].homeID ?? UUID()) {
             devices[i].homeID = nil
@@ -1023,154 +1620,29 @@ final class AppModel {
     }
 
     func signIn() {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.signIn()
+        return
+        #endif
         withAnimation(.easeInOut) { route = .main }
     }
 
     func signOut() {
+        #if canImport(PetticoatShared) && os(iOS)
+        sharedModel.signOut()
+        return
+        #endif
         showAccount = false
         withAnimation(.easeInOut) { route = .login }
     }
 
     // MARK: - Widget
 
-    /// Writes every device's current state to the App Group UserDefaults so
-    /// any configured widget can read it, and publishes the device list for the
-    /// widget's thermostat picker. Preserves in-flight comfort feedback.
     func writeWidgetSnapshot() {
-        let list: [WidgetDeviceInfo] = devices.map {
-            WidgetDeviceInfo(id: $0.id.uuidString, name: $0.name)
-        }
-        WidgetSnapshot.saveDeviceList(list)
-
-        for d in devices {
-            let widgetActivity: WidgetActivity
-            switch d.activity {
-            case .idle:    widgetActivity = d.fanMode == .on ? .fan : .idle
-            case .heating: widgetActivity = .heating
-            case .cooling: widgetActivity = .cooling
-            }
-
-            let deviceID = d.id.uuidString
-            var snap = WidgetSnapshot.load(deviceID: deviceID)
-            // Reset feedback state when the HVAC activity changes.
-            if snap.activity != widgetActivity {
-                snap.feedbackGiven = false
-                snap.comfortFeedback = nil
-            }
-            snap.deviceName  = d.name
-            snap.currentTemp = d.currentTemp
-            snap.humidity    = d.humidity
-            snap.activity    = widgetActivity
-            snap.isOffline   = d.isOffline
-            let widgetMode: WidgetSystemMode
-            switch d.systemMode {
-            case .heat, .auxHeat: widgetMode = .heat
-            case .cool:           widgetMode = .cool
-            case .auto:           widgetMode = .auto
-            case .off:            widgetMode = .off
-            }
-            snap.systemMode = widgetMode
-            // The app is the source of truth — drop any optimistic guess the
-            // widget wrote once the real activity is known.
-            snap.optimisticActivity = nil
-            snap.save()
-        }
-
-        WidgetCenter.shared.reloadTimelines(ofKind: WidgetSnapshot.widgetKind)
-        manageLiveActivity(for: device)
+        widgetSyncService.sync(devices: devices, selectedDevice: device, homes: homes)
     }
 
-    /// Estimates minutes to reach `target` from `current`, factoring in:
-    /// - Outdoor temperature (cold/hot outdoor air slows heating/cooling via heat loss or gain)
-    /// - HVAC system type from systemMode (gas furnace fastest; heat pump moderate; aux slowest)
-    /// - Home size (larger homes slower even with proportionally larger systems, due to
-    ///   greater thermal mass, wall area, and duct run length)
-    ///
-    /// Base rates: heating 10°F/hr, cooling 12°F/hr for a medium home on a moderate day.
-    private func estimateMinutesToTemp(current: Int, target: Int, for d: Device, isHeating: Bool) -> Int {
-        let delta = max(1, abs(target - current))
-        let base: Double = isHeating ? 10.0 / 60.0 : 12.0 / 60.0   // °F per minute
-
-        // Outdoor temperature penalty
-        let outdoorPenalty: Double
-        if isHeating {
-            outdoorPenalty = min(0.4, max(0, Double(target - d.outdoorTemp)) / 100.0)
-        } else {
-            outdoorPenalty = min(0.3, max(0, Double(d.outdoorTemp - target)) / 100.0)
-        }
-
-        // Look up home-level settings; fall back to medium/gas defaults when unassigned.
-        let home = homes.first { $0.id == d.homeID }
-        let hvacFactor: Double = isHeating ? (home?.hvacSystemType.heatingFactor ?? 1.0) : 1.0
-
-        let rate = base * (1.0 - outdoorPenalty) * hvacFactor * (home?.homeSize.rateMultiplier ?? 1.0)
-        return max(1, Int((Double(delta) / rate).rounded()))
-    }
-
-    /// Starts, updates, or ends the "time to temp" Live Activity based on the
-    /// selected device's current HVAC state.
-    private func manageLiveActivity(for d: Device) {
-        let isActive = d.activity == .heating || d.activity == .cooling
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-
-        if isActive {
-            let isHeating = d.activity == .heating
-            let target = isHeating ? d.keepMin : d.keepMax
-            let minutes = estimateMinutesToTemp(
-                current: d.currentTemp, target: target,
-                for: d, isHeating: isHeating
-            )
-            let endDate = Date().addingTimeInterval(Double(minutes) * 60)
-
-            let state = PetticoatActivityAttributes.ContentState(
-                currentTemp: d.currentTemp,
-                targetTemp: target,
-                estimatedEndDate: endDate,
-                isHeating: isHeating
-            )
-
-            if let activity = liveActivity, activity.activityState == .active {
-                Task { await activity.update(.init(state: state, staleDate: endDate)) }
-            } else {
-                let attrs = PetticoatActivityAttributes(deviceName: d.name, startTemp: d.currentTemp)
-                liveActivity = try? Activity.request(
-                    attributes: attrs,
-                    content: .init(state: state, staleDate: endDate)
-                )
-            }
-        } else if let activity = liveActivity {
-            Task { await activity.end(nil, dismissalPolicy: .immediate) }
-            liveActivity = nil
-        }
-    }
-
-    /// Reads any pending thermostat command left by a widget interaction and
-    /// applies it. Called when the app returns to the foreground. Clears the
-    /// command before applying so a recomputeDevice()-triggered writeWidgetSnapshot()
-    /// doesn't see stale data.
     func applyPendingWidgetCommand() {
-        let deviceID = device.id.uuidString
-        var snap = WidgetSnapshot.load(deviceID: deviceID)
-        guard snap.pendingSetpointDelta != nil || snap.pendingFanRun == true else { return }
-
-        let delta = snap.pendingSetpointDelta
-        let runFan = snap.pendingFanRun == true
-        snap.pendingSetpointDelta = nil
-        snap.pendingFanRun = nil
-        snap.save()
-
-        if let delta {
-            // Positive delta = user is cold → raise the heat bound.
-            // Negative delta = user is warm → lower the cool bound.
-            // adjustKeep ignores the bound in single-mode (heat/cool), so this
-            // is correct for all system modes.
-            let bound: SetpointBound = delta > 0 ? .low : .high
-            adjustKeep(bound, by: delta)
-        }
-
-        if runFan, let i = devices.firstIndex(where: { $0.id == device.id }) {
-            devices[i].fanMode = .on
-            devices[i].fanHoldDuration = .twoHours
-        }
+        widgetSyncService.applyPendingCommand(to: self)
     }
 }

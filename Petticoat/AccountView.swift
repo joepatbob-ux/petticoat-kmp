@@ -159,10 +159,12 @@ struct ApplicationSettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        @Bindable var model = model
         List {
             Section {
-                AppearancePicker(selection: $model.appearance)
+                AppearancePicker(selection: Binding(
+                    get: { model.appearance },
+                    set: model.setAppearance
+                ))
                     .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 10, trailing: 16))
             } header: {
                 Text("Appearance")
@@ -171,7 +173,10 @@ struct ApplicationSettingsView: View {
             }
 
             Section {
-                Toggle("Weather Location", isOn: $model.showWeatherLocation)
+                Toggle("Weather Location", isOn: Binding(
+                    get: { model.showWeatherLocation },
+                    set: model.setShowWeatherLocation
+                ))
                     .tint(Color(hex: 0x34C759))
                     .foregroundStyle(SMA.labelPrimary)
             } footer: {
@@ -225,11 +230,17 @@ struct ApplicationSettingsView: View {
             }
 
             Section {
-                Toggle("Show Sensors on Dashboard", isOn: $model.showSensorsOnDashboard)
+                Toggle("Show Sensors on Dashboard", isOn: Binding(
+                    get: { model.showSensorsOnDashboard },
+                    set: model.setShowSensorsOnDashboard
+                ))
                     .tint(Color(hex: 0x34C759))
                     .foregroundStyle(SMA.labelPrimary)
 
-                Picker("Stepper Buttons", selection: $model.stepperStyle) {
+                Picker("Stepper Buttons", selection: Binding(
+                    get: { model.stepperStyle },
+                    set: model.setStepperStyle
+                )) {
                     ForEach(StepperStyle.allCases) { style in
                         Text(style.label).tag(style)
                     }
@@ -532,11 +543,10 @@ struct HomesSettingsView: View {
     @State private var newHomeName = ""
 
     var body: some View {
-        @Bindable var model = model
         List {
-            ForEach($model.homes) { $home in
+            ForEach(model.homes) { home in
                 NavigationLink(home.name) {
-                    HomeDetailView(home: $home)
+                    HomeDetailView(home: home)
                 }
             }
             .onDelete { model.deleteHomes(at: $0) }
@@ -562,7 +572,7 @@ struct HomesSettingsView: View {
             Button("Add") {
                 let trimmed = newHomeName.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty else { return }
-                model.homes.append(Home(name: trimmed))
+                model.addHome(Home(name: trimmed))
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -570,8 +580,12 @@ struct HomesSettingsView: View {
 }
 
 struct HomeDetailView: View {
-    @Binding var home: Home
+    @State private var home: Home
     @Environment(AppModel.self) private var model
+
+    init(home: Home) {
+        _home = State(initialValue: home)
+    }
 
     var body: some View {
         Form {
@@ -640,6 +654,9 @@ struct HomeDetailView: View {
         .listRowBackground(SMA.card)
         .navigationTitle(home.name)
         .inlineNavTitle()
+        .onChange(of: home) { _, updated in
+            model.updateHome(updated)
+        }
     }
 }
 
