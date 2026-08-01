@@ -650,6 +650,9 @@ final class AppModel {
         // initial values).
         recomputeDevice()
         installNativeChangeObservers()
+        #if canImport(PetticoatShared) && os(iOS)
+        applySharedState(sharedModel.snapshot)
+        #endif
         startSharedObservation()
     }
 
@@ -811,7 +814,7 @@ final class AppModel {
     /// Make a device the target of the single-device screens.
     func selectDevice(_ id: Device.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.selectDevice(id: id.uuidString)
+        sharedModel.selectDevice(id: id.kmpID)
         #else
         selectedDeviceID = id
         #endif
@@ -915,7 +918,7 @@ final class AppModel {
 
     func setSystemMode(_ value: SystemMode, for deviceID: Device.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.setSystemModeWire(value: value.sharedWireValue, deviceId: deviceID.uuidString)
+        sharedModel.setSystemModeWire(value: value.sharedWireValue, deviceId: deviceID.kmpID)
         #else
         self[deviceID: deviceID, \.systemMode] = value
         #endif
@@ -923,7 +926,7 @@ final class AppModel {
 
     func setFanMode(_ value: FanMode, for deviceID: Device.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.setFanModeWire(value: value.sharedWireValue, deviceId: deviceID.uuidString)
+        sharedModel.setFanModeWire(value: value.sharedWireValue, deviceId: deviceID.kmpID)
         #else
         self[deviceID: deviceID, \.fanMode] = value
         #endif
@@ -933,7 +936,7 @@ final class AppModel {
         #if canImport(PetticoatShared) && os(iOS)
         sharedModel.setDeviceFanHoldDurationWire(
             value: value.sharedWireValue,
-            deviceId: deviceID.uuidString
+            deviceId: deviceID.kmpID
         )
         #else
         self[deviceID: deviceID, \.fanHoldDuration] = value
@@ -942,7 +945,7 @@ final class AppModel {
 
     func setCirculateFan(_ value: Bool, for deviceID: Device.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.setDeviceCirculateFan(v: value, deviceId: deviceID.uuidString)
+        sharedModel.setDeviceCirculateFan(v: value, deviceId: deviceID.kmpID)
         #else
         self[deviceID: deviceID, \.circulateFan] = value
         #endif
@@ -950,7 +953,7 @@ final class AppModel {
 
     func setCirculateAmount(_ value: String, for deviceID: Device.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.setDeviceCirculateAmount(v: value, deviceId: deviceID.uuidString)
+        sharedModel.setDeviceCirculateAmount(v: value, deviceId: deviceID.kmpID)
         #else
         self[deviceID: deviceID, \.circulateAmount] = value
         #endif
@@ -960,7 +963,7 @@ final class AppModel {
         #if canImport(PetticoatShared) && os(iOS)
         sharedModel.setDeviceCirculateHoldDurationWire(
             value: value.sharedWireValue,
-            deviceId: deviceID.uuidString
+            deviceId: deviceID.kmpID
         )
         #else
         self[deviceID: deviceID, \.circulateHoldDuration] = value
@@ -969,7 +972,7 @@ final class AppModel {
 
     func setUsePresets(_ value: Bool) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.setDeviceUsePresets(v: value, deviceId: device.id.uuidString)
+        sharedModel.setDeviceUsePresets(v: value, deviceId: device.id.kmpID)
         #else
         self[device: \.usePresets] = value
         #endif
@@ -977,7 +980,7 @@ final class AppModel {
 
     func setEarlyStart(_ value: Bool) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.setDeviceEarlyStart(v: value, deviceId: device.id.uuidString)
+        sharedModel.setDeviceEarlyStart(v: value, deviceId: device.id.kmpID)
         #else
         self[device: \.earlyStart] = value
         #endif
@@ -985,7 +988,7 @@ final class AppModel {
 
     func setGeofenceEnabled(_ value: Bool) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.setDeviceGeofenceEnabled(v: value, deviceId: device.id.uuidString)
+        sharedModel.setDeviceGeofenceEnabled(v: value, deviceId: device.id.kmpID)
         #else
         self[device: \.geofenceEnabled] = value
         #endif
@@ -1036,7 +1039,7 @@ final class AppModel {
     /// Show or hide a spotlight card on the dashboard (reversible).
     func setSpotlight(_ item: SpotlightItem, hidden: Bool) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.setSpotlightHidden(itemId: item.id.uuidString, hidden: hidden)
+        sharedModel.setSpotlightHidden(itemId: item.id.kmpID, hidden: hidden)
         return
         #endif
         if hidden { hiddenSpotlights.insert(item.id) } else { hiddenSpotlights.remove(item.id) }
@@ -1212,7 +1215,7 @@ final class AppModel {
         sharedModel.adjustKeepWire(
             bound: bound == .low ? "Low" : "High",
             delta: Int32(delta),
-            deviceId: id.uuidString
+            deviceId: id.kmpID
         )
         return
         #endif
@@ -1283,7 +1286,7 @@ final class AppModel {
     /// one sensor must always feed the average, so deselecting the last participant is a no-op.
     func toggleSensor(_ sensor: RoomSensor, in id: Device.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.toggleSensor(sensorId: sensor.id.uuidString, deviceId: id.uuidString)
+        sharedModel.toggleSensor(sensorId: sensor.id.kmpID, deviceId: id.kmpID)
         return
         #endif
         guard let di = devices.firstIndex(where: { $0.id == id }),
@@ -1296,7 +1299,7 @@ final class AppModel {
     /// Rename a paired sensor. No-op if the name is blank/unchanged.
     func renameSensor(_ sensorID: RoomSensor.ID, to name: String, in id: Device.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.renameSensor(sensorId: sensorID.uuidString, name: name, deviceId: id.uuidString)
+        sharedModel.renameSensor(sensorId: sensorID.kmpID, name: name, deviceId: id.kmpID)
         return
         #endif
         let trimmed = name.trimmingCharacters(in: .whitespaces)
@@ -1319,7 +1322,7 @@ final class AppModel {
     /// Activate an activity profile as the current controller mode.
     func activateProfile(_ profile: ActivityProfile) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.activateProfileById(id: profile.id.uuidString)
+        sharedModel.activateProfileById(id: profile.id.kmpID)
         return
         #endif
         activeProfile = profile
@@ -1342,7 +1345,7 @@ final class AppModel {
 
     func duplicateProfile(_ profile: ActivityProfile) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.duplicateProfileById(id: profile.id.uuidString)
+        sharedModel.duplicateProfileById(id: profile.id.kmpID)
         return
         #endif
         guard let i = activityProfiles.firstIndex(where: { $0.id == profile.id }) else { return }
@@ -1353,7 +1356,7 @@ final class AppModel {
 
     func deleteProfile(_ profile: ActivityProfile) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.deleteProfile(profileId: profile.id.uuidString)
+        sharedModel.deleteProfile(profileId: profile.id.kmpID)
         return
         #endif
         activityProfiles.removeAll { $0.id == profile.id }
@@ -1395,7 +1398,7 @@ final class AppModel {
     /// Select a schedule to run and snap the current setpoints to its active period.
     func selectSchedule(_ id: SchedulePreset.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.selectSchedule(id: id.uuidString)
+        sharedModel.selectSchedule(id: id.kmpID)
         return
         #endif
         selectedScheduleID = id
@@ -1420,7 +1423,7 @@ final class AppModel {
 
     func duplicateSchedule(_ preset: SchedulePreset) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.duplicateScheduleById(id: preset.id.uuidString)
+        sharedModel.duplicateScheduleById(id: preset.id.kmpID)
         return
         #endif
         guard let i = schedules.firstIndex(where: { $0.id == preset.id }) else { return }
@@ -1437,7 +1440,7 @@ final class AppModel {
 
     func deleteSchedule(_ id: SchedulePreset.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.deleteSchedule(id: id.uuidString)
+        sharedModel.deleteSchedule(id: id.kmpID)
         return
         #endif
         schedules.removeAll { $0.id == id }
@@ -1468,7 +1471,7 @@ final class AppModel {
 
     func selectProgram(_ id: ScheduleProgram.ID, kind: ScheduleKind) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.selectProgramWire(id: id.uuidString, kind: kind.sharedWireValue)
+        sharedModel.selectProgramWire(id: id.kmpID, kind: kind.sharedWireValue)
         return
         #endif
         selectedProgramID[kind] = id
@@ -1494,7 +1497,7 @@ final class AppModel {
 
     func duplicateProgram(_ program: ScheduleProgram, kind: ScheduleKind) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.duplicateProgramById(id: program.id.uuidString, kind: kind.sharedWireValue)
+        sharedModel.duplicateProgramById(id: program.id.kmpID, kind: kind.sharedWireValue)
         return
         #endif
         guard let i = programs[kind]?.firstIndex(where: { $0.id == program.id }) else { return }
@@ -1503,7 +1506,7 @@ final class AppModel {
 
     func deleteProgram(_ id: ScheduleProgram.ID, kind: ScheduleKind) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.deleteProgramWire(id: id.uuidString, kind: kind.sharedWireValue)
+        sharedModel.deleteProgramWire(id: id.kmpID, kind: kind.sharedWireValue)
         return
         #endif
         programs[kind]?.removeAll { $0.id == id }
@@ -1528,7 +1531,7 @@ final class AppModel {
 
     func deleteReminder(_ id: ServiceReminder.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.deleteReminder(id: id.uuidString)
+        sharedModel.deleteReminder(id: id.kmpID)
         return
         #endif
         serviceReminders.removeAll { $0.id == id }
@@ -1536,7 +1539,9 @@ final class AppModel {
 
     func deleteReminders(_ offsets: IndexSet) {
         #if canImport(PetticoatShared) && os(iOS)
-        let ids = offsets.compactMap { serviceReminders.indices.contains($0) ? serviceReminders[$0].id.uuidString : nil }
+        let ids = offsets.compactMap {
+            serviceReminders.indices.contains($0) ? serviceReminders[$0].id.kmpID : nil
+        }
         sharedModel.deleteReminders(ids: ids)
         return
         #endif
@@ -1546,7 +1551,7 @@ final class AppModel {
     /// Mark a reminder serviced: reset its life and push the next-service date out.
     func completeReminder(_ id: ServiceReminder.ID) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.completeReminder(id: id.uuidString)
+        sharedModel.completeReminder(id: id.kmpID)
         return
         #endif
         guard let i = serviceReminders.firstIndex(where: { $0.id == id }) else { return }
@@ -1559,7 +1564,7 @@ final class AppModel {
     /// is hidden entirely.
     func dismissSpotlight(_ item: SpotlightItem) {
         #if canImport(PetticoatShared) && os(iOS)
-        sharedModel.dismissSpotlight(itemId: item.id.uuidString)
+        sharedModel.dismissSpotlight(itemId: item.id.kmpID)
         return
         #endif
         withAnimation { spotlights.removeAll { $0.id == item.id } }
@@ -1572,8 +1577,8 @@ final class AppModel {
     func assignDevice(_ deviceID: Device.ID, toHome homeID: Home.ID?) {
         #if canImport(PetticoatShared) && os(iOS)
         sharedModel.assignDevice(
-            deviceId: deviceID.uuidString,
-            homeId: homeID?.uuidString
+            deviceId: deviceID.kmpID,
+            homeId: homeID?.kmpID
         )
         return
         #endif
@@ -1601,7 +1606,9 @@ final class AppModel {
     /// Delete homes and unassign any thermostats that were in those homes.
     func deleteHomes(at offsets: IndexSet) {
         #if canImport(PetticoatShared) && os(iOS)
-        let ids = offsets.compactMap { homes.indices.contains($0) ? homes[$0].id.uuidString : nil }
+        let ids = offsets.compactMap {
+            homes.indices.contains($0) ? homes[$0].id.kmpID : nil
+        }
         sharedModel.deleteHomes(ids: ids)
         return
         #endif

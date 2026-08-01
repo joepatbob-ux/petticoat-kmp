@@ -2,6 +2,10 @@
 import Foundation
 import PetticoatShared
 
+extension UUID {
+    var kmpID: String { uuidString.lowercased() }
+}
+
 /// Converts Kotlin value snapshots into the existing native SwiftUI model types.
 /// The conversion layer deliberately stays in iOS: SwiftUI continues to work with
 /// `UUID`, `Date`, SF Symbols, and observable reference types.
@@ -311,7 +315,7 @@ enum SharedStateMapper {
 
     static func sharedProfile(_ value: ActivityProfile) -> PetticoatShared.ActivityProfile {
         PetticoatShared.SharedModelFactory.shared.profile(
-            id: value.id.uuidString,
+            id: value.id.kmpID,
             name: value.name,
             symbol: value.symbol,
             colorHex: Int64(value.colorHex),
@@ -323,7 +327,7 @@ enum SharedStateMapper {
 
     static func sharedScheduleEvent(_ value: ScheduleEvent) -> PetticoatShared.ScheduleEvent {
         PetticoatShared.SharedModelFactory.shared.scheduleEvent(
-            id: value.id.uuidString,
+            id: value.id.kmpID,
             name: value.name,
             symbol: value.symbol,
             colorHex: Int64(value.colorHex),
@@ -335,7 +339,7 @@ enum SharedStateMapper {
 
     static func sharedScheduleGroup(_ value: ScheduleDayGroup) -> PetticoatShared.ScheduleDayGroup {
         PetticoatShared.SharedModelFactory.shared.scheduleGroup(
-            id: value.id.uuidString,
+            id: value.id.kmpID,
             dayNumbers: value.days.sorted().map { KotlinInt(int: Int32($0)) },
             events: value.events.map(sharedScheduleEvent)
         )
@@ -343,7 +347,7 @@ enum SharedStateMapper {
 
     static func sharedSchedule(_ value: SchedulePreset) -> PetticoatShared.SchedulePreset {
         PetticoatShared.SharedModelFactory.shared.schedule(
-            id: value.id.uuidString,
+            id: value.id.kmpID,
             name: value.name,
             groups: value.groups.map(sharedScheduleGroup)
         )
@@ -351,7 +355,7 @@ enum SharedStateMapper {
 
     static func sharedProgramEvent(_ value: ProgramEvent) -> PetticoatShared.ProgramEvent {
         PetticoatShared.SharedModelFactory.shared.programEvent(
-            id: value.id.uuidString,
+            id: value.id.kmpID,
             startMinutes: minutes(value.time),
             heatTo: Int32(value.heatTo),
             coolTo: Int32(value.coolTo)
@@ -360,7 +364,7 @@ enum SharedStateMapper {
 
     static func sharedProgramGroup(_ value: ProgramDayGroup) -> PetticoatShared.ProgramDayGroup {
         PetticoatShared.SharedModelFactory.shared.programGroup(
-            id: value.id.uuidString,
+            id: value.id.kmpID,
             dayNumbers: value.days.sorted().map { KotlinInt(int: Int32($0)) },
             events: value.events.map(sharedProgramEvent)
         )
@@ -368,7 +372,7 @@ enum SharedStateMapper {
 
     static func sharedProgram(_ value: ScheduleProgram) -> PetticoatShared.ScheduleProgram {
         PetticoatShared.SharedModelFactory.shared.program(
-            id: value.id.uuidString,
+            id: value.id.kmpID,
             name: value.name,
             groups: value.groups.map(sharedProgramGroup)
         )
@@ -376,7 +380,7 @@ enum SharedStateMapper {
 
     static func sharedReminder(_ value: ServiceReminder) -> PetticoatShared.ServiceReminder {
         PetticoatShared.SharedModelFactory.shared.reminder(
-            id: value.id.uuidString,
+            id: value.id.kmpID,
             name: value.name,
             type: value.type,
             basedOn: value.basedOn == .calendar ? "Calendar" : "Runtime",
@@ -393,7 +397,7 @@ enum SharedStateMapper {
 
     static func sharedHome(_ value: Home) -> PetticoatShared.Home {
         PetticoatShared.SharedModelFactory.shared.home(
-            id: value.id.uuidString,
+            id: value.id.kmpID,
             name: value.name,
             homeSize: value.homeSize.sharedWireValue,
             hvacSystemType: value.hvacSystemType.sharedWireValue
