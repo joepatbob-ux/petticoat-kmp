@@ -37,3 +37,26 @@ Petticoat is a native iOS / SwiftUI prototype of the Sensi smart-thermostat app.
   (so `@testable import Petticoat` resolves unchanged) with a matching `PetticoatTests` test target,
   and run `swift test`. This compiles/passes all 26 of those tests but does **not** cover the app,
   the widget, or any SwiftUI/UIKit code — it is not a substitute for building in Xcode.
+
+### Android / KMP toolchain (installed on the Linux VM snapshot)
+
+Despite the repo name (`petticoat-kmp`), **there is currently no Kotlin Multiplatform / Gradle
+project in this repository** — no `gradlew`, no `settings.gradle(.kts)`, and no `:androidApp` or
+`:shared` modules on any branch. So `./gradlew :androidApp:assembleDebug :shared:allTests` cannot be
+run against this repo until that project structure is added.
+
+The VM snapshot nonetheless has a ready Android/JVM toolchain for when a Gradle/KMP project lands:
+
+- **JDK 21** (`openjdk-21-jdk`, system-installed). `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`.
+- **Android SDK** under `$HOME/android-sdk` (`ANDROID_HOME`/`ANDROID_SDK_ROOT`): `platform-tools`,
+  `platforms;android-35`, `build-tools;35.0.0`, plus `cmdline-tools;latest`. All licenses accepted
+  (`$ANDROID_HOME/licenses`).
+- `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and the tool `PATH` are exported from `~/.bashrc`
+  (interactive shells). If you need them in a non-login/non-interactive shell, source `~/.bashrc` or
+  set them explicitly.
+- **Gradle 8.14.3** wrapper distribution and the Kotlin/AGP/Android dependency caches are pre-warmed
+  in `~/.gradle` (verified by building a throwaway Android+KMP smoke project — that project lives in
+  `/tmp`, not the repo). A future in-repo `./gradlew` on Gradle 8.14.3 will reuse the warmed cache.
+
+These are one-time snapshot installs, **not** part of the startup update script (which stays a
+no-op). Do not add SDK/JDK installs or `gradle assemble` to the update script.
