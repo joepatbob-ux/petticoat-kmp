@@ -24,7 +24,7 @@ jobs:
       - name: Install Android SDK
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Shared tests, Android build, and lint
-        run: ./gradlew :shared:jvmTest :androidApp:assembleDebug :androidApp:lintDebug
+        run: ./gradlew :shared:jvmTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest :androidApp:lintDebug
 
   ios:
     runs-on: xcode-27
