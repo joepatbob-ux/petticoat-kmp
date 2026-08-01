@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.sensi.petticoat.AppModel
 import com.sensi.petticoat.AppState
 import com.sensi.petticoat.model.ControlMode
+import com.sensi.petticoat.model.ScheduleKind
 import com.sensi.petticoat.ui.components.NavRow
 import com.sensi.petticoat.ui.components.PillOption
 import com.sensi.petticoat.ui.components.PillSegmentedSelector
@@ -39,6 +40,18 @@ import com.sensi.petticoat.ui.components.ToggleRow
 
 private enum class ScheduleMode { Schedule, Off }
 private enum class AutomationRoute { Menu, Presets, Programs, Profiles, Geofence, Vacations }
+
+@Composable
+private fun ProgramRowFor(
+    state: AppState,
+    kind: ScheduleKind,
+    title: String,
+    onClick: () -> Unit,
+) {
+    val selectedId = state.selectedProgramIdFor(kind)
+    val name = state.programsFor(kind).firstOrNull { it.id == selectedId }?.name
+    NavRow(title, value = name, onClick = onClick)
+}
 
 /**
  * Schedule/Automation tab landing. Toggles are wired to shared state; the drill-in rows
@@ -53,12 +66,19 @@ fun AutomationScreen(
     onBack: () -> Unit,
 ) {
     var route by remember { mutableStateOf(AutomationRoute.Menu) }
+    var programKind by remember { mutableStateOf(ScheduleKind.Heat) }
 
     when (route) {
         AutomationRoute.Menu -> Unit
         AutomationRoute.Presets -> { PlaceholderScreen("Schedules") { route = AutomationRoute.Menu }; return }
-        AutomationRoute.Programs -> { PlaceholderScreen("Programs") { route = AutomationRoute.Menu }; return }
-        AutomationRoute.Profiles -> { PlaceholderScreen("Activity Profiles") { route = AutomationRoute.Menu }; return }
+        AutomationRoute.Programs -> {
+            ProgramScheduleScreen(model, state, programKind) { route = AutomationRoute.Menu }
+            return
+        }
+        AutomationRoute.Profiles -> {
+            ActivityProfilesScreen(model, state) { route = AutomationRoute.Menu }
+            return
+        }
         AutomationRoute.Geofence -> { PlaceholderScreen("Auto Home/Away") { route = AutomationRoute.Menu }; return }
         AutomationRoute.Vacations -> { PlaceholderScreen("Vacations") { route = AutomationRoute.Menu }; return }
     }
@@ -110,11 +130,20 @@ fun AutomationScreen(
                         route = AutomationRoute.Profiles
                     }
                 } else {
-                    NavRow("Heating Schedule") { route = AutomationRoute.Programs }
+                    ProgramRowFor(state, ScheduleKind.Heat, "Heating Schedule") {
+                        programKind = ScheduleKind.Heat
+                        route = AutomationRoute.Programs
+                    }
                     RowDivider()
-                    NavRow("Cooling Schedule") { route = AutomationRoute.Programs }
+                    ProgramRowFor(state, ScheduleKind.Cool, "Cooling Schedule") {
+                        programKind = ScheduleKind.Cool
+                        route = AutomationRoute.Programs
+                    }
                     RowDivider()
-                    NavRow("Auto Schedule") { route = AutomationRoute.Programs }
+                    ProgramRowFor(state, ScheduleKind.Auto, "Auto Schedule") {
+                        programKind = ScheduleKind.Auto
+                        route = AutomationRoute.Programs
+                    }
                 }
             }
 
