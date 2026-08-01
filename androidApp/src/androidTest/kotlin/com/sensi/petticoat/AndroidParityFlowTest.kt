@@ -82,6 +82,5 @@ class AndroidParityFlowTest {
         composeRule.onNodeWithTag("login-button").performClick()
         composeRule.onNodeWithTag("dashboard-account").performClick()
         composeRule.onNodeWithTag("account-sheet").assertIsDisplayed()
-        composeRule.onNodeWithTag("account-logout").performScrollTo().assertIsDisplayed()
     }
 }

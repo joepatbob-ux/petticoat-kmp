@@ -1,7 +1,6 @@
 package com.sensi.petticoat.ui.screens
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -90,10 +89,11 @@ fun UsageScreen(model: AppModel, state: AppState, onBack: () -> Unit) {
 @Composable
 private fun UsageCard(entry: UsageEntry, expanded: Boolean, onToggle: () -> Unit, onHelp: () -> Unit) {
     Card(
+        onClick = { if (!entry.insufficient) onToggle() },
         modifier = Modifier.fillMaxWidth().testTag(if (entry.insufficient) "usage-entry-insufficient" else "usage-entry-row"),
     ) {
         Column(
-            Modifier.clickable(enabled = !entry.insufficient, onClick = onToggle).padding(16.dp),
+            Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
