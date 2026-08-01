@@ -128,7 +128,7 @@ private fun UsageBar(entry: UsageEntry) {
         UsageMode.Aux to Color(0xFFE61234),
         UsageMode.Fan to Color(0xFFC5B1C2),
     )
-    Canvas(Modifier.fillMaxWidth().height(14.dp)) {
+    Canvas(Modifier.fillMaxWidth().height(14.dp).testTag("usage-runtime-bar")) {
         var x = 0f
         UsageMode.entries.forEach { mode ->
             val width = size.width * entry.fraction(mode)
