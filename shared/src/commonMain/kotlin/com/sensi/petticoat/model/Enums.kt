@@ -201,8 +201,24 @@ enum class ScheduleKind {
             Auto -> "Auto Schedule"
         }
     val wireValue: String get() = name
+    val detail: String get() = when (this) {
+        Heat -> "Heat"
+        Cool -> "Cool"
+        Auto -> "Auto"
+    }
+    val editsHeat: Boolean get() = this != Cool
+    val editsCool: Boolean get() = this != Heat
 }
 
 enum class ReminderBasis { Runtime, Calendar; val wireValue: String get() = name }
 
 enum class SpotlightKind { Promotional, Generic, Partner; val wireValue: String get() = name }
+
+enum class DistanceUnit {
+    Miles, Kilometers;
+
+    val wireValue: String get() = name
+    val range: IntRange get() = if (this == Miles) 1..10 else 1..16
+    fun label(value: Int): String =
+        "$value ${if (this == Miles) if (value == 1) "mile" else "miles" else "km"}"
+}

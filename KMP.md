@@ -38,7 +38,11 @@ not a shared Compose Multiplatform UI.
 
 Android owns its Compose UI and collects `AppModel.state` with
 `collectAsStateWithLifecycle()`. The theme uses `MaterialExpressiveTheme` and expressive
-motion. Current native screens are Splash, Login, Dashboard, and Control.
+motion. The adaptive device shell exposes Control, Schedule, Usage, Reminders, and
+Settings tabs. Schedule includes profiles, preset/program editing, vacations, geofence,
+and a draggable Canvas dial. Usage includes runtime ranges and expandable mode charts;
+Control exposes Sensors and Mode sheets; global Account, Help, and Add Device flows use
+native Material sheets.
 
 ## iOS
 
@@ -64,10 +68,10 @@ Canonical shared behavior:
 ./gradlew :shared:jvmTest
 ```
 
-Android compile/package:
+Android compile/package and instrumentation-test compile:
 
 ```bash
-./gradlew :androidApp:assembleDebug
+./gradlew :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest
 ```
 
 iOS facade, platform services, and UI (macOS/Xcode required):

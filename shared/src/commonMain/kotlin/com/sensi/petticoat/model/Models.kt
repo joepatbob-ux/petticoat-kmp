@@ -37,6 +37,8 @@ data class Device(
     var circulateAmount: String = "33% (15min)",
     var circulateHoldDuration: HoldDuration = HoldDuration.Indefinite,
     var geofenceEnabled: Boolean = true,
+    var geofenceRadius: Int = 3,
+    var geofenceUnit: DistanceUnit = DistanceUnit.Miles,
     var usePresets: Boolean = true,
     var earlyStart: Boolean = true,
     var isOffline: Boolean = false,
@@ -273,6 +275,17 @@ data class ProgramEvent(
     var coolTo: Int,
 ) {
     val timeText: String get() = formatMinutes(startMinutes)
+    fun setpointText(kind: ScheduleKind): String = when (kind) {
+        ScheduleKind.Heat -> "Heat to: $heatTo"
+        ScheduleKind.Cool -> "Cool to: $coolTo"
+        ScheduleKind.Auto -> "$heatTo · $coolTo"
+    }
+
+    fun withDeadband(heat: Int = heatTo, cool: Int = coolTo): ProgramEvent {
+        val safeHeat = heat.coerceIn(SetpointConfig.MIN_TEMP, SetpointConfig.MAX_TEMP - SetpointConfig.DEADBAND)
+        val safeCool = cool.coerceIn(safeHeat + SetpointConfig.DEADBAND, SetpointConfig.MAX_TEMP)
+        return copy(heatTo = safeHeat, coolTo = safeCool)
+    }
 }
 
 data class ProgramDayGroup(
@@ -323,6 +336,8 @@ data class ServiceReminder(
     var hasContractor: Boolean = false,
 ) {
     val isCritical: Boolean get() = lifeRemaining < CRITICAL_THRESHOLD
+    val nextServiceText: String get() = platformFormatDate(nextServiceEpochMs)
+    val lastCompletedText: String? get() = lastCompletedEpochMs?.let(::platformFormatDate)
 
     companion object {
         const val CRITICAL_THRESHOLD = 0.25
@@ -353,6 +368,40 @@ data class ServiceReminder(
                 ),
             )
         }
+    }
+}
+
+data class VacationTrip(
+    val id: String = newId(),
+    var name: String,
+    var startEpochMs: Long,
+    var endEpochMs: Long,
+    var isActive: Boolean = false,
+    var profileId: String? = null,
+) {
+    val dateRangeText: String get() = platformFormatDateRange(startEpochMs, endEpochMs)
+
+    fun normalized(): VacationTrip =
+        if (endEpochMs >= startEpochMs) this else copy(endEpochMs = startEpochMs)
+
+    companion object {
+        fun samples(nowMs: Long = platformNowMillis()): List<VacationTrip> {
+            val day = 24L * 60 * 60 * 1000
+            return listOf(
+                VacationTrip(
+                    name = "Summer Trip",
+                    startEpochMs = nowMs + 7 * day,
+                    endEpochMs = nowMs + 12 * day,
+                ),
+            )
+        }
+
+        fun newBlank(nowMs: Long = platformNowMillis()): VacationTrip =
+            VacationTrip(
+                name = "New Vacation",
+                startEpochMs = nowMs,
+                endEpochMs = nowMs + 24L * 60 * 60 * 1000,
+            )
     }
 }
 
