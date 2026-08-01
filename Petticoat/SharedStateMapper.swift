@@ -228,7 +228,7 @@ enum SharedStateMapper {
     static func scheduleGroup(_ value: PetticoatShared.ScheduleDayGroup) -> ScheduleDayGroup {
         ScheduleDayGroup(
             id: requiredUUID(value.id),
-            days: Set(value.dayNumbers.map(Int.init)),
+            days: Set(value.dayNumbers.map { Int($0.int32Value) }),
             events: value.events.map(scheduleEvent)
         )
     }
@@ -253,7 +253,7 @@ enum SharedStateMapper {
     static func programGroup(_ value: PetticoatShared.ProgramDayGroup) -> ProgramDayGroup {
         ProgramDayGroup(
             id: requiredUUID(value.id),
-            days: Set(value.dayNumbers.map(Int.init)),
+            days: Set(value.dayNumbers.map { Int($0.int32Value) }),
             events: value.events.map(programEvent)
         )
     }
@@ -336,7 +336,7 @@ enum SharedStateMapper {
     static func sharedScheduleGroup(_ value: ScheduleDayGroup) -> PetticoatShared.ScheduleDayGroup {
         PetticoatShared.SharedModelFactory.shared.scheduleGroup(
             id: value.id.uuidString,
-            dayNumbers: value.days.sorted().map(Int32.init),
+            dayNumbers: value.days.sorted().map { KotlinInt(int: Int32($0)) },
             events: value.events.map(sharedScheduleEvent)
         )
     }
@@ -361,7 +361,7 @@ enum SharedStateMapper {
     static func sharedProgramGroup(_ value: ProgramDayGroup) -> PetticoatShared.ProgramDayGroup {
         PetticoatShared.SharedModelFactory.shared.programGroup(
             id: value.id.uuidString,
-            dayNumbers: value.days.sorted().map(Int32.init),
+            dayNumbers: value.days.sorted().map { KotlinInt(int: Int32($0)) },
             events: value.events.map(sharedProgramEvent)
         )
     }
