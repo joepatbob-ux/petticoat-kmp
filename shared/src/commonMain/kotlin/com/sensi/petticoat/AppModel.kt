@@ -24,6 +24,7 @@ import com.sensi.petticoat.model.ThermostatSettings
 import com.sensi.petticoat.model.TimelinePeriod
 import com.sensi.petticoat.model.formatMinutes
 import com.sensi.petticoat.model.newId
+import com.sensi.petticoat.model.platformFormatTime
 import com.sensi.petticoat.model.platformNowMillis
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -124,10 +125,14 @@ data class AppState(
     val holdUntilText: String
         get() {
             val end = holdEndsAtEpochMs ?: return "you resume it"
-            val mins = ((end / 60_000) % (24 * 60)).toInt()
-            val time = formatMinutes(mins)
+            val time = platformFormatTime(end)
             return if (device.geofenceEnabled) "$time or Away" else time
         }
+
+    fun programsFor(kind: ScheduleKind): List<ScheduleProgram> = programs[kind].orEmpty()
+
+    fun selectedProgramIdFor(kind: ScheduleKind): String? =
+        selectedProgramId[kind] ?: programs[kind]?.firstOrNull()?.id
 }
 
 /**
@@ -137,6 +142,7 @@ data class AppState(
 class AppModel(
     private val clockMinutes: () -> Int = { platformNowMinutes() },
     private val weekdayIndex: () -> Int = { platformWeekdayIndex() },
+    private val nowMillis: () -> Long = { platformNowMillis() },
 ) {
     private val _state = MutableStateFlow(seedState())
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -203,6 +209,20 @@ class AppModel(
     fun setShowHelp(v: Boolean) = update { it.copy(showHelp = v) }
     fun setSelectedTab(tab: DeviceTab) = update { it.copy(selectedTab = tab) }
     fun setAddingReminder(v: Boolean) = update { it.copy(addingReminder = v) }
+    fun setSidebarVisible(v: Boolean) = update { it.copy(sidebarVisible = v) }
+    fun setShowSensorsOnDashboard(v: Boolean) = update { it.copy(showSensorsOnDashboard = v) }
+    fun setAppearance(v: AppAppearance) = update { it.copy(appearance = v) }
+    fun setShowWeatherLocation(v: Boolean) = update { it.copy(showWeatherLocation = v) }
+    fun setStepperStyle(v: StepperStyle) = update { it.copy(stepperStyle = v) }
+    fun setControlMode(v: ControlMode) = update { it.copy(controlMode = v) }
+
+    fun setHoldDuration(v: HoldDuration) = update { state ->
+        state.copy(
+            holdDuration = v,
+            holdEndsAtEpochMs = if (state.controlMode == ControlMode.Hold) holdEndEpoch(v)
+            else state.holdEndsAtEpochMs,
+        )
+    }
 
     fun selectDevice(id: String?) = update { it.copy(selectedDeviceId = id) }
 
@@ -217,6 +237,17 @@ class AppModel(
 
     fun moveDevices(fromIndex: Int, toIndex: Int) = update { s ->
         s.copy(devices = s.devices.toMutableList().also { move(it, fromIndex, toIndex) })
+    }
+
+    fun moveSpotlights(fromIndex: Int, toIndex: Int) = update { s ->
+        s.copy(spotlights = s.spotlights.toMutableList().also { move(it, fromIndex, toIndex) })
+    }
+
+    fun moveDashboardSections(fromIndex: Int, toIndex: Int) = update { s ->
+        s.copy(
+            dashboardSectionOrder = s.dashboardSectionOrder.toMutableList()
+                .also { move(it, fromIndex, toIndex) },
+        )
     }
 
     fun adjustKeep(bound: SetpointBound, delta: Int, deviceId: String? = null) = update { s ->
@@ -282,6 +313,32 @@ class AppModel(
         s.copy(devices = s.devices.map {
             if (it.id == id) it.copy(fanMode = mode) else it
         })
+    }
+
+    fun setDeviceFanHoldDuration(v: HoldDuration, deviceId: String? = null) =
+        updateDevice(deviceId) { copy(fanHoldDuration = v) }
+
+    fun setDeviceCirculateFan(v: Boolean, deviceId: String? = null) =
+        updateDevice(deviceId) { copy(circulateFan = v) }
+
+    fun setDeviceCirculateAmount(v: String, deviceId: String? = null) =
+        updateDevice(deviceId) { copy(circulateAmount = v) }
+
+    fun setDeviceCirculateHoldDuration(v: HoldDuration, deviceId: String? = null) =
+        updateDevice(deviceId) { copy(circulateHoldDuration = v) }
+
+    fun setDeviceGeofenceEnabled(v: Boolean, deviceId: String? = null) =
+        updateDevice(deviceId) { copy(geofenceEnabled = v) }
+
+    fun setDeviceUsePresets(v: Boolean, deviceId: String? = null) =
+        updateDevice(deviceId) { copy(usePresets = v) }
+
+    fun setDeviceEarlyStart(v: Boolean, deviceId: String? = null) =
+        updateDevice(deviceId) { copy(earlyStart = v) }
+
+    private fun updateDevice(deviceId: String?, transform: Device.() -> Device) = update { s ->
+        val id = deviceId ?: s.device.id
+        s.copy(devices = s.devices.map { if (it.id == id) it.transform() else it })
     }
 
     fun toggleSensor(sensorId: String, deviceId: String) = update { s ->
@@ -422,6 +479,19 @@ class AppModel(
         s.copy(programs = s.programs + (kind to list), selectedProgramId = selected)
     }
 
+    fun duplicateProgram(program: ScheduleProgram, kind: ScheduleKind) = update { s ->
+        val list = s.programs[kind].orEmpty().toMutableList()
+        val i = list.indexOfFirst { it.id == program.id }
+        if (i < 0) return@update s
+        val copy = program.copy(id = newId(), name = program.name + " Copy")
+        list.add(i + 1, copy)
+        s.copy(programs = s.programs + (kind to list))
+    }
+
+    fun activeProgramId(kind: ScheduleKind): String? = snapshot.selectedProgramIdFor(kind)
+
+    fun programsFor(kind: ScheduleKind): List<ScheduleProgram> = snapshot.programsFor(kind)
+
     fun saveReminder(reminder: ServiceReminder) = update { s ->
         val list = s.serviceReminders.toMutableList()
         val i = list.indexOfFirst { it.id == reminder.id }
@@ -433,9 +503,22 @@ class AppModel(
         it.copy(serviceReminders = it.serviceReminders.filterNot { r -> r.id == id })
     }
 
+    fun deleteReminders(ids: List<String>) = update { s ->
+        s.copy(serviceReminders = s.serviceReminders.filterNot { it.id in ids })
+    }
+
     fun completeReminder(id: String) = update { s ->
+        val now = nowMillis()
         s.copy(serviceReminders = s.serviceReminders.map {
-            if (it.id == id) it.copy(lifeRemaining = 1.0) else it
+            if (it.id == id) {
+                it.copy(
+                    lifeRemaining = 1.0,
+                    lastCompletedEpochMs = now,
+                    nextServiceEpochMs = now + 90L * 24 * 60 * 60 * 1000,
+                )
+            } else {
+                it
+            }
         })
     }
 
@@ -456,6 +539,28 @@ class AppModel(
         })
     }
 
+    fun addHome(home: Home) = update { it.copy(homes = it.homes + home) }
+
+    fun updateHome(home: Home) = update { s ->
+        s.copy(homes = s.homes.map { if (it.id == home.id) home else it })
+    }
+
+    fun deleteHomes(ids: List<String>) = update { s ->
+        val deleted = ids.toSet()
+        s.copy(
+            homes = s.homes.filterNot { it.id in deleted },
+            devices = s.devices.map {
+                if (it.homeId in deleted) it.copy(homeId = null) else it
+            },
+        )
+    }
+
+    fun setContractor(v: Contractor) = update { it.copy(contractor = v) }
+    fun setThermostatSettings(v: ThermostatSettings) =
+        update { it.copy(thermostatSettings = v) }
+
+    fun syncScheduleSetpoints() = update(::syncScheduleSetpoints)
+
     private fun syncScheduleSetpoints(s: AppState): AppState {
         if (s.controlMode != ControlMode.Schedule) return s
         val p = s.currentPeriod(clockMinutes()) ?: return s
@@ -467,7 +572,7 @@ class AppModel(
 
     private fun holdEndEpoch(duration: HoldDuration): Long? {
         val hours = duration.hours ?: return null
-        return platformNowMillis() + hours * 3_600_000L
+        return nowMillis() + hours * 3_600_000L
     }
 }
 
