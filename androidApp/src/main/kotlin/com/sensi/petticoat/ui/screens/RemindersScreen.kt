@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,7 +28,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -167,66 +167,81 @@ private fun ReminderCard(
     onEdit: () -> Unit,
 ) {
     val context = LocalContext.current
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    reminder.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    reminder.type,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (reminder.isCritical) {
-                Text(
-                    "Service due",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFFE0392B),
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        LinearProgressIndicator(
-            progress = { reminder.lifeRemaining.toFloat().coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth(),
-            color = if (reminder.isCritical) Color(0xFFE0392B) else MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "${(reminder.lifeRemaining * 100).toInt()}% life remaining · Next: ${formatDate(reminder.nextServiceEpochMs)}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (reminder.spec.isNotEmpty()) {
-            Text(
-                reminder.spec,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onComplete) { Text("Mark Complete") }
-            if (reminder.hasContractor && contractorPhone.isNotEmpty()) {
-                OutlinedButton(onClick = {
-                    context.startActivity(
-                        Intent(Intent.ACTION_DIAL, Uri.parse("tel:$contractorPhone")),
+    val critical = Color(0xFFE0392B)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        reminder.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
-                }) { Text("Call Contractor") }
+                    Text(
+                        reminder.type,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        Icons.Outlined.Info,
+                        contentDescription = "Reminder details",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            TextButton(onClick = onEdit) { Text("Edit") }
+            Spacer(Modifier.height(12.dp))
+            LinearProgressIndicator(
+                progress = { reminder.lifeRemaining.toFloat().coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+                color = if (reminder.isCritical) critical else MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                if (reminder.isCritical) "Service due" else "Next Service",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (reminder.isCritical) critical else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                buildString {
+                    append(formatDate(reminder.nextServiceEpochMs))
+                    if (reminder.spec.isNotEmpty()) append(" · ${reminder.spec}")
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                if (reminder.hasContractor && contractorPhone.isNotEmpty()) {
+                    OutlinedButton(onClick = {
+                        context.startActivity(
+                            Intent(Intent.ACTION_DIAL, Uri.parse("tel:$contractorPhone")),
+                        )
+                    }) { Text("Call Contractor") }
+                }
+                Button(onClick = onComplete) { Text("Mark Complete") }
+            }
+        }
+        val last = reminder.lastCompletedEpochMs
+        if (last != null) {
+            Text(
+                "Last Completed: ${formatDate(last)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp),
+            )
         }
     }
 }
