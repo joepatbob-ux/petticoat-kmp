@@ -11,8 +11,8 @@ import androidx.compose.ui.Modifier
 import com.sensi.petticoat.AppModel
 import com.sensi.petticoat.AppState
 import com.sensi.petticoat.Route
-import com.sensi.petticoat.ui.screens.ControlScreen
 import com.sensi.petticoat.ui.screens.DashboardScreen
+import com.sensi.petticoat.ui.screens.DeviceDetailScreen
 import com.sensi.petticoat.ui.screens.LoginScreen
 import com.sensi.petticoat.ui.screens.SplashScreen
 
@@ -37,11 +37,7 @@ fun PetticoatApp(model: AppModel, state: AppState) {
 private fun MainNav(model: AppModel, state: AppState) {
     val selectedId = state.selectedDeviceId
     if (selectedId != null && state.devices.any { it.id == selectedId }) {
-        ControlScreen(
-            model = model,
-            state = state,
-            onBack = model::clearSelectedDevice,
-        )
+        DeviceDetailScreen(model = model, state = state)
     } else {
         DashboardScreen(
             model = model,

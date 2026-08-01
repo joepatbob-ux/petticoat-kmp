@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Sensors
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
@@ -28,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,11 +38,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,19 +56,28 @@ import com.sensi.petticoat.model.ControlMode
 import com.sensi.petticoat.model.HVACActivity
 import com.sensi.petticoat.model.SetpointBound
 import com.sensi.petticoat.model.SystemMode
+import com.sensi.petticoat.ui.components.ModeSheet
 import com.sensi.petticoat.ui.theme.SensiControlFill
 import com.sensi.petticoat.ui.theme.SensiCooling
 import com.sensi.petticoat.ui.theme.SensiHeating
 import com.sensi.petticoat.ui.theme.SensiThermostatSurface
 
+/**
+ * Control tab content: setpoint stepper, quick system-mode chips, sensors / mode entry
+ * points, and the control-mode status card. Hosted inside [DeviceDetailScreen].
+ * Refactored from the standalone ControlScreen; the device chrome (back) lives here so the
+ * tab reads as a full screen with the bottom nav provided by the host.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ControlScreen(
+fun ControlContent(
     model: AppModel,
     state: AppState,
     onBack: () -> Unit,
+    onOpenSensors: () -> Unit,
 ) {
     val device = state.device
+    var showModeSheet by remember { mutableStateOf(false) }
     val activityColor = when (device.activity) {
         HVACActivity.Heating -> SensiHeating
         HVACActivity.Cooling -> SensiCooling
@@ -160,7 +176,7 @@ fun ControlScreen(
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -181,7 +197,31 @@ fun ControlScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onOpenSensors,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Outlined.Sensors, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text(device.sensorSummary)
+                }
+                OutlinedButton(
+                    onClick = { showModeSheet = true },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Text("System & Fan")
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
 
             Column(
                 modifier = Modifier
@@ -216,11 +256,15 @@ fun ControlScreen(
             }
         }
     }
+
+    if (showModeSheet) {
+        ModeSheet(model = model, device = device, onDismiss = { showModeSheet = false })
+    }
 }
 
 @Composable
 private fun SetpointButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     onClick: () -> Unit,
 ) {
