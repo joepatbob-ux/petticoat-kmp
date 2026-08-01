@@ -138,4 +138,25 @@ struct SchedulingMathTests {
         #expect(p?.tailStart == 820)
         #expect(p?.length == 1440)
     }
+
+    // MARK: DialMath.clampStart
+
+    @Test func clampStartKeepsMinimumOnBothSides() {
+        // Neighbors at 6:00 and 10:00 (span 240), one-hour floor.
+        #expect(DialMath.clampStart(370, prev: 360, span: 240, minLen: 60) == 420)  // too close to prev
+        #expect(DialMath.clampStart(590, prev: 360, span: 240, minLen: 60) == 540)  // too close to next
+        #expect(DialMath.clampStart(480, prev: 360, span: 240, minLen: 60) == 480)  // already fine
+    }
+
+    @Test func clampStartSitsInMiddleWhenNoRoom() {
+        // 60-min room can't fit an hour on both sides → middle of the span.
+        #expect(DialMath.clampStart(400, prev: 360, span: 60, minLen: 60) == 390)
+    }
+
+    @Test func clampStartWrapsMidnight() {
+        // Prev at 23:00, span 180 (next at 2:00): a start pulled under the floor lands midnight.
+        #expect(DialMath.clampStart(1400, prev: 1380, span: 180, minLen: 60) == 0)
+        // Clamped at the far side wraps past midnight: 23:00 + 120 = 1:00.
+        #expect(DialMath.clampStart(110, prev: 1380, span: 180, minLen: 60) == 60)
+    }
 }

@@ -36,6 +36,16 @@ enum DialMath {
         return ((r % 1440) + 1440) % 1440
     }
 
+    /// Clamp a proposed start (minutes of day) so the event keeps at least `minLen` on
+    /// each side of the room between its neighbors: ≥ `minLen` after `prev` and ≥ `minLen`
+    /// before `prev + span`. When the room can't fit both floors, it sits in the middle.
+    static func clampStart(_ proposed: Int, prev: Int, span: Int, minLen: Int) -> Int {
+        let lo = minLen
+        let hi = span - minLen
+        guard hi >= lo else { return (prev + span / 2) % 1440 }
+        return (prev + min(max(cwDistance(prev, proposed), lo), hi)) % 1440
+    }
+
     /// The arc in `others` (sorted, distinct start minutes) whose span encloses `minute`,
     /// as `(start, length)` in minutes. A lone arc spans the whole ring.
     static func enclosing(_ minute: Int, others: [Int]) -> (start: Int, length: Int)? {

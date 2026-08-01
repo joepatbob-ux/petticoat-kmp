@@ -194,6 +194,8 @@ struct ProgramScheduleEditor: View {
     @State private var program: ScheduleProgram
     @State private var addTarget: ProgramGroupRef?
     @State private var editTarget: ProgramEventRef?
+    /// Validation message shown when Save is blocked (uncovered days / empty group).
+    @State private var saveWarning: String?
     let onSave: (ScheduleProgram) -> Void
     /// Present when editing an existing program — drives the Delete action. Nil while
     /// creating a new one.
@@ -217,7 +219,9 @@ struct ProgramScheduleEditor: View {
 
             ForEach(program.groups) { group in
                 Section {
-                    DayPicker(days: group.days) { toggleDay($0, in: group.id) }
+                    DayPicker(days: group.days, usedElsewhere: daysUsedElsewhere(than: group.id)) {
+                        toggleDay($0, in: group.id)
+                    }
 
                     ForEach(group.events) { event in
                         eventRow(event, in: group)
@@ -285,10 +289,22 @@ struct ProgramScheduleEditor: View {
                 Button { model.showHelp = true } label: { Image(systemName: "questionmark.bubble") }
                     .accessibilityLabel("Help and Support")
                 EditorSaveButton {
-                    onSave(program)
-                    dismiss()
+                    if let issue = validationIssue() {
+                        saveWarning = issue
+                    } else {
+                        onSave(program)
+                        dismiss()
+                    }
                 }
             }
+        }
+        .alert("Can't Save Schedule", isPresented: Binding(
+            get: { saveWarning != nil },
+            set: { if !$0 { saveWarning = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveWarning ?? "")
         }
         .sheet(item: $addTarget) { target in
             ProgramEventEditor(kind: kind, title: "Add Event", initial: nil) { event in
@@ -296,7 +312,13 @@ struct ProgramScheduleEditor: View {
             }
         }
         .sheet(item: $editTarget) { target in
-            ProgramEventEditor(kind: kind, title: "Edit Event", initial: target.event) { updated in
+            let canDelete = (program.groups.first { $0.id == target.groupID }?.events.count ?? 0) > minEvents
+            ProgramEventEditor(
+                kind: kind,
+                title: "Edit Event",
+                initial: target.event,
+                onDelete: canDelete ? { deleteEvent(target.event.id, from: target.groupID) } : nil
+            ) { updated in
                 replaceEvent(target.event.id, with: updated)
             }
         }
@@ -312,15 +334,15 @@ struct ProgramScheduleEditor: View {
             Text(event.timeText)
                 .foregroundStyle(SMA.labelSecondary)
                 .monospacedDigit()
-            Menu {
-                Button("Edit", systemImage: "pencil") { editTarget = ProgramEventRef(groupID: group.id, event: event) }
-                Button("Delete", systemImage: "trash", role: .destructive) { deleteEvent(event.id, from: group.id) }
-                    .disabled(group.events.count <= minEvents)
+            Button {
+                editTarget = ProgramEventRef(groupID: group.id, event: event)
             } label: {
-                EllipsisMenuLabel()
+                Image(systemName: "info.circle")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(SMA.accent)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Options for event at \(event.timeText)")
+            .accessibilityLabel("Edit event at \(event.timeText)")
         }
         .contentShape(Rectangle())
         .onTapGesture { editTarget = ProgramEventRef(groupID: group.id, event: event) }
@@ -333,6 +355,26 @@ struct ProgramScheduleEditor: View {
     private func toggleDay(_ i: Int, in id: ProgramDayGroup.ID) {
         guard let g = groupIndex(id) else { return }
         if program.groups[g].days.contains(i) { program.groups[g].days.remove(i) } else { program.groups[g].days.insert(i) }
+    }
+
+    /// Days claimed by every day group except the given one — the picker's grey-dot state.
+    private func daysUsedElsewhere(than id: ProgramDayGroup.ID) -> Set<Int> {
+        program.groups.reduce(into: Set<Int>()) { if $1.id != id { $0.formUnion($1.days) } }
+    }
+
+    /// Why the schedule can't be saved yet, or nil when it's valid: every day of the week
+    /// must belong to a day group, and every day group needs at least one event.
+    private func validationIssue() -> String? {
+        let covered = program.groups.reduce(into: Set<Int>()) { $0.formUnion($1.days) }
+        let missing = Set(0..<7).subtracting(covered)
+        if !missing.isEmpty {
+            let names = missing.sorted().map { WeekDay.names[$0] }.joined(separator: ", ")
+            return "Every day needs a day group. Not scheduled yet: \(names)."
+        }
+        if program.groups.contains(where: { $0.events.isEmpty }) {
+            return "Every day group needs at least one event."
+        }
+        return nil
     }
 
     private func addEvent(_ event: ProgramEvent, to id: ProgramDayGroup.ID) {
@@ -400,14 +442,19 @@ struct ProgramEventEditor: View {
     let kind: ScheduleKind
     let title: String
     let onSave: (ProgramEvent) -> Void
+    /// Present when editing an existing event — drives the Delete Event section. Nil
+    /// while adding a new one (or when the group is at its minimum).
+    let onDelete: (() -> Void)?
 
     @State private var time: Date
     @State private var heatTo: Int
     @State private var coolTo: Int
 
-    init(kind: ScheduleKind, title: String, initial: ProgramEvent?, onSave: @escaping (ProgramEvent) -> Void) {
+    init(kind: ScheduleKind, title: String, initial: ProgramEvent?,
+         onDelete: (() -> Void)? = nil, onSave: @escaping (ProgramEvent) -> Void) {
         self.kind = kind
         self.title = title
+        self.onDelete = onDelete
         self.onSave = onSave
         _time = State(initialValue: initial?.time ?? ProgramEvent.at(12, 0))
         _heatTo = State(initialValue: initial?.heatTo ?? 70)
@@ -454,6 +501,19 @@ struct ProgramEventEditor: View {
                             if kind.editsHeat, heatTo > v - SetpointConfig.deadband {
                                 heatTo = max(v - SetpointConfig.deadband, SetpointConfig.minTemp)
                             }
+                        }
+                    }
+                }
+
+                if let onDelete {
+                    Section {
+                        Button(role: .destructive) {
+                            onDelete()
+                            dismiss()
+                        } label: {
+                            Text("Delete Event")
+                                .frame(maxWidth: .infinity)
+                                .foregroundStyle(SMA.destructive)
                         }
                     }
                 }

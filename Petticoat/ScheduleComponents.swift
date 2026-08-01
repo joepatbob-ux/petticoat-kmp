@@ -24,8 +24,14 @@ enum WeekDay {
 
 /// The 7-day selector used by the schedule editors. On compact (iPhone) each day
 /// is a single-letter circle; on regular (iPad) it expands to abbreviated-name pills.
+/// Each day carries one of three treatments: in *this* group (filled accent), in
+/// another group of the same schedule (grey dot below), or not scheduled anywhere
+/// yet (accent dot below — it still needs a home).
 struct DayPicker: View {
     let days: Set<Int>
+    /// Days claimed by the schedule's other day groups — drawn with a grey dot so
+    /// it's clear they're already scheduled elsewhere.
+    var usedElsewhere: Set<Int> = []
     let onToggle: (Int) -> Void
     @Environment(\.horizontalSizeClass) private var hSize
 
@@ -36,24 +42,33 @@ struct DayPicker: View {
                 Button {
                     onToggle(i)
                 } label: {
-                    if hSize == .regular {
-                        Text(WeekDay.short[i])
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(on ? .white : SMA.labelPrimary)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 34)
-                            .background(Capsule().fill(on ? SMA.accent : SMA.fillTertiary))
-                    } else {
-                        Text(WeekDay.labels[i])
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(on ? .white : SMA.labelPrimary)
-                            .frame(width: 34, height: 34)
-                            .background(Circle().fill(on ? SMA.accent : SMA.fillTertiary))
+                    VStack(spacing: 5) {
+                        if hSize == .regular {
+                            Text(WeekDay.short[i])
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(on ? .white : SMA.labelPrimary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 34)
+                                .background(Capsule().fill(on ? SMA.accent : SMA.fillTertiary))
+                        } else {
+                            Text(WeekDay.labels[i])
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(on ? .white : SMA.labelPrimary)
+                                .frame(width: 34, height: 34)
+                                .background(Circle().fill(on ? SMA.accent : .clear))
+                        }
+                        // The dot only shows on unselected days; a clear stand-in keeps
+                        // the selected day's height aligned with its neighbors.
+                        Circle()
+                            .fill(on ? .clear : (usedElsewhere.contains(i) ? SMA.fillTertiary : SMA.accent))
+                            .frame(width: 5, height: 5)
                     }
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
                 .accessibilityLabel(WeekDay.names[i])
+                .accessibilityValue(on ? "In this day group"
+                                       : usedElsewhere.contains(i) ? "In another day group" : "Not scheduled")
                 .accessibilityAddTraits(on ? [.isSelected] : [])
             }
         }

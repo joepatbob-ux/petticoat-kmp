@@ -38,6 +38,12 @@ struct ScheduleEvent: Identifiable, Hashable {
     var timeText: String { time.formatted(date: .omitted, time: .shortened) }
     var rangeText: String { "\(heatTo) · \(coolTo)" }
 
+    /// Whether `other` snapshots the same activity (ignoring start time).
+    func sameActivity(as other: ScheduleEvent) -> Bool {
+        name == other.name && symbol == other.symbol && colorHex == other.colorHex
+            && heatTo == other.heatTo && coolTo == other.coolTo
+    }
+
     init(name: String, symbol: String, colorHex: UInt, heatTo: Int, coolTo: Int, time: Date) {
         self.name = name
         self.symbol = symbol
@@ -181,6 +187,8 @@ struct ScheduleEditorView: View {
     @State private var addTarget: GroupTarget?
     @State private var editTarget: EventTarget?
     @State private var timeTarget: EventTarget?
+    /// Validation message shown when Save is blocked (uncovered days / empty group).
+    @State private var saveWarning: String?
     let onSave: (SchedulePreset) -> Void
     /// Present when editing an existing schedule — drives the Delete action. Nil while
     /// creating a new one.
@@ -188,9 +196,12 @@ struct ScheduleEditorView: View {
 
     private let minEvents = 1
     private let maxEvents = 8
-    /// The 15-minute grid every start time snaps to. (The one-hour minimum is a drag-only
-    /// floor enforced in the dial; manual entry may set finer sub-hour periods.)
+    /// The 15-minute grid every start time snaps to.
     private let snapMinutes = 15
+    /// The one-hour floor dial gestures keep on every piece — a drag-only, visual floor
+    /// (arcs stay big enough to grab; the sandwiched slide honors it too). Manual entry
+    /// may still set finer sub-hour periods on the 15-minute grid.
+    private let minDurationMinutes = 60
 
     init(preset: SchedulePreset, onSave: @escaping (SchedulePreset) -> Void, onDelete: (() -> Void)? = nil) {
         _preset = State(initialValue: preset)
@@ -207,13 +218,18 @@ struct ScheduleEditorView: View {
 
             ForEach(preset.groups) { group in
                 Section {
-                    DayPicker(days: group.days) { toggleDay($0, in: group.id) }
+                    DayPicker(days: group.days, usedElsewhere: daysUsedElsewhere(than: group.id)) {
+                        toggleDay($0, in: group.id)
+                    }
 
                     RadialScheduleDial(
                         events: group.events,
                         selectedID: selectedEventID,
                         onChangeStart: { id, newTime in setEventTime(id, to: newTime) },
                         onSelect: { id in selectedEventID = id },
+                        onCommitDrop: { moves, tailCopy in
+                            commitDrop(moves, tailCopy: tailCopy, in: group.id)
+                        },
                         onRequestManualTime: { id in
                             if let event = group.events.first(where: { $0.id == id }) {
                                 timeTarget = EventTarget(groupID: group.id, event: event)
@@ -321,10 +337,22 @@ struct ScheduleEditorView: View {
                 Button { model.showHelp = true } label: { Image(systemName: "questionmark.bubble") }
                     .accessibilityLabel("Help and Support")
                 EditorSaveButton {
-                    onSave(preset)
-                    dismiss()
+                    if let issue = validationIssue() {
+                        saveWarning = issue
+                    } else {
+                        onSave(preset)
+                        dismiss()
+                    }
                 }
             }
+        }
+        .alert("Can't Save Schedule", isPresented: Binding(
+            get: { saveWarning != nil },
+            set: { if !$0 { saveWarning = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(saveWarning ?? "")
         }
         .sheet(item: $addTarget) { target in
             ScheduleEventEditor(title: "Add Event", initial: nil, profiles: model.activityProfiles) { event in
@@ -332,7 +360,13 @@ struct ScheduleEditorView: View {
             }
         }
         .sheet(item: $editTarget) { target in
-            ScheduleEventEditor(title: "Edit Event", initial: target.event, profiles: model.activityProfiles) { updated in
+            let canDelete = (preset.groups.first { $0.id == target.groupID }?.events.count ?? 0) > minEvents
+            ScheduleEventEditor(
+                title: "Edit Event",
+                initial: target.event,
+                profiles: model.activityProfiles,
+                onDelete: canDelete ? { deleteEvent(target.event.id, from: target.groupID) } : nil
+            ) { updated in
                 replaceEvent(target.event.id, with: updated)
             }
         }
@@ -374,15 +408,15 @@ struct ScheduleEditorView: View {
             Text(event.timeText)
                 .foregroundStyle(SMA.labelSecondary)
                 .monospacedDigit()
-            Menu {
-                Button("Edit", systemImage: "pencil") { editTarget = EventTarget(groupID: group.id, event: event) }
-                Button("Delete", systemImage: "trash", role: .destructive) { deleteEvent(event.id, from: group.id) }
-                    .disabled(group.events.count <= minEvents)
+            Button {
+                editTarget = EventTarget(groupID: group.id, event: event)
             } label: {
-                EllipsisMenuLabel()
+                Image(systemName: "info.circle")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(SMA.accent)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Options for \(event.name)")
+            .accessibilityLabel("Edit \(event.name)")
         }
         .contentShape(Rectangle())
         .onTapGesture { selectedEventID = event.id }
@@ -396,6 +430,26 @@ struct ScheduleEditorView: View {
     private func toggleDay(_ i: Int, in id: ScheduleDayGroup.ID) {
         guard let g = groupIndex(id) else { return }
         if preset.groups[g].days.contains(i) { preset.groups[g].days.remove(i) } else { preset.groups[g].days.insert(i) }
+    }
+
+    /// Days claimed by every day group except the given one — the picker's grey-dot state.
+    private func daysUsedElsewhere(than id: ScheduleDayGroup.ID) -> Set<Int> {
+        preset.groups.reduce(into: Set<Int>()) { if $1.id != id { $0.formUnion($1.days) } }
+    }
+
+    /// Why the schedule can't be saved yet, or nil when it's valid: every day of the week
+    /// must belong to a day group, and every day group needs at least one event.
+    private func validationIssue() -> String? {
+        let covered = preset.groups.reduce(into: Set<Int>()) { $0.formUnion($1.days) }
+        let missing = Set(0..<7).subtracting(covered)
+        if !missing.isEmpty {
+            let names = missing.sorted().map { WeekDay.names[$0] }.joined(separator: ", ")
+            return "Every day needs a day group. Not scheduled yet: \(names)."
+        }
+        if preset.groups.contains(where: { $0.events.isEmpty }) {
+            return "Every day group needs at least one event."
+        }
+        return nil
     }
 
     private func deleteEvents(_ offsets: IndexSet, from id: ScheduleDayGroup.ID) {
@@ -429,30 +483,79 @@ struct ScheduleEditorView: View {
     }
 
     /// Replace a selected event's start time (from the dial's grip or the manual sheet),
-    /// snapping to the 15-min grid and keeping the list sorted. The one-hour floor is only a
-    /// *drag* minimum (enforced in the dial so arcs stay big enough to grab) — manual entry
-    /// may set finer sub-hour periods down to 15 minutes.
+    /// snapping to the 15-min grid and keeping the list sorted. The one-hour floor is a
+    /// drag-only, visual minimum (the dial clamps its gestures before calling) — manual
+    /// entry may set finer sub-hour periods. An event sandwiched between two pieces of
+    /// the same activity slides instead of resizing (see `slideBetweenSamePieces`).
     private func setEventTime(_ eventID: ScheduleEvent.ID, to newTime: Date) {
         for g in preset.groups.indices {
             guard let e = preset.groups[g].events.firstIndex(where: { $0.id == eventID }) else { continue }
-            preset.groups[g].events[e].time = dateAtMinutes(DialMath.snapToGrid(minutesOfDay(newTime), snap: snapMinutes))
-            preset.groups[g].events.sort { $0.time < $1.time }
+            let snapped = DialMath.snapToGrid(minutesOfDay(newTime), snap: snapMinutes)
+            if !slideBetweenSamePieces(at: e, to: snapped, in: g) {
+                preset.groups[g].events[e].time = dateAtMinutes(snapped)
+                preset.groups[g].events.sort { $0.time < $1.time }
+            }
             mergeAdjacentSameEvents(in: g)
             return
         }
     }
 
+    /// When the same activity sits on both sides of a moved event, a start change slides
+    /// the event between the two pieces instead of resizing it: the event keeps its
+    /// duration and its tail (the following piece) moves with it, so the piece before
+    /// shrinks while the one after grows — or vice versa — each keeping the one-hour
+    /// floor. Returns false when the event isn't sandwiched, or the room between the
+    /// outer neighbors can't fit the slide; the normal resize path applies instead.
+    private func slideBetweenSamePieces(at idx: Int, to proposed: Int, in g: Int) -> Bool {
+        let evs = preset.groups[g].events
+        let n = evs.count
+        guard n >= 3 else { return false }
+        let prevIdx = (idx - 1 + n) % n
+        let nextIdx = (idx + 1) % n
+        let afterIdx = (idx + 2) % n
+        guard evs[prevIdx].sameActivity(as: evs[nextIdx]) else { return false }
+        let start = minutesOfDay(evs[idx].time)
+        let dur = DialMath.cwDistance(start, minutesOfDay(evs[nextIdx].time))
+        let prev = minutesOfDay(evs[prevIdx].time)
+        let span = afterIdx == prevIdx ? 1440 : DialMath.cwDistance(prev, minutesOfDay(evs[afterIdx].time))
+        // The event's duration is reserved out of the room; what's left must still fit
+        // the head and tail pieces at the floor.
+        let room = span - dur
+        guard room >= 2 * minDurationMinutes else { return false }
+        let newStart = DialMath.clampStart(proposed, prev: prev, span: room, minLen: minDurationMinutes)
+        preset.groups[g].events[idx].time = dateAtMinutes(newStart)
+        preset.groups[g].events[nextIdx].time = dateAtMinutes((newStart + dur) % 1440)
+        preset.groups[g].events.sort { $0.time < $1.time }
+        return true
+    }
+
+
+    /// Applies a dial pickup-and-move drop: start-time changes for the moved (and possibly
+    /// pushed) events, plus an optional tail copy when an event's interior was broken. The
+    /// tail is skipped at the event cap — the moved event then absorbs it.
+    private func commitDrop(_ moves: [(id: ScheduleEvent.ID, time: Date)],
+                            tailCopy: ScheduleEvent?, in id: ScheduleDayGroup.ID) {
+        guard let g = groupIndex(id) else { return }
+        for move in moves {
+            guard let e = preset.groups[g].events.firstIndex(where: { $0.id == move.id }) else { continue }
+            preset.groups[g].events[e].time = dateAtMinutes(DialMath.snapToGrid(minutesOfDay(move.time), snap: snapMinutes))
+        }
+        if let tailCopy, preset.groups[g].events.count < maxEvents {
+            preset.groups[g].events.append(tailCopy)
+        }
+        preset.groups[g].events.sort { $0.time < $1.time }
+        mergeAdjacentSameEvents(in: g)
+    }
+
     /// After a drag move, collapse any two adjacent events that share the same activity
-    /// (name, symbol, colorHex, heatTo, coolTo) into one — keeping the earlier start time.
+    /// into one — keeping the earlier start time.
     private func mergeAdjacentSameEvents(in g: Int) {
         var evs = preset.groups[g].events
         guard evs.count > 1 else { return }
         var i = 0
         while i < evs.count {
             let next = (i + 1) % evs.count
-            let a = evs[i], b = evs[next]
-            if a.name == b.name && a.symbol == b.symbol && a.colorHex == b.colorHex
-                && a.heatTo == b.heatTo && a.coolTo == b.coolTo {
+            if evs[i].sameActivity(as: evs[next]) {
                 evs.remove(at: next > i ? next : i)
                 if evs.count <= 1 { break }
             } else {
@@ -540,14 +643,19 @@ struct ScheduleEventEditor: View {
     let title: String
     let profiles: [ActivityProfile]
     let onSave: (ScheduleEvent) -> Void
+    /// Present when editing an existing event — drives the Delete Event section. Nil
+    /// while adding a new one (or when the group is at its minimum).
+    let onDelete: (() -> Void)?
 
     @State private var selectedProfileID: ActivityProfile.ID?
     @State private var time: Date
     @State private var creatingProfile = false
 
-    init(title: String, initial: ScheduleEvent?, profiles: [ActivityProfile], onSave: @escaping (ScheduleEvent) -> Void) {
+    init(title: String, initial: ScheduleEvent?, profiles: [ActivityProfile],
+         onDelete: (() -> Void)? = nil, onSave: @escaping (ScheduleEvent) -> Void) {
         self.title = title
         self.profiles = profiles
+        self.onDelete = onDelete
         self.onSave = onSave
         _time = State(initialValue: initial?.time ?? ScheduleEvent.at(12, 0))
         let match = profiles.first(where: { $0.name == initial?.name })?.id ?? profiles.first?.id
@@ -605,6 +713,19 @@ struct ScheduleEventEditor: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                }
+
+                if let onDelete {
+                    Section {
+                        Button(role: .destructive) {
+                            onDelete()
+                            dismiss()
+                        } label: {
+                            Text("Delete Event")
+                                .frame(maxWidth: .infinity)
+                                .foregroundStyle(SMA.destructive)
+                        }
+                    }
                 }
             }
             .listStyle(.insetGrouped)

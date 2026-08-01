@@ -11,6 +11,9 @@ import UIKit
 /// drag it around the ring: it keeps its own duration and, on drop, is inserted at the
 /// finger — breaking whichever event encloses it into a kept head and a copied tail, so
 /// that activity resumes after the inserted one (every piece stays ≥ the minimum length).
+/// While it floats, its two neighbors grow to fill the vacated span (meeting at its
+/// midpoint) and the floating arc carves its span out of whatever arc it sits over,
+/// previewing the split live.
 /// Dropping near an existing boundary instead snaps flush against it, reordering the event
 /// between two arcs without splitting either (see `DialMath.breakPlacement`).
 /// Tapping the time in the center opens manual entry. Hour ticks are dots on top of the arcs, with "M"
@@ -20,6 +23,11 @@ struct RadialScheduleDial: View {
     let selectedID: ScheduleEvent.ID?
     let onChangeStart: (ScheduleEvent.ID, Date) -> Void
     let onSelect: (ScheduleEvent.ID) -> Void
+    /// Commits a pickup-and-move drop: `moves` are start-time changes to apply (the
+    /// dragged event, plus the enclosing event when a boundary snap pushes it aside);
+    /// `tailCopy` — present when the drop broke an event's interior — is a new event to
+    /// insert so the broken activity resumes after the dropped one.
+    let onCommitDrop: (_ moves: [(id: ScheduleEvent.ID, time: Date)], _ tailCopy: ScheduleEvent?) -> Void
     /// Tapping the start time in the center asks the host to present manual entry.
     let onRequestManualTime: (ScheduleEvent.ID) -> Void
     /// Neutral background band; drawn thicker than the arcs so they sit inset within it.
@@ -35,9 +43,11 @@ struct RadialScheduleDial: View {
     private let hourMarkerFadeFraction: CGFloat = 0.018
     private let gripMarkerFadeFraction: CGFloat = 0.024
     private let gripTickSpreadFraction: CGFloat = 0.005
-    /// Minimum piece size when splitting an arc on drop. 15 minutes matches the grid
-    /// snap so any grid-aligned drop that fits geometrically will succeed.
-    private let minDurationMinutes = 15
+    /// The one-hour floor on every piece a dial gesture produces — grip drags, drops, and
+    /// splits all stop so no arc renders shorter than an hour (big enough to grab), while
+    /// movement itself still steps the 15-minute grid. Drag-only: manual entry may set
+    /// finer sub-hour periods.
+    private let minDurationMinutes = 60
     private let spaceName = "scheduleDial"
 
     // MARK: - Drag-to-reorder state
@@ -124,9 +134,11 @@ struct RadialScheduleDial: View {
                 // still goes through the dial's tap gesture.
                 ForEach(sortedEvents) { e in
                     let showsGrip = (e.id == selectedEvent?.id && draggingID == nil)
-                    if !showsGrip {
-                        // The dragged icon must sit at the arc's rendered start.
-                        let base = (e.id == draggingID) ? gridSnappedStart : frac(e.time)
+                    // Each icon sits at its arc's rendered start — the float for the dragged
+                    // event, the (possibly grown or trimmed) head piece for the others. An
+                    // event whose arc is fully covered by the float shows no icon.
+                    if !showsGrip,
+                       let base = arcs.first(where: { $0.id == "\(e.id)" || $0.id == "\(e.id)-float" })?.start {
                         let f = base + knobInsetFraction(radius: radius)
                         let dimmed = draggingID != nil && e.id != draggingID
                         Image(systemName: e.symbol)
@@ -292,7 +304,36 @@ struct RadialScheduleDial: View {
         draggingID = nil
         let snapped = gridSnappedStart
         guard circularDistance(snapped, eventStartFraction(id)) >= 0.01 else { return }
-        onChangeStart(id, minutesToDate(Int((snapped * 1440).rounded())))
+        commitBreak(of: id, atFraction: snapped)
+    }
+
+    /// Resolve a drop via `DialMath.breakPlacement` and hand the result to the host: the
+    /// dragged event moves to the resolved start; a leading boundary snap also pushes the
+    /// enclosing event later; an interior break inserts a copy of the enclosing event as
+    /// the resumed tail. A `nil` placement (no room) snaps the arc back with no change.
+    private func commitBreak(of id: ScheduleEvent.ID, atFraction f: CGFloat) {
+        let evs = sortedEvents
+        guard evs.count > 1, let iD = evs.firstIndex(where: { $0.id == id }) else { return }
+        let durS = cwDistance(dayMinutes(evs[iD].time), dayMinutes(evs[(iD + 1) % evs.count].time))
+        let others = evs.filter { $0.id != id }.map { dayMinutes($0.time) }
+        guard let p = DialMath.breakPlacement(fingerMin: Int((f * 1440).rounded()), durS: durS,
+                                              others: others, minLen: minDurationMinutes,
+                                              boundarySnap: snapMinutes),
+              let enclosing = evs.first(where: { $0.id != id && dayMinutes($0.time) == p.brokenStart })
+        else { return }
+        var moves: [(id: ScheduleEvent.ID, time: Date)] = [(id, minutesToDate(p.newStart))]
+        var tailCopy: ScheduleEvent?
+        switch p.kind {
+        case .insertLeading:
+            moves.append((enclosing.id, minutesToDate(p.tailStart)))
+        case .insertTrailing:
+            break
+        case .breakInto:
+            tailCopy = ScheduleEvent(name: enclosing.name, symbol: enclosing.symbol,
+                                     colorHex: enclosing.colorHex, heatTo: enclosing.heatTo,
+                                     coolTo: enclosing.coolTo, time: minutesToDate(p.tailStart))
+        }
+        onCommitDrop(moves, tailCopy)
     }
 
     private func eventStartFraction(_ id: ScheduleEvent.ID) -> CGFloat {
@@ -337,18 +378,28 @@ struct RadialScheduleDial: View {
     }
 
     /// Clamp a proposed start (minutes since midnight) so the dragged event and its
-    /// previous neighbor each keep at least `minDurationMinutes`.
+    /// previous neighbor each keep at least `minDurationMinutes`. An event sandwiched
+    /// between two pieces of the same activity slides instead of resizing (the host
+    /// moves its tail with it), so the room reserved ahead is the event's own duration
+    /// plus the tail's floor — not just the floor.
     private func clampedStartMinutes(_ proposed: Int, for e: ScheduleEvent) -> Int {
         let evs = sortedEvents
-        guard evs.count > 1, let idx = evs.firstIndex(where: { $0.id == e.id }) else { return proposed }
-        let prev = dayMinutes(evs[(idx - 1 + evs.count) % evs.count].time)
-        let next = dayMinutes(evs[(idx + 1) % evs.count].time)
-        let span = evs.count == 2 ? 1440 : cwDistance(prev, next)   // room between neighbors
-        let lo = minDurationMinutes
-        let hi = span - minDurationMinutes
-        guard hi >= lo else { return (prev + span / 2) % 1440 }     // no room; sit in the middle
-        let d = min(max(cwDistance(prev, proposed), lo), hi)
-        return (prev + d) % 1440
+        let n = evs.count
+        guard n > 1, let idx = evs.firstIndex(where: { $0.id == e.id }) else { return proposed }
+        let prevE = evs[(idx - 1 + n) % n]
+        let nextE = evs[(idx + 1) % n]
+        let prev = dayMinutes(prevE.time)
+        if n >= 3, prevE.sameActivity(as: nextE) {
+            let afterIdx = (idx + 2) % n
+            let dur = cwDistance(dayMinutes(e.time), dayMinutes(nextE.time))
+            let span = afterIdx == (idx - 1 + n) % n ? 1440 : cwDistance(prev, dayMinutes(evs[afterIdx].time))
+            let room = span - dur
+            if room >= 2 * minDurationMinutes {
+                return DialMath.clampStart(proposed, prev: prev, span: room, minLen: minDurationMinutes)
+            }
+        }
+        let span = n == 2 ? 1440 : cwDistance(prev, dayMinutes(nextE.time))   // room between neighbors
+        return DialMath.clampStart(proposed, prev: prev, span: span, minLen: minDurationMinutes)
     }
 
     private func dayMinutes(_ date: Date) -> Int {
@@ -430,52 +481,92 @@ struct RadialScheduleDial: View {
     private let dimmedOpacity: Double = 0.45
 
     /// One arc per event, from its start to the next event's start. While dragging, the
-    /// picked-up arc floats and the enclosing arc shows a split preview (head + tail);
-    /// no data changes until release.
+    /// picked-up arc floats, its neighbors grow to fill the vacated span (meeting at its
+    /// midpoint), and the floating arc carves its span out of whatever arc it sits over —
+    /// a live preview of the head/tail split committed on drop. No data changes until release.
     private func arcSegments() -> [Arc] {
         let evs = sortedEvents
         guard !evs.isEmpty else { return [] }
-        let dragging = draggingID != nil
 
-        // Float position always follows the finger (15-min grid).
-        let floatStart: CGFloat
-        let floatDuration: CGFloat
-        if let id = draggingID, let iD = evs.firstIndex(where: { $0.id == id }) {
-            floatStart = gridSnappedStart
-            let ds = frac(evs[iD].time)
-            var den = frac(evs[(iD + 1) % evs.count].time)
-            if evs.count == 1 { den = ds + 1 } else if den <= ds { den += 1 }
-            floatDuration = den - ds
-        } else {
-            floatStart = gridSnappedStart
-            floatDuration = 0
+        guard let dragID = draggingID, let iD = evs.firstIndex(where: { $0.id == dragID }) else {
+            var result: [Arc] = []
+            for (i, e) in evs.enumerated() {
+                let selected = e.id == selectedEvent?.id
+                let s = frac(e.time)
+                var en = frac(evs[(i + 1) % evs.count].time)
+                if evs.count == 1 { en = s + 1 } else if en <= s { en += 1 }
+                let ge = en - gap
+                guard ge > s else { continue }
+                result.append(Arc(id: "\(e.id)", start: s, end: ge, colorHex: e.colorHex,
+                                  thickness: selected ? selectedArcWidth : arcWidth, opacity: 1,
+                                  floating: false, z: selected ? 2 : 0))
+            }
+            return result.sorted { $0.z < $1.z }
         }
 
-        var result: [Arc] = []
-        for (i, e) in evs.enumerated() {
-            let selected = e.id == selectedEvent?.id
-            let s = frac(e.time)
-            var en = frac(evs[(i + 1) % evs.count].time)
-            if evs.count == 1 { en = frac(e.time) + 1 }
-            else if en <= s { en += 1 }
-            let ge = en - gap
+        // Float position always follows the finger (15-min grid), keeping the arc's duration.
+        // "-float" suffix keeps the float arc as a distinct view from the committed arc.
+        // Without it, ArcBand.animatableData would interpolate between float and committed
+        // positions, causing the arc to sweep visibly around the ring.
+        let floatStart = gridSnappedStart
+        let ds = frac(evs[iD].time)
+        var den = frac(evs[(iD + 1) % evs.count].time)
+        if evs.count == 1 { den = ds + 1 } else if den <= ds { den += 1 }
+        let floatDuration = den - ds
+        var result: [Arc] = [Arc(id: "\(dragID)-float", start: floatStart,
+                                 end: floatStart + floatDuration - gap,
+                                 colorHex: evs[iD].colorHex, thickness: selectedArcWidth,
+                                 opacity: 1.0, floating: true, z: 3)]
 
-            if e.id == draggingID {
-                // "-float" suffix keeps the float arc as a distinct view from the committed
-                // arc. Without it, ArcBand.animatableData would interpolate between float
-                // and committed positions, causing the arc to sweep visibly around the ring.
-                result.append(Arc(id: "\(e.id)-float", start: floatStart, end: floatStart + floatDuration - gap,
-                                  colorHex: e.colorHex, thickness: selectedArcWidth, opacity: 1.0,
-                                  floating: true, z: 3))
-            } else {
-                guard ge > s else { continue }
-                let thickness = (selected && !dragging) ? selectedArcWidth : arcWidth
-                result.append(Arc(id: "\(e.id)", start: s, end: ge, colorHex: e.colorHex,
-                                  thickness: thickness, opacity: dragging ? dimmedOpacity : 1,
-                                  floating: false, z: (selected && !dragging) ? 2 : 0))
+        let others = evs.filter { $0.id != dragID }
+        guard !others.isEmpty else { return result }
+        // The dragged event's successor pulls its start back to the midpoint of the
+        // vacated span, so both neighbors share the fill.
+        var starts = others.map { frac($0.time) }
+        if others.count > 1 {
+            starts[iD % others.count] = normalize((ds + den) / 2)
+        }
+        for (j, e) in others.enumerated() {
+            let s = starts[j]
+            var en = others.count == 1 ? s + 1 : starts[(j + 1) % others.count]
+            if others.count > 1, en <= s { en += 1 }
+            for (k, piece) in carve(from: s, to: en - gap, holeStart: floatStart - gap,
+                                    holeLength: floatDuration + gap).enumerated() {
+                result.append(Arc(id: k == 0 ? "\(e.id)" : "\(e.id)-tail\(k)",
+                                  start: piece.0, end: piece.1, colorHex: e.colorHex,
+                                  thickness: arcWidth, opacity: dimmedOpacity,
+                                  floating: false, z: 0))
             }
         }
         return result.sorted { $0.z < $1.z }
+    }
+
+    /// Pieces of the arc `[start, end)` left after removing the circular interval
+    /// `[holeStart, holeStart + holeLength)` — the floating arc's span. An arc fully
+    /// containing the hole yields a head and a tail; one only clipped at an edge yields a
+    /// single trimmed piece; one fully covered yields nothing. Slivers too short to render
+    /// cleanly are dropped.
+    private func carve(from start: CGFloat, to end: CGFloat, holeStart: CGFloat,
+                       holeLength: CGFloat) -> [(CGFloat, CGFloat)] {
+        let length = end - start
+        guard length > 0 else { return [] }
+        let a = normalize(holeStart - start)
+        // The hole relative to the arc's start; the shifted copy catches a hole that
+        // wraps across the arc's own start.
+        var cuts: [(CGFloat, CGFloat)] = []
+        for base in [a - 1, a] {
+            let lo = max(base, 0)
+            let hi = min(base + holeLength, length)
+            if hi > lo { cuts.append((lo, hi)) }
+        }
+        var pieces: [(CGFloat, CGFloat)] = []
+        var cursor: CGFloat = 0
+        for cut in cuts.sorted(by: { $0.0 < $1.0 }) {
+            if cut.0 > cursor { pieces.append((cursor, cut.0)) }
+            cursor = max(cursor, cut.1)
+        }
+        if cursor < length { pieces.append((cursor, length)) }
+        return pieces.filter { $0.1 - $0.0 > gap * 2 }.map { (start + $0.0, start + $0.1) }
     }
 
     private func eventID(atFraction f: CGFloat) -> ScheduleEvent.ID? {
