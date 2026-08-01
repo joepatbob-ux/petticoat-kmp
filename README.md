@@ -1,17 +1,27 @@
-# Petticoat — Sensi thermostat app (SwiftUI prototype)
+# Petticoat — Sensi thermostat app (KMP + native UIs)
 
-A working SwiftUI prototype of the Sensi smart-thermostat experience: onboarding, a
-device dashboard, and a full device-detail experience (Control, Schedule, Usage,
-Reminders, Settings). **The UI, navigation, and interactions are real; all data is
-in-memory mock data.** For wiring in real device/cloud functionality, see
-[`HANDOFF.md`](HANDOFF.md).
+A working prototype of the Sensi smart-thermostat experience. **Domain logic lives in a
+Kotlin Multiplatform `shared` module**; UIs are native:
+
+- **iOS** — existing SwiftUI app (`Petticoat.xcodeproj`) with the SMA design system
+- **Android** — Jetpack Compose with **Material 3 Expressive** (`androidApp/`)
+
+The UI, navigation, and interactions are real; all data is in-memory mock data.
+Architecture details: [`KMP.md`](KMP.md). Production wiring: [`HANDOFF.md`](HANDOFF.md).
 
 ## Requirements
 
+### iOS
 - **Xcode** with the **iOS 27** SDK/simulator (deployment target: iOS 27.0).
 - Swift 5 language mode. No third-party dependencies — plain SwiftUI + WebKit + MapKit.
 
+### Android / shared
+- JDK 17+, Android SDK 35, Android Studio or CLI (`./gradlew`).
+- Kotlin 2.1 / AGP 8.10 (see `gradle/libs.versions.toml`).
+
 ## Build & run
+
+### iOS (SwiftUI)
 
 1. Open `Petticoat.xcodeproj`.
 2. Select the **Petticoat** scheme and an iOS 26/27 simulator (e.g. iPhone 17 Pro).
@@ -20,6 +30,21 @@ in-memory mock data.** For wiring in real device/cloud functionality, see
 
 Xcode uses **file-system-synchronized groups**, so files added to the `Petticoat/`
 folder are picked up automatically — no manual target membership needed.
+
+### Android (Material Expressive)
+
+```
+./gradlew :androidApp:assembleDebug
+```
+
+Install the debug APK on an emulator/device, or open the repo root in Android Studio and
+run the **androidApp** configuration.
+
+### Shared tests
+
+```
+./gradlew :shared:jvmTest
+```
 
 ## Test
 
@@ -36,19 +61,20 @@ xcodebuild test -scheme Petticoat \
 
 ## Architecture
 
-- **`AppModel`** (`Petticoat/AppModel.swift`) is an `@Observable` class and the **single
-  source of truth**. It's created once in `RootView` and injected via `.environment(...)`;
-  views read `model.x` and call `model.doThing()`. State is in-memory (resets on cold
-  launch).
+- **Shared KMP** (`shared/`): models, `SchedulingMath`, and `AppModel` (`StateFlow<AppState>`).
+  See [`KMP.md`](KMP.md). Android uses this today; iOS links via `PetticoatShared.framework`.
+- **iOS `AppModel`** (`Petticoat/AppModel.swift`) remains the SwiftUI source of truth until
+  the framework bridge lands — same mock domain; keep logic aligned with `shared/`.
+  Created once in `RootView` and injected via `.environment(...)`.
 - **Routing** (`RootView`): `splash → login → main`. `MainView` shows the iPhone (compact)
   experience as `DashboardView` in a `NavigationStack`, and the iPad (regular) experience
   as `MainSplitView` (adaptive sidebar/tab). Account / Add Device / Help present as sheets.
 - **Device detail** is `DeviceTabView` — a `TabView` (Control / Schedule / Usage /
   Reminders / Settings) pushed from a dashboard thermostat card.
 - **Pure logic** that's easy to get wrong is extracted and unit-tested in
-  `SchedulingMath.swift` (timeline current/upcoming; radial-dial break placement).
-- **Design tokens & shared UI** live in `Theme.swift` (`SMA` color tokens,
-  `groupedListChrome()`, `MetricBar`, card styles).
+  `SchedulingMath` (Swift + Kotlin port) — timeline current/upcoming; radial-dial break placement.
+- **Design tokens & shared UI** live in `Theme.swift` (`SMA` color tokens) on iOS and
+  `ui/theme/Theme.kt` (Material Expressive + SMA brand colors) on Android.
 
 ## Screen / file map
 
