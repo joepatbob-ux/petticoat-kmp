@@ -25,7 +25,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.sensi.petticoat.AppModel
 import com.sensi.petticoat.AppState
 import com.sensi.petticoat.model.DeviceTab
-import com.sensi.petticoat.ui.components.PlaceholderScreen
 
 /**
  * Device-detail container: a bottom navigation bar over [DeviceTab] with each tab providing
@@ -55,7 +54,7 @@ fun DeviceDetailScreen(
                     onOpenSensors = { showSensors = true },
                 )
                 DeviceTab.Schedule -> AutomationScreen(model = model, state = state, onBack = onBack)
-                DeviceTab.Usage -> PlaceholderScreen(title = "Usage", onBack = onBack)
+                DeviceTab.Usage -> UsageScreen(model = model, state = state, onBack = onBack)
                 DeviceTab.Reminders -> RemindersScreen(model = model, state = state, onBack = onBack)
                 DeviceTab.Settings -> SettingsScreen(model = model, state = state, onBack = onBack)
             }

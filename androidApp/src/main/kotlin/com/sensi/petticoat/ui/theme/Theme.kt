@@ -11,8 +11,9 @@ import androidx.compose.ui.graphics.Color
 
 // Color roles synced from the Petticoat Android Expressive Figma ("Flow (Light)"
 // Schemes/* variables). Dark is a derived counterpart in the same hue family.
-private val HeatingOrange = Color(0xFFF76707)
+private val HeatingOrange = Color(0xFFF76707) // Figma System Mode/Heating Orange
 private val CoolingBlue = Color(0xFF0093C8) // Figma System Mode/Cooling Blue
+private val AuxRed = Color(0xFFE61234) // Figma System Mode/AUX Red
 private val FanPurple = Color(0xFFC5B1C2) // Figma System Mode/Fan Purple
 
 // Kept for the (currently dark) Control surface until it is restyled to the Figma light design.
@@ -21,6 +22,7 @@ private val ControlFill = Color(0xFF2C3238)
 
 val SensiHeating = HeatingOrange
 val SensiCooling = CoolingBlue
+val SensiAux = AuxRed
 val SensiFanPurple = FanPurple
 val SensiThermostatSurface = ThermostatCard
 val SensiControlFill = ControlFill

@@ -22,6 +22,7 @@ import com.sensi.petticoat.model.StepperStyle
 import com.sensi.petticoat.model.SystemMode
 import com.sensi.petticoat.model.ThermostatSettings
 import com.sensi.petticoat.model.TimelinePeriod
+import com.sensi.petticoat.model.UsageSample
 import com.sensi.petticoat.model.formatMinutes
 import com.sensi.petticoat.model.newId
 import com.sensi.petticoat.model.platformFormatTime
@@ -79,6 +80,8 @@ data class AppState(
     val serviceReminders: List<ServiceReminder> = ServiceReminder.samples(),
     val contractor: Contractor = Contractor.sample(),
     val thermostatSettings: ThermostatSettings = ThermostatSettings(),
+    val usageRecent: List<UsageSample> = UsageSample.recent(),
+    val usageMonthly: List<UsageSample> = UsageSample.monthly(),
     val todaysTimeline: List<TimelineEntry> = emptyList(),
 ) {
     val device: Device
