@@ -319,6 +319,44 @@ class AppModel(
 
     fun clearSelectedDevice() = update { it.copy(selectedDeviceId = null) }
 
+    fun addDevice(name: String, location: String = "St. Louis, MO") = update { state ->
+        val device = Device(
+            name = name.trim().ifEmpty { "Thermostat" },
+            location = location,
+            keepMin = 68,
+            keepMax = 76,
+            holdUntil = "you resume it",
+            outdoorTemp = 72,
+            outdoorHigh = 78,
+            outdoorLow = 64,
+            scheduleName = "Comfort",
+            sensorSummary = "1 Sensor",
+            sensors = listOf(
+                com.sensi.petticoat.model.RoomSensor(
+                    name = "Thermostat",
+                    temp = 72,
+                    humidity = 40,
+                    participating = true,
+                ),
+            ),
+            homeId = state.homes.firstOrNull()?.id,
+        )
+        state.copy(
+            devices = state.devices + device,
+            selectedDeviceId = device.id,
+            showAddDevice = false,
+        )
+    }
+
+    fun removeDevice(id: String) = update { state ->
+        val devices = state.devices.filterNot { it.id == id }
+        state.copy(
+            devices = devices,
+            selectedDeviceId = if (state.selectedDeviceId == id) devices.firstOrNull()?.id
+            else state.selectedDeviceId,
+        )
+    }
+
     fun markSelectedDeviceOnline() = update { s ->
         val id = s.device.id
         s.copy(devices = s.devices.map {
