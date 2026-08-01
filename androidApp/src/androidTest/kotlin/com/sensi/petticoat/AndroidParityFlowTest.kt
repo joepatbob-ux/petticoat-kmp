@@ -1,6 +1,7 @@
 package com.sensi.petticoat
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -28,11 +29,11 @@ class AndroidParityFlowTest {
     fun allDeviceTabsAreReachable() {
         openDevice()
         composeRule.onNodeWithTag("device-tab-schedule").performClick()
-        composeRule.onNodeWithText("Schedule").assertIsDisplayed()
+        composeRule.onNodeWithTag("device-tab-schedule").assertIsSelected()
         composeRule.onNodeWithTag("device-tab-reminders").performClick()
-        composeRule.onNodeWithText("Reminders").assertIsDisplayed()
+        composeRule.onNodeWithTag("device-tab-reminders").assertIsSelected()
         composeRule.onNodeWithTag("device-tab-settings").performClick()
-        composeRule.onNodeWithText("Settings").assertIsDisplayed()
+        composeRule.onNodeWithTag("device-tab-settings").assertIsSelected()
     }
 
     @Test
