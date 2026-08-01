@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
   push:
@@ -24,6 +28,7 @@ jobs:
 
   ios:
     runs-on: xcode-27
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
@@ -31,10 +36,18 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - name: Build and test native SwiftUI app
+      - name: Build native SwiftUI app and tests
         run: |
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -project Petticoat.xcodeproj \
             -scheme Petticoat \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Run native iOS unit tests
+        run: |
+          xcodebuild test-without-building \
+            -project Petticoat.xcodeproj \
+            -scheme Petticoat \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+            -only-testing:PetticoatTests \
             CODE_SIGNING_ALLOWED=NO
