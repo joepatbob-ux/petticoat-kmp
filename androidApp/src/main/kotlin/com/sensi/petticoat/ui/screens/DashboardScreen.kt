@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sensi.petticoat.AppModel
@@ -150,6 +151,7 @@ private fun ThermostatCard(device: Device, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag("thermostat-${device.name.lowercase()}")
             .clip(RoundedCornerShape(28.dp))
             .background(SensiThermostatSurface)
             .clickable(onClick = onClick)
