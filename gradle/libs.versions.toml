@@ -8,6 +8,7 @@ navigationCompose = "2.9.0"
 coroutines = "1.10.2"
 junit = "4.13.2"
 material3 = "1.4.0"
+skie = "0.10.11"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -35,3 +36,4 @@ androidLibrary = { id = "com.android.library", version.ref = "agp" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+skie = { id = "co.touchlab.skie", version.ref = "skie" }

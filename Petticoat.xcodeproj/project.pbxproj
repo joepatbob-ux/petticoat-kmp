@@ -179,6 +179,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 000000000000000110000000 /* Build configuration list for PBXNativeTarget "Petticoat" */;
 			buildPhases = (
+				4B4D5001303F000000000001 /* Build PetticoatShared */,
 				000000000000000120000000 /* Sources */,
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
@@ -327,6 +328,28 @@
 			);
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		4B4D5001303F000000000001 /* Build PetticoatShared */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build PetticoatShared";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle framework build: IDE already built it\"\n  exit 0\nfi\n\ncase \"$PLATFORM_NAME\" in\n  iphoneos|iphonesimulator)\n    cd \"$SRCROOT\"\n    \"$SRCROOT/gradlew\" :shared:embedAndSignAppleFrameworkForXcode\n    ;;\n  *)\n    echo \"Skipping PetticoatShared for unsupported platform: $PLATFORM_NAME\"\n    ;;\nesac\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		000000000000000120000000 /* Sources */ = {
@@ -513,7 +536,10 @@
 				DEVELOPMENT_TEAM = 683C6FAB64;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(inherited) $(SRCROOT)/shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = "$(inherited) $(SRCROOT)/shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Petticoat/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -532,6 +558,8 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = "$(inherited) -framework PetticoatShared";
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "$(inherited) -framework PetticoatShared";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.joepatbob.Petticoat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -559,7 +587,10 @@
 				DEVELOPMENT_TEAM = 683C6FAB64;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(inherited) $(SRCROOT)/shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)";
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = "$(inherited) $(SRCROOT)/shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Petticoat/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -578,6 +609,8 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = "$(inherited) -framework PetticoatShared";
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "$(inherited) -framework PetticoatShared";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.joepatbob.Petticoat;
 				PRODUCT_NAME = "$(TARGET_NAME)";
