@@ -111,8 +111,8 @@ fun NavRow(
 fun ToggleRow(
     title: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
     subtitle: String? = null,
+    onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier
