@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,27 +15,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.AcUnit
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Cyclone
 import androidx.compose.material.icons.outlined.Remove
-import androidx.compose.material.icons.outlined.Sensors
-import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Thunderstorm
+import androidx.compose.material.icons.outlined.WaterDrop
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,20 +52,24 @@ import androidx.compose.ui.unit.sp
 import com.sensi.petticoat.AppModel
 import com.sensi.petticoat.AppState
 import com.sensi.petticoat.model.ControlMode
+import com.sensi.petticoat.model.Device
+import com.sensi.petticoat.model.FanMode
 import com.sensi.petticoat.model.HVACActivity
 import com.sensi.petticoat.model.SetpointBound
-import com.sensi.petticoat.model.SystemMode
 import com.sensi.petticoat.ui.components.ModeSheet
-import com.sensi.petticoat.ui.theme.SensiControlFill
+import com.sensi.petticoat.ui.components.iconForSymbol
 import com.sensi.petticoat.ui.theme.SensiCooling
+import com.sensi.petticoat.ui.theme.SensiFanPurple
 import com.sensi.petticoat.ui.theme.SensiHeating
-import com.sensi.petticoat.ui.theme.SensiThermostatSurface
 
 /**
- * Control tab content: setpoint stepper, quick system-mode chips, sensors / mode entry
- * points, and the control-mode status card. Hosted inside [DeviceDetailScreen].
- * Refactored from the standalone ControlScreen; the device chrome (back) lives here so the
- * tab reads as a full screen with the bottom nav provided by the host.
+ * Control tab, built to the Android Expressive Figma ("Enviromental Control", 318:56879):
+ * centered app bar, weather row, "Average of N Sensors" pill, large current temperature with
+ * humidity stat, a cool/fan mode-select pill, and a bottom activity/setpoint card. The bottom
+ * navigation bar is supplied by [DeviceDetailScreen].
+ *
+ * Note: custom Figma glyphs (thunderstorm/cool/fan/water-drop/air) are rendered with the
+ * closest Material icons pending an exported-asset pipeline.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -78,182 +81,72 @@ fun ControlContent(
 ) {
     val device = state.device
     var showModeSheet by remember { mutableStateOf(false) }
-    val activityColor = when (device.activity) {
-        HVACActivity.Heating -> SensiHeating
-        HVACActivity.Cooling -> SensiCooling
-        HVACActivity.Idle -> Color(0xFF8E8E93)
-    }
+    var selectedBound by remember { mutableStateOf(SetpointBound.High) }
+
     val pulse by animateFloatAsState(
-        targetValue = if (device.activity == HVACActivity.Idle) 1f else 1.04f,
-        animationSpec = spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessLow),
+        targetValue = if (device.activity == HVACActivity.Idle) 1f else 1.03f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessLow),
         label = "tempPulse",
     )
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(device.name, fontWeight = FontWeight.SemiBold) },
+            CenterAlignedTopAppBar(
+                title = { Text(device.name, fontWeight = FontWeight.Medium) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = SensiThermostatSurface,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
+                actions = {
+                    IconButton(onClick = { model.setShowAccount(true) }) {
+                        Icon(Icons.Outlined.AccountCircle, contentDescription = "Account")
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
                 ),
             )
         },
-        containerColor = SensiThermostatSurface,
+        containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                device.systemMode.setpointLabel,
-                color = Color.White.copy(alpha = 0.7f),
-                style = MaterialTheme.typography.labelLarge,
-            )
             Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = if (device.systemMode.isRangeSetpoint) {
-                    "${device.keepMin}–${device.keepMax}"
-                } else if (device.systemMode == SystemMode.Cool) {
-                    "${device.keepMax}"
-                } else {
-                    "${device.keepMin}"
-                },
-                fontSize = 64.sp,
-                fontWeight = FontWeight.Light,
-                color = Color.White,
-                modifier = Modifier.scale(pulse),
-            )
-
-            Text(
-                "${device.currentTemp}° now · ${device.humidity}%",
-                color = activityColor,
-                style = MaterialTheme.typography.titleMedium,
-            )
-
-            Spacer(Modifier.height(28.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(28.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SetpointButton(Icons.Outlined.Remove, "Decrease") {
-                    when (device.systemMode) {
-                        SystemMode.Cool -> model.adjustKeep(SetpointBound.High, -1)
-                        SystemMode.Heat, SystemMode.AuxHeat -> model.adjustKeep(SetpointBound.Low, -1)
-                        else -> {
-                            model.adjustKeep(SetpointBound.Low, -1)
-                            model.adjustKeep(SetpointBound.High, -1)
-                        }
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(activityColor),
-                )
-                SetpointButton(Icons.Outlined.Add, "Increase") {
-                    when (device.systemMode) {
-                        SystemMode.Cool -> model.adjustKeep(SetpointBound.High, 1)
-                        SystemMode.Heat, SystemMode.AuxHeat -> model.adjustKeep(SetpointBound.Low, 1)
-                        else -> {
-                            model.adjustKeep(SetpointBound.Low, 1)
-                            model.adjustKeep(SetpointBound.High, 1)
-                        }
-                    }
-                }
-            }
+            WeatherRow(device)
 
             Spacer(Modifier.height(24.dp))
+            SensorsPill(count = device.participatingCount, onClick = onOpenSensors)
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                SystemMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = device.systemMode == mode,
-                        onClick = { model.setSystemMode(mode) },
-                        label = { Text(mode.label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = SensiControlFill,
-                            labelColor = Color.White.copy(alpha = 0.8f),
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = Color.White,
-                        ),
-                    )
-                }
-            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "${device.currentTemp}",
+                fontSize = 96.sp,
+                fontWeight = FontWeight.Normal,
+                letterSpacing = (-0.25).sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.scale(pulse),
+            )
+            StatsRow(device)
 
             Spacer(Modifier.height(16.dp))
+            ModeSelectPill(device = device, onClick = { showModeSheet = true })
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(
-                    onClick = onOpenSensors,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Outlined.Sensors, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(8.dp))
-                    Text(device.sensorSummary)
-                }
-                OutlinedButton(
-                    onClick = { showModeSheet = true },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(8.dp))
-                    Text("System & Fan")
-                }
-            }
+            Spacer(Modifier.weight(1f))
 
-            Spacer(Modifier.height(20.dp))
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(SensiControlFill)
-                    .padding(16.dp),
-            ) {
-                Text(
-                    when (state.controlMode) {
-                        ControlMode.Schedule -> "Following ${state.scheduleName}"
-                        ControlMode.Hold -> "Hold until ${state.holdUntilText}"
-                        ControlMode.Activity -> "Activity · ${state.activeProfile.name}"
-                        ControlMode.Vacation -> "Vacation"
-                        ControlMode.Standard -> "Manual"
-                    },
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    state.currentPeriod()?.let { "Now: ${it.name} · ${it.startText}" }
-                        ?: "No schedule period",
-                    color = Color.White.copy(alpha = 0.65f),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                if (state.controlMode == ControlMode.Hold) {
-                    TextButton(onClick = model::resumeSchedule) {
-                        Text("Resume schedule")
-                    }
-                }
-            }
+            ActivityCard(
+                state = state,
+                device = device,
+                selectedBound = selectedBound,
+                onSelectBound = { selectedBound = it },
+                onAdjust = { delta -> model.adjustKeep(selectedBound, delta) },
+            )
+            Spacer(Modifier.height(16.dp))
         }
     }
 
@@ -263,19 +156,228 @@ fun ControlContent(
 }
 
 @Composable
-private fun SetpointButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .size(64.dp)
-            .clip(CircleShape)
-            .background(SensiControlFill),
-        colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White),
-    ) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(28.dp))
+private fun WeatherRow(device: Device) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            device.location,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                Icons.Outlined.Thunderstorm,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(30.dp),
+            )
+            Text(
+                "${device.outdoorTemp}",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Column {
+                Text(
+                    "H: ${device.outdoorHigh}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "L: ${device.outdoorLow}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
+
+@Composable
+private fun SensorsPill(count: Int, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "Average of",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f),
+        )
+        Text(
+            "$count Sensors",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+    }
+}
+
+@Composable
+private fun StatsRow(device: Device) {
+    // Figma shows a second "air" stat; the model has no matching field, so only humidity
+    // (which the model provides) is shown until a data source exists.
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Stat(Icons.Outlined.WaterDrop, "${device.humidity}%", SensiCooling)
+    }
+}
+
+@Composable
+private fun Stat(icon: ImageVector, value: String, tint: androidx.compose.ui.graphics.Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ModeSelectPill(device: Device, onClick: () -> Unit) {
+    val modeIcon = iconForSystemMode(device)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(66.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable(onClick = onClick)
+            .padding(11.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(modeIcon.first, contentDescription = "System mode", tint = modeIcon.second, modifier = Modifier.size(28.dp))
+        if (device.fanMode == FanMode.On) {
+            Icon(Icons.Outlined.Cyclone, contentDescription = "Fan", tint = SensiFanPurple, modifier = Modifier.size(28.dp))
+        }
+    }
+}
+
+@Composable
+private fun ActivityCard(
+    state: AppState,
+    device: Device,
+    selectedBound: SetpointBound,
+    onSelectBound: (SetpointBound) -> Unit,
+    onAdjust: (Int) -> Unit,
+) {
+    val title = when (state.controlMode) {
+        ControlMode.Activity -> state.activeProfile.name
+        ControlMode.Vacation -> "Vacation"
+        else -> state.currentPeriod()?.name ?: state.scheduleName
+    }
+    val symbol = if (state.controlMode == ControlMode.Activity) state.activeProfile.symbol else "dumbbell.fill"
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                iconForSymbol(symbol),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            SetpointSwitcher(
+                low = device.keepMin,
+                high = device.keepMax,
+                selected = selectedBound,
+                onSelect = onSelectBound,
+            )
+            Spacer(Modifier.width(8.dp))
+            Column {
+                IconButton(onClick = { onAdjust(1) }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Outlined.Add, contentDescription = "Increase")
+                }
+                IconButton(onClick = { onAdjust(-1) }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Outlined.Remove, contentDescription = "Decrease")
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Now until ${device.holdUntil}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SetpointSwitcher(
+    low: Int,
+    high: Int,
+    selected: SetpointBound,
+    onSelect: (SetpointBound) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(64.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SetpointChip(
+            value = low,
+            selected = selected == SetpointBound.Low,
+            onClick = { onSelect(SetpointBound.Low) },
+        )
+        SetpointChip(
+            value = high,
+            selected = selected == SetpointBound.High,
+            onClick = { onSelect(SetpointBound.High) },
+        )
+    }
+}
+
+@Composable
+private fun SetpointChip(value: Int, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else androidx.compose.ui.graphics.Color.Transparent,
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "$value",
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+    }
+}
+
+/** Maps the device's system mode to a Material glyph + tint (custom Figma art deferred). */
+@Composable
+private fun iconForSystemMode(device: Device): Pair<ImageVector, androidx.compose.ui.graphics.Color> =
+    when (device.activity) {
+        HVACActivity.Heating -> Icons.Outlined.Thunderstorm to SensiHeating
+        HVACActivity.Cooling -> Icons.Outlined.AcUnit to SensiCooling
+        HVACActivity.Idle -> Icons.Outlined.AcUnit to SensiCooling
+    }
