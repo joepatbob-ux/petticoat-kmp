@@ -51,3 +51,11 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
             -only-testing:PetticoatTests \
             CODE_SIGNING_ALLOWED=NO
+      - name: Run native iOS UI tests
+        run: |
+          xcodebuild test-without-building \
+            -project Petticoat.xcodeproj \
+            -scheme Petticoat \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+            -only-testing:PetticoatUITests \
+            CODE_SIGNING_ALLOWED=NO
